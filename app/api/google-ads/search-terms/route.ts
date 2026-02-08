@@ -25,6 +25,7 @@ export async function GET(request: Request) {
     const customerId = searchParams.get('customerId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const aggregate = searchParams.get('aggregate') === 'true'; // For NegativeKeywordMiner: no date/device segmentation
 
     if (!customerId || !startDate || !endDate) {
         return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -50,8 +51,30 @@ export async function GET(request: Request) {
         const customer = getGoogleAdsCustomer(refreshToken, customerId || undefined);
 
         // Query search terms with full metrics and campaign info
-        const query = `
-            SELECT 
+        // Aggregate mode: no date/device segmentation for higher coverage (used by NegativeKeywordMiner)
+        const query = aggregate
+            ? `
+            SELECT
+                campaign.id,
+                campaign.name,
+                search_term_view.search_term,
+                search_term_view.status,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM
+                search_term_view
+            WHERE
+                segments.date BETWEEN '${startDate}' AND '${endDate}'
+                AND metrics.impressions > 0
+            ORDER BY
+                metrics.cost_micros DESC
+            LIMIT 10000
+            `
+            : `
+            SELECT
                 campaign.id,
                 campaign.name,
                 ad_group.id,
@@ -67,15 +90,15 @@ export async function GET(request: Request) {
                 metrics.conversions_value,
                 metrics.ctr,
                 metrics.average_cpc
-            FROM 
-                search_term_view 
-            WHERE 
+            FROM
+                search_term_view
+            WHERE
                 segments.date BETWEEN '${startDate}' AND '${endDate}'
                 AND metrics.impressions > 0
-            ORDER BY 
+            ORDER BY
                 metrics.cost_micros DESC
             LIMIT 2000
-        `;
+            `;
 
         const searchTerms = await customer.query(query);
         console.log(`[SearchTermsAPI] Standard Query result count: ${searchTerms.length}`);
@@ -114,14 +137,14 @@ export async function GET(request: Request) {
                 searchTerm: row.search_term_view.search_term,
                 searchTermStatus: String(row.search_term_view?.status) || 'NONE',
                 date: row.segments?.date || '',
-                device: getDeviceName(row.segments?.device),
+                device: row.segments?.device ? getDeviceName(row.segments.device) : 'ALL',
                 impressions: Number(row.metrics?.impressions) || 0,
                 clicks: Number(row.metrics?.clicks) || 0,
                 cost: Number(row.metrics?.cost_micros) / 1000000 || 0,
                 conversions: Number(row.metrics?.conversions) || 0,
                 conversionValue: Number(row.metrics?.conversions_value) || 0,
-                ctr: Number(row.metrics?.ctr) || 0,
-                averageCpc: Number(row.metrics?.average_cpc) / 1000000 || 0,
+                ctr: row.metrics?.ctr != null ? Number(row.metrics.ctr) : (Number(row.metrics?.clicks) > 0 && Number(row.metrics?.impressions) > 0 ? Number(row.metrics.clicks) / Number(row.metrics.impressions) : 0),
+                averageCpc: row.metrics?.average_cpc != null ? Number(row.metrics.average_cpc) / 1000000 : (Number(row.metrics?.clicks) > 0 ? (Number(row.metrics?.cost_micros) / 1000000) / Number(row.metrics.clicks) : 0),
                 conversionRate: Number(row.metrics?.clicks) > 0 ? Number(row.metrics?.conversions) / Number(row.metrics?.clicks) : 0,
             })),
             ...pmaxInsights.map((row: any) => ({

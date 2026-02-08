@@ -66,7 +66,8 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                 const params = new URLSearchParams({
                     customerId,
                     startDate: dateRange.start,
-                    endDate: dateRange.end
+                    endDate: dateRange.end,
+                    aggregate: 'true'  // No date/device segmentation = more terms coverage
                 });
                 const res = await fetch(`/api/google-ads/search-terms?${params}`);
                 const json = await res.json();
