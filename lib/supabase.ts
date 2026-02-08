@@ -41,6 +41,7 @@ export interface GadsUserAccount {
 
 // Helper functions for user management
 export async function getUserByUsername(username: string): Promise<GadsUser | null> {
+  console.log('[Supabase] Fetching user:', username);
   const { data, error } = await supabaseAdmin
     .from('gads_users')
     .select('*')
@@ -48,22 +49,34 @@ export async function getUserByUsername(username: string): Promise<GadsUser | nu
     .eq('is_active', true)
     .single();
 
-  if (error || !data) return null;
+  if (error) {
+    console.error('[Supabase] Error fetching user:', error.message, error.details, error.code);
+    return null;
+  }
+
+  if (!data) {
+    console.warn('[Supabase] User not found or inactive:', username);
+    return null;
+  }
+
   return data as GadsUser;
 }
 
 export async function verifyPassword(inputPassword: string, storedHash: string): Promise<boolean> {
   // Use Supabase's pgcrypto to verify the password
+  console.log('[Supabase] Verifying password for hash length:', storedHash?.length);
+
   const { data, error } = await supabaseAdmin.rpc('verify_password', {
     input_password: inputPassword,
     stored_hash: storedHash
   });
 
   if (error) {
-    console.error('Password verification error:', error);
+    console.error('[Supabase] Password verification PRC error:', error);
     return false;
   }
 
+  console.log('[Supabase] Verification result:', data);
   return data === true;
 }
 

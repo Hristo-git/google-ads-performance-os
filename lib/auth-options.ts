@@ -23,7 +23,10 @@ export const authOptions: NextAuthOptions = {
                 password: { label: "Password", type: "password" }
             },
             async authorize(credentials) {
+                console.log('[Auth] Attempting login for username:', credentials?.username);
+
                 if (!credentials?.username || !credentials?.password) {
+                    console.log('[Auth] Missing credentials');
                     return null;
                 }
 
@@ -31,15 +34,24 @@ export const authOptions: NextAuthOptions = {
                     // Get user from Supabase
                     const user = await getUserByUsername(credentials.username);
 
-                    if (!user) return null;
+                    if (!user) {
+                        console.log('[Auth] User not found explicitly for:', credentials.username);
+                        return null;
+                    }
+                    console.log('[Auth] User found:', user.username, 'ID:', user.id, 'Role:', user.role);
 
                     // Verify password using Supabase pgcrypto
                     const isValid = await verifyPassword(credentials.password, user.password_hash);
 
-                    if (!isValid) return null;
+                    if (!isValid) {
+                        console.log('[Auth] Password verification failed for:', credentials.username);
+                        return null;
+                    }
+                    console.log('[Auth] Password verified successfully');
 
                     // Get user's allowed accounts
                     const allowedAccountIds = await getUserAllowedAccounts(user.id);
+                    console.log('[Auth] Allowed accounts:', allowedAccountIds);
 
                     return {
                         id: user.id,
@@ -49,7 +61,7 @@ export const authOptions: NextAuthOptions = {
                         allowedCustomerIds: allowedAccountIds
                     };
                 } catch (err) {
-                    console.error('Auth error:', err);
+                    console.error('[Auth] Critical Auth error:', err);
                     return null;
                 }
             }
