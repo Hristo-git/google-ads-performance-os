@@ -3,6 +3,17 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { getUserByUsername, verifyPassword, getUserAllowedAccounts } from "@/lib/supabase";
 
+// Check essential environment variables
+if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    console.error("❌ CRITICAL ERROR: Missing Google Auth environment variables!");
+    if (!process.env.GOOGLE_CLIENT_ID) console.error("   - Missing GOOGLE_CLIENT_ID");
+    if (!process.env.GOOGLE_CLIENT_SECRET) console.error("   - Missing GOOGLE_CLIENT_SECRET");
+}
+
+if (!process.env.NEXTAUTH_SECRET) {
+    console.error("❌ CRITICAL ERROR: Missing NEXTAUTH_SECRET environment variable!");
+}
+
 export const authOptions: NextAuthOptions = {
     providers: [
         CredentialsProvider({

@@ -1,11 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase configuration
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error("❌ CRITICAL ERROR: Missing Supabase environment variables during initialization!");
+  if (!supabaseUrl) console.error("   - Missing SUPABASE_URL");
+  if (!supabaseServiceKey) console.error("   - Missing SUPABASE_SERVICE_ROLE_KEY");
+}
 
 // Server-side Supabase client with service role for admin operations
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+// Use empty string fallback to prevent crash during module evaluation, but calls will fail
+export const supabaseAdmin = createClient(supabaseUrl || '', supabaseServiceKey || '', {
   auth: {
     autoRefreshToken: false,
     persistSession: false
