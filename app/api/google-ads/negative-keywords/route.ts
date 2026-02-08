@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import { getNegativeKeywords } from "@/lib/google-ads";
 
 // Mock negative keywords for demonstration
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session?.refreshToken) {
+        if (!session?.user) {
             return NextResponse.json(
                 { error: "Unauthorized - Please sign in" },
                 { status: 401 }
@@ -46,9 +46,31 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url);
         const adGroupId = searchParams.get("adGroupId");
+        let customerId = searchParams.get('customerId') || undefined;
+
+        // Access Control
+        const allowedIds = session.user.allowedCustomerIds || [];
+        if (session.user.role !== 'admin') {
+            if (!customerId && allowedIds.length > 0) {
+                customerId = allowedIds[0];
+            }
+            if (customerId && !allowedIds.includes('*') && !allowedIds.includes(customerId)) {
+                return NextResponse.json(
+                    { error: "Forbidden - Access to this account is denied" },
+                    { status: 403 }
+                );
+            }
+        }
 
         try {
-            const negativeKeywords = await getNegativeKeywords(session.refreshToken, adGroupId || undefined);
+            const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
+            if (!refreshToken) {
+                return NextResponse.json(
+                    { error: "Configuration Error - Missing Refresh Token" },
+                    { status: 500 }
+                );
+            }
+            const negativeKeywords = await getNegativeKeywords(refreshToken, adGroupId || undefined, customerId);
             return NextResponse.json({ negativeKeywords });
         } catch (apiError) {
             console.error("Google Ads API error, using mock data:", apiError);

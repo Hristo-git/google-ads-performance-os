@@ -1,0 +1,18 @@
+{
+    "name": "google-ads-reports-inference",
+    "dimension": 768,
+    "metric": "cosine",
+    "spec": {
+        "serverless": {
+            "cloud": "aws",
+            "region": "us-east-1"
+        }
+    },
+    "inference": {
+        "enabled": true,
+        "model": "multilingual-e5-large",
+        "field_map": {
+            "text": "analysis_content"
+        }
+    }
+}

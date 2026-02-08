@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import { getAdsWithStrength } from "@/lib/google-ads";
 
 // Mock ads with Ad Strength data
@@ -210,7 +210,7 @@ export async function GET(request: Request) {
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session?.refreshToken) {
+        if (!session?.user) {
             return NextResponse.json(
                 { error: "Unauthorized - Please sign in" },
                 { status: 401 }
@@ -219,9 +219,37 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url);
         const adGroupId = searchParams.get("adGroupId");
+        let customerId = searchParams.get('customerId') || undefined;
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
+        const status = searchParams.get('status');
+        const onlyEnabled = status === 'ENABLED';
+        const dateRange = (startDate && endDate) ? { start: startDate, end: endDate } : undefined;
+
+        // Access Control
+        const allowedIds = session.user.allowedCustomerIds || [];
+        if (session.user.role !== 'admin') {
+            if (!customerId && allowedIds.length > 0) {
+                customerId = allowedIds[0];
+            }
+            if (customerId && !allowedIds.includes('*') && !allowedIds.includes(customerId)) {
+                return NextResponse.json(
+                    { error: "Forbidden - Access to this account is denied" },
+                    { status: 403 }
+                );
+            }
+        }
 
         try {
-            const ads = await getAdsWithStrength(session.refreshToken, adGroupId || undefined);
+            const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
+            if (!refreshToken) {
+                return NextResponse.json(
+                    { error: "Configuration Error - Missing Refresh Token" },
+                    { status: 500 }
+                );
+            }
+            // Note: getAdsWithStrength expects adGroupIds as the 4th argument, so we pass undefined there
+            const ads = await getAdsWithStrength(refreshToken, adGroupId || undefined, customerId, undefined, dateRange, onlyEnabled);
             return NextResponse.json({ ads });
         } catch (apiError) {
             console.error("Google Ads API error, using mock data:", apiError);

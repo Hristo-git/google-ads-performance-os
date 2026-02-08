@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# test files
+test-*.ts
+test-*.js
+windsor-test-*.json
+
+# Agent/AI artifacts
+.claude/
+.next_new/
+repro_plan.md

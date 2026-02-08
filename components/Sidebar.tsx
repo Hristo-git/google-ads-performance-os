@@ -6,6 +6,7 @@ import { useState } from "react";
 interface SidebarProps {
     campaigns: Campaign[];
     adGroups: AdGroup[];
+    assetGroups: any[];
     navigation: NavigationState;
     onNavigate: (nav: NavigationState) => void;
     accountName: string;
@@ -14,6 +15,7 @@ interface SidebarProps {
 export default function Sidebar({
     campaigns,
     adGroups,
+    assetGroups,
     navigation,
     onNavigate,
     accountName,
@@ -30,8 +32,11 @@ export default function Sidebar({
         setExpandedCampaigns(newExpanded);
     };
 
-    const getAdGroupsForCampaign = (campaignId: string) => {
-        return adGroups.filter(ag => ag.campaignId === campaignId);
+    const getAdGroupsForCampaign = (campaign: Campaign) => {
+        if (campaign.advertisingChannelType === 'PERFORMANCE_MAX' || campaign.name.toLowerCase().includes('pmax')) {
+            return assetGroups.filter(ag => ag.campaignId === campaign.id);
+        }
+        return adGroups.filter(ag => ag.campaignId === campaign.id);
     };
 
     const isSelected = (level: string, id?: string) => {
@@ -47,11 +52,10 @@ export default function Sidebar({
             <div className="p-4 border-b border-slate-700">
                 <button
                     onClick={() => onNavigate({ level: 'account' })}
-                    className={`w-full text-left p-3 rounded-lg transition-colors ${
-                        isSelected('account')
-                            ? 'bg-violet-600 text-white'
-                            : 'hover:bg-slate-700 text-slate-300'
-                    }`}
+                    className={`w-full text-left p-3 rounded-lg transition-colors ${isSelected('account')
+                        ? 'bg-violet-600 text-white'
+                        : 'hover:bg-slate-700 text-slate-300'
+                        }`}
                 >
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
@@ -67,6 +71,61 @@ export default function Sidebar({
                 </button>
             </div>
 
+            {/* View Mode Navigation */}
+            <div className="px-4 py-3 border-b border-slate-700">
+                <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">View</div>
+                <div className="space-y-1">
+                    <button
+                        onClick={() => onNavigate({ level: 'account', view: 'dashboard' })}
+                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${(!navigation.view || navigation.view === 'dashboard')
+                            ? 'bg-violet-600 text-white'
+                            : 'hover:bg-slate-700 text-slate-300'
+                            }`}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Dashboard
+                    </button>
+                    <button
+                        onClick={() => onNavigate({ level: 'account', view: 'insights' })}
+                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${navigation.view === 'insights'
+                            ? 'bg-violet-600 text-white'
+                            : 'hover:bg-slate-700 text-slate-300'
+                            }`}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Strategic Insights
+                    </button>
+                    <button
+                        onClick={() => onNavigate({ level: 'account', view: 'reports' })}
+                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${navigation.view === 'reports'
+                            ? 'bg-violet-600 text-white'
+                            : 'hover:bg-slate-700 text-slate-300'
+                            }`}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        AI Reports
+                    </button>
+                    <button
+                        onClick={() => onNavigate({ level: 'account', view: 'diagnostics' })}
+                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${navigation.view === 'diagnostics'
+                            ? 'bg-violet-600 text-white'
+                            : 'hover:bg-slate-700 text-slate-300'
+                            }`}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        Diagnostics & N-Grams
+                    </button>
+                </div>
+            </div>
+
             {/* Campaign Tree */}
             <div className="flex-1 overflow-y-auto p-2">
                 <div className="text-xs text-slate-500 uppercase tracking-wide px-3 py-2">
@@ -75,7 +134,7 @@ export default function Sidebar({
 
                 <div className="space-y-1">
                     {campaigns.map((campaign) => {
-                        const campaignAdGroups = getAdGroupsForCampaign(campaign.id);
+                        const items = getAdGroupsForCampaign(campaign);
                         const isExpanded = expandedCampaigns.has(campaign.id);
                         const isCampaignSelected = isSelected('campaign', campaign.id);
 
@@ -105,52 +164,48 @@ export default function Sidebar({
                                             });
                                             if (!isExpanded) toggleCampaign(campaign.id);
                                         }}
-                                        className={`flex-1 text-left px-2 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                                            isCampaignSelected
-                                                ? 'bg-violet-600 text-white'
-                                                : 'hover:bg-slate-700 text-slate-300'
-                                        }`}
+                                        className={`flex-1 text-left px-2 py-2 rounded-lg transition-colors flex items-center gap-2 ${isCampaignSelected
+                                            ? 'bg-violet-600 text-white'
+                                            : 'hover:bg-slate-700 text-slate-300'
+                                            }`}
                                     >
-                                        <span className={`w-2 h-2 rounded-full ${
-                                            campaign.status === 'ENABLED' ? 'bg-emerald-400' : 'bg-slate-500'
-                                        }`} />
+                                        <span className={`w-2 h-2 rounded-full ${campaign.status === 'ENABLED' ? 'bg-emerald-400' : 'bg-slate-500'
+                                            }`} />
                                         <span className="truncate text-sm">{campaign.name}</span>
                                         <span className="ml-auto text-xs text-slate-500">
-                                            {campaignAdGroups.length}
+                                            {items.length}
                                         </span>
                                     </button>
                                 </div>
 
-                                {/* Ad Groups */}
+                                {/* Ad Groups / Asset Groups */}
                                 {isExpanded && (
                                     <div className="ml-8 space-y-1 mt-1">
-                                        {campaignAdGroups.map((adGroup) => {
-                                            const isAdGroupSelected = isSelected('adgroup', adGroup.id);
+                                        {items.map((item) => {
+                                            const isItemSelected = isSelected('adgroup', item.id);
                                             return (
                                                 <button
-                                                    key={adGroup.id}
+                                                    key={item.id}
                                                     onClick={() => onNavigate({
                                                         level: 'adgroup',
                                                         campaignId: campaign.id,
                                                         campaignName: campaign.name,
-                                                        adGroupId: adGroup.id,
-                                                        adGroupName: adGroup.name,
+                                                        adGroupId: item.id,
+                                                        adGroupName: item.name,
                                                     })}
-                                                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${
-                                                        isAdGroupSelected
-                                                            ? 'bg-violet-600/80 text-white'
-                                                            : 'hover:bg-slate-700/50 text-slate-400'
-                                                    }`}
+                                                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${isItemSelected
+                                                        ? 'bg-violet-600/80 text-white'
+                                                        : 'hover:bg-slate-700/50 text-slate-400'
+                                                        }`}
                                                 >
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                                        adGroup.status === 'ENABLED' ? 'bg-emerald-400' : 'bg-slate-500'
-                                                    }`} />
-                                                    <span className="truncate">{adGroup.name}</span>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${(item.status === 'ENABLED' || item.status === 'enabled') ? 'bg-emerald-400' : 'bg-slate-500'
+                                                        }`} />
+                                                    <span className="truncate text-[11px] leading-tight">{item.name}</span>
                                                 </button>
                                             );
                                         })}
-                                        {campaignAdGroups.length === 0 && (
-                                            <p className="text-xs text-slate-600 px-3 py-2">No ad groups</p>
+                                        {items.length === 0 && (
+                                            <p className="text-xs text-slate-600 px-3 py-2">No items found</p>
                                         )}
                                     </div>
                                 )}

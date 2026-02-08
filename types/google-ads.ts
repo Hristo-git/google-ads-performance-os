@@ -6,12 +6,59 @@ export interface Campaign {
     clicks: number;
     cost: number;
     conversions: number;
+    conversionValue?: number;
     ctr: number;
     cpc: number;
+    cpa?: number | null;
+    roas?: number | null;
     // Impression Share metrics
     searchImpressionShare: number | null;
     searchLostISRank: number | null;
     searchLostISBudget: number | null;
+    category?: string;
+    biddingStrategyType?: string | null;
+    advertisingChannelType?: string | null;
+    advertisingChannelSubType?: string | null;
+    targetRoas?: number;
+    targetCpa?: number;
+    // PMax Asset Groups
+    assetGroups?: AssetGroup[];
+    // PoP Analysis
+    previous?: {
+        cost: number;
+        conversions: number;
+        cpa: number | null;
+        roas: number | null;
+        clicks: number;
+        impressions: number;
+    };
+    trends?: {
+        date: string;
+        cost: number;
+        conversions: number;
+        roas: number;
+        cpa: number;
+        clicks: number;
+        impressions: number;
+    }[];
+}
+
+export interface AssetGroup {
+    id: string;
+    campaignId: string;
+    name: string;
+    status: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue?: number;
+    ctr: number;
+    cpc: number;
+    cpa?: number | null;
+    roas?: number | null;
+    category?: string;
+    strength?: string;
 }
 
 export interface AdGroup {
@@ -23,14 +70,20 @@ export interface AdGroup {
     clicks: number;
     cost: number;
     conversions: number;
+    conversionValue?: number;
     ctr: number;
     cpc: number;
+    cpa?: number | null;
+    roas?: number | null;
     // Quality Score (aggregated)
     avgQualityScore: number | null;
+    relativeCtr?: number | null; // Display Network Relevance
     keywordsWithLowQS: number;
     // Ad Strength summary
     adsCount: number;
     poorAdsCount: number;
+    adStrength?: string;
+    category?: string;
 }
 
 export interface NegativeKeyword {
@@ -73,11 +126,107 @@ export interface Account {
 }
 
 export type NavigationLevel = 'account' | 'campaign' | 'adgroup';
+export type ViewMode = 'dashboard' | 'insights' | 'reports' | 'diagnostics';
 
 export interface NavigationState {
     level: NavigationLevel;
+    view?: ViewMode; // 'dashboard' or 'insights'
     campaignId?: string;
     campaignName?: string;
     adGroupId?: string;
     adGroupName?: string;
+}
+
+export interface AccountAsset {
+    id: string;
+    name: string;
+    type: string; // SITELINK, CALLOUT, etc.
+    fieldType: string; // BUSINESS_NAME, LOGO, etc.
+    status: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    ctr: number;
+    cpc: number;
+    performanceLabel?: string;
+}
+
+export interface PMaxAsset {
+    id: string;
+    assetGroupId: string;
+    type: string; // HEADLINE, DESCRIPTION, LOGO, MARKETING_IMAGE, etc.
+    fieldType: string;
+    text?: string;
+    name?: string;
+    status: string;
+    performanceLabel?: string; // PENDING, LEARNING, LOW, GOOD, BEST
+}
+
+export interface SearchTerm {
+    searchTerm: string;
+    date: string;
+    device: string; // MOBILE, DESKTOP, TABLET, UNKNOWN
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    ctr: number;
+    averageCpc: number;
+    conversionRate: number;
+}
+
+export interface DeviceBreakdown {
+    campaignId: string;
+    campaignName: string;
+    device: string; // MOBILE, DESKTOP, TABLET, UNKNOWN
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    clicks: number;
+    impressions: number;
+    crossDeviceConversions: number;
+    viewThroughConversions: number;
+}
+
+export type ReportTemplateId =
+    | 'quality_score_diagnostics'
+    | 'lost_is_analysis'
+    | 'search_terms_intelligence'
+    | 'ad_strength_performance'
+    | 'budget_allocation_efficiency'
+    | 'campaign_structure_health'
+    | 'change_impact_analysis';
+
+export type ReportCategory = 'quality' | 'efficiency' | 'insights' | 'structure';
+
+export interface ReportTemplate {
+    id: ReportTemplateId;
+    nameEN: string;
+    nameBG: string;
+    descriptionEN: string;
+    descriptionBG: string;
+    icon: string; // emoji or icon identifier
+    category: ReportCategory;
+    requiredData: ('campaigns' | 'adGroups' | 'keywords' | 'searchTerms' | 'ads')[];
+}
+
+export interface ReportSettings {
+    model: 'claude-sonnet-4.5';
+    language: 'bg' | 'en';
+    audience: 'internal' | 'client';
+    expertMode: boolean;
+    rowLimit: number;
+}
+
+export interface GeneratedReport {
+    id: string;
+    templateId: ReportTemplateId;
+    templateName: string;
+    timestamp: string;
+    analysis: string;
+    settings: ReportSettings;
+    accountId?: string;
 }

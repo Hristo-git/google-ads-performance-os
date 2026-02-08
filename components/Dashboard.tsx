@@ -1,87 +1,572 @@
 "use client";
 
-import { useSession, signIn, signOut } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
-import { Campaign, AdGroup, NegativeKeyword, KeywordWithQS, AdWithStrength, Account, NavigationState } from "@/types/google-ads";
+import { Campaign, AdGroup, AssetGroup, NegativeKeyword, KeywordWithQS, AdWithStrength, Account, AccountAsset, NavigationState, PMaxAsset, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
+import { ACCOUNTS, DEFAULT_ACCOUNT_ID } from "../config/accounts";
+import { processNGrams } from "@/lib/n-gram";
+import AIAnalysisModal from "./AIAnalysisModal";
+import StrategicInsights from "./StrategicInsights";
+import AIReportsHub from "./AIReportsHub";
+import AccountHealthWidget from "./AccountHealthWidget";
+import NGramInsights from "./NGramInsights";
 
-export default function Dashboard() {
+const Sparkline = ({ data, color = "#a78bfa" }: { data: number[], color?: string }) => {
+    if (!data || data.length < 2) return null;
+
+    const height = 24;
+    const width = 60;
+    const max = Math.max(...data);
+    const min = Math.min(...data);
+    const range = max - min || 1;
+
+    const points = data.map((val, i) => {
+        const x = (i / (data.length - 1)) * width;
+        const y = height - ((val - min) / range) * height;
+        return `${x},${y}`;
+    }).join(' ');
+
+    return (
+        <svg width={width} height={height} className="opacity-70">
+            <polyline
+                fill="none"
+                stroke={color}
+                strokeWidth="1.5"
+                points={points}
+                vectorEffect="non-scaling-stroke"
+            />
+        </svg>
+    );
+};
+
+const MetricCell = ({ value, format, previous, invertColor = false }: { value: number, format: (v: number) => string, previous?: number, invertColor?: boolean }) => {
+    let delta = null;
+
+    if (previous !== undefined && previous !== null && previous !== 0) {
+        delta = ((value - previous) / previous) * 100;
+    }
+
+    let colorClass = "text-slate-500";
+    let arrow = "";
+
+    if (delta !== null) {
+        if (delta > 0) {
+            arrow = "↑";
+            colorClass = invertColor ? "text-red-400" : "text-emerald-400";
+        } else if (delta < 0) {
+            arrow = "↓";
+            colorClass = invertColor ? "text-emerald-400" : "text-red-400";
+        }
+    }
+
+    return (
+        <div className="flex flex-col items-end">
+            <span>{format(value)}</span>
+            {delta !== null && Math.abs(delta) > 0.5 && (
+                <span className={`text-[10px] ${colorClass} flex items-center`}>
+                    {arrow} {Math.abs(delta).toFixed(0)}%
+                </span>
+            )}
+        </div>
+    );
+};
+
+// Helper to get default "Last Month" date range
+const getLastMonthRange = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of last month
+
+    // Format YYYY-MM-DD
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+    return {
+        start: formatDate(start),
+        end: formatDate(end)
+    };
+};
+
+// Helper to get "Last 7 Days" date range
+const getLast7DaysRange = () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 7);
+
+    return {
+        start: start.toISOString().split('T')[0],
+        end: end.toISOString().split('T')[0]
+    };
+};
+
+// Helper to categorize campaigns
+const getCampaignCategory = (c: any) => {
+    const name = (c.name || "").trim().toLowerCase().replace(/\s+/g, ' ');
+    const channelType = String(c.advertisingChannelType || "");
+
+    // (1) Brand
+    if (name.includes('brand') || name.includes('brand protection') ||
+        name.includes('бренд') || name.includes('защита')) {
+        return 'brand';
+    }
+
+    // PMax Check (Channel Type OR Name)
+    const isPMax = channelType === 'PERFORMANCE_MAX' ||
+        channelType === '10' ||
+        name.includes('pmax') ||
+        name.includes('performance');
+
+    if (isPMax) {
+        // (2) PMax – Sale
+        if (name.includes('[sale]') || name.includes('sale') || name.includes('promo') ||
+            name.includes('promotion') || name.includes('bf') || name.includes('black friday') ||
+            name.includes('cyber') || name.includes('discount') || name.includes('намал') ||
+            name.includes('промо') || name.includes('reducere') || name.includes('oferta') ||
+            name.includes('promotie')) {
+            return 'pmax_sale';
+        }
+        // (3) PMax – AON (Default for PMax)
+        return 'pmax_aon';
+    }
+
+    // (4) Search – DSA
+    if (name.includes('dsa')) {
+        return 'search_dsa';
+    }
+
+    // (5) Search – NonBrand
+    if (name.includes('sn') || name.includes('search') || name.includes('wd_s')) {
+        return 'search_nonbrand';
+    }
+
+    // (6) Video/Display / Demand Gen
+    if (name.includes('video') || name.includes('display') ||
+        name.includes('youtube') || name.includes('yt') ||
+        name.includes('dg - video') || name.includes('gdn') ||
+        channelType === 'VIDEO' || channelType === 'DISPLAY' ||
+        channelType === '6' || channelType === '3' ||
+        channelType === 'DEMAND_GEN' || channelType === '14' ||
+        channelType === 'DISCOVERY' || channelType === '12') {
+        return 'upper_funnel';
+    }
+
+    // (7) Shopping
+    if (name.includes('shop') || channelType === 'SHOPPING' || channelType === '4') {
+        return 'shopping';
+    }
+
+    return 'other';
+};
+
+const CHANNEL_TYPE_LABELS: Record<string, string> = {
+    'PERFORMANCE_MAX': 'PMax',
+    'SEARCH': 'Search',
+    'VIDEO': 'Video',
+    'DISPLAY': 'Display',
+    'SHOPPING': 'Shopping',
+    'DEMAND_GEN': 'Demand Gen',
+    'DISCOVERY': 'Demand Gen',
+    'MULTI_CHANNEL': 'PMax (Multi)',
+    'LOCAL': 'Local',
+    'SMART': 'Smart',
+    // Numeric mappings (Google Ads Enums v17+)
+    '2': 'Search',
+    '3': 'Display',
+    '4': 'Shopping',
+    '5': 'Hotel',
+    '6': 'Video',
+    '7': 'PMax (Multi)',
+    '8': 'Local',
+    '9': 'Smart',
+    '10': 'Performance Max',
+    '11': 'Local Services',
+    '12': 'Discovery',
+    '13': 'Travel',
+    '14': 'Demand Gen',
+};
+
+const BIDDING_STRATEGY_LABELS: Record<string, string> = {
+    'TARGET_ROAS': 'tROAS',
+    'TARGET_CPA': 'tCPA',
+    'MAXIMIZE_CONVERSIONS': 'Max Conversions',
+    'MAXIMIZE_CONVERSION_VALUE': 'Max Conv Value',
+    'ENHANCED_CPC': 'eCPC',
+    'MANUAL_CPC': 'Manual CPC',
+    'MANUAL_CPM': 'Manual CPM',
+    'TARGET_SPEND': 'Max Clicks',
+    'TARGET_IMPRESSION_SHARE': 'Target Imp Share',
+    'COMMISSION': 'Commission',
+    'MAXIMIZE_CONVERSION_VALUE_BASED_BIDDING': 'Max Conv Value',
+    // Numeric mappings (Google Ads Enums)
+    '2': 'Manual CPC',
+    '3': 'Manual CPM',
+    '4': 'Page One Promoted',
+    '5': 'Max Clicks',
+    '6': 'tCPA',
+    '7': 'tROAS',
+    '8': 'Max Conversions',
+    '9': 'Max Conv Value',
+    '10': 'eCPC',
+    '11': 'Target Imp Share'
+};
+
+
+// Asset Field Type Labels
+const ASSET_FIELD_TYPE_LABELS: Record<string, string> = {
+    'HEADLINE': 'Headline',
+    'DESCRIPTION': 'Description',
+    'MARKETING_IMAGE': 'Marketing Image',
+    'LOGO': 'Logo',
+    'YOUTUBE_VIDEO': 'Video',
+    'MEDIA_BUNDLE': 'Media Bundle',
+    'CALL_TO_ACTION': 'Call to Action',
+    'SITELINK': 'Sitelink',
+    'CALLOUT': 'Callout',
+    'STRUCTURED_SNIPPET': 'Structured Snippet',
+    'LONG_HEADLINE': 'Long Headline',
+    'BUSINESS_NAME': 'Business Name',
+    'SQUARE_MARKETING_IMAGE': 'Square Image',
+    'PORTRAIT_MARKETING_IMAGE': 'Portrait Image',
+    'LANDSCAPE_LOGO': 'Landscape Logo',
+    // numeric fallbacks just in case
+    '2': 'Headline',
+    '3': 'Description',
+    '5': 'Marketing Image',
+    '12': 'Structured Snippet',
+    '13': 'Sitelink',
+    '19': 'Business Name',
+    '20': 'Square Image',
+    '21': 'Portrait Image',
+    '22': 'Logo',
+    '23': 'Landscape Logo',
+    '24': 'Video',
+    '25': 'Long Headline',
+    '26': 'Call to Action'
+};
+
+const PERFORMANCE_LABEL_LABELS: Record<string, string> = {
+    'PENDING': 'Pending',
+    'LEARNING': 'Learning',
+    'LOW': 'Low',
+    'GOOD': 'Good',
+    'BEST': 'Best',
+    'UNKNOWN': 'Unknown',
+    'undefined': 'Pending'
+};
+
+// Helper to calculate strategic breakdown
+const calculateStrategicBreakdown = (campaigns: any[]) => {
+    const totalSpend = campaigns.reduce((sum, c) => sum + (c.cost || 0), 0);
+    const breakdown: Record<string, any> = {
+        brand: { spend: 0, campaigns: 0, percentage: 0 },
+        pmax_sale: { spend: 0, campaigns: 0, percentage: 0 },
+        pmax_aon: { spend: 0, campaigns: 0, percentage: 0 },
+        search_dsa: { spend: 0, campaigns: 0, percentage: 0 },
+        search_nonbrand: { spend: 0, campaigns: 0, percentage: 0 },
+        shopping: { spend: 0, campaigns: 0, percentage: 0 },
+        upper_funnel: { spend: 0, campaigns: 0, percentage: 0 },
+        other: { spend: 0, campaigns: 0, percentage: 0 }
+    };
+
+    campaigns.forEach(c => {
+        const cat = getCampaignCategory(c);
+        if (breakdown[cat]) {
+            breakdown[cat].spend += (c.cost || 0);
+            breakdown[cat].campaigns += 1;
+        } else {
+            breakdown.other.spend += (c.cost || 0);
+            breakdown.other.campaigns += 1;
+        }
+    });
+
+    Object.keys(breakdown).forEach(key => {
+        breakdown[key].percentage = totalSpend > 0 ? (breakdown[key].spend / totalSpend) * 100 : 0;
+    });
+
+    return breakdown;
+};
+
+// Helper to calculate Smart Bidding Deviation
+const enrichWithSmartBidding = (camps: Campaign[]) => {
+    return camps.map(c => {
+        let smartBiddingAnalysis = null;
+        // Check for Target ROAS
+        if (c.biddingStrategyType === 'TARGET_ROAS' && c.targetRoas) {
+            const actualRoas = c.roas || 0;
+            const target = c.targetRoas;
+            const deviation = target > 0 ? (actualRoas - target) / target : 0;
+            smartBiddingAnalysis = {
+                type: 'tROAS',
+                target,
+                actual: actualRoas,
+                deviation: parseFloat(deviation.toFixed(2)),
+                status: deviation < -0.2 ? 'MISSING_TARGET' : deviation > 0.2 ? 'EXCEEDING_TARGET' : 'ON_TARGET'
+            };
+        }
+        // Check for Target CPA
+        else if (c.biddingStrategyType === 'TARGET_CPA' && c.targetCpa) {
+            const actualCpa = c.cpa || 0;
+            const target = c.targetCpa;
+            // For CPA, lower is better. Positive deviation means we are spending MORE than target (bad).
+            const deviation = target > 0 ? (actualCpa - target) / target : 0;
+            smartBiddingAnalysis = {
+                type: 'tCPA',
+                target,
+                actual: actualCpa,
+                deviation: parseFloat(deviation.toFixed(2)),
+                status: deviation > 0.2 ? 'MISSING_TARGET' : deviation < -0.2 ? 'BEATING_TARGET' : 'ON_TARGET'
+            };
+        }
+        return { ...c, smartBiddingAnalysis };
+    });
+};
+
+export default function Dashboard({ customerId }: { customerId?: string }) {
     const { data: session, status } = useSession();
+    const router = useRouter();
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [adGroups, setAdGroups] = useState<AdGroup[]>([]);
+    const [assetGroups, setAssetGroups] = useState<AssetGroup[]>([]);
     const [negativeKeywords, setNegativeKeywords] = useState<NegativeKeyword[]>([]);
     const [keywords, setKeywords] = useState<KeywordWithQS[]>([]);
     const [ads, setAds] = useState<AdWithStrength[]>([]);
+    const [assets, setAssets] = useState<AccountAsset[]>([]); // New state for assets
+    const [pmaxAssets, setPmaxAssets] = useState<PMaxAsset[]>([]); // New state for PMax assets
     const [account, setAccount] = useState<Account | null>(null);
     const [loading, setLoading] = useState(false);
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
-    const [navigation, setNavigation] = useState<NavigationState>({ level: 'account' });
-    const [dataSource, setDataSource] = useState<'google-ads' | 'windsor'>('google-ads');
+    const [navigation, setNavigation] = useState<NavigationState>({ level: 'account', view: 'dashboard' });
+    const [error, setError] = useState<string | null>(null);
     const [loadingMessage, setLoadingMessage] = useState<string>("");
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+    const [strategicBreakdown, setStrategicBreakdown] = useState<any>(null);
+    const [selectedAccountId, setSelectedAccountId] = useState<string>(DEFAULT_ACCOUNT_ID);
+    const [dateRange, setDateRange] = useState<{ start: string, end: string }>(getLast7DaysRange());
+    const [sortBy, setSortBy] = useState<string>('cost'); // Default sort by cost
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // Default descending
+    const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // Filter by category
+    const [showAIModal, setShowAIModal] = useState(false); // AI Insights modal
+    const [dateRangeSelection, setDateRangeSelection] = useState<string>('last-7'); // Track date selection explicitly
+    const [language, setLanguage] = useState<'bg' | 'en'>('bg');
+    const [deviceBreakdown, setDeviceBreakdown] = useState<DeviceBreakdownType[]>([]);
+    const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([]);
+    const [hideStopped, setHideStopped] = useState(false); // Filter for Enabled only items
+    const [healthData, setHealthData] = useState<any>(null);
+    const [loadingHealth, setLoadingHealth] = useState(false);
 
+    // Sync state with URL parameter (from props) and trigger data refresh
     useEffect(() => {
-        if (session) {
-            fetchData();
+        if (customerId && customerId !== selectedAccountId) {
+            console.log(`[Dashboard] Account changed from ${selectedAccountId} to ${customerId}`);
+            // Clear existing data to force refresh
+            setCampaigns([]);
+            setAdGroups([]);
+            setAssetGroups([]);
+            setKeywords([]);
+            setAds([]);
+            setNegativeKeywords([]);
+            setAssets([]);
+            setPmaxAssets([]);
+            setAccount(null);
+            setStrategicBreakdown(null);
+            // Update the selected account ID
+            setSelectedAccountId(customerId);
+            // Data will be refetched automatically by the useEffect that watches selectedAccountId
         }
-    }, [session]);
+    }, [customerId, selectedAccountId]);
 
-    useEffect(() => {
-        if (navigation.level === 'adgroup' && navigation.adGroupId) {
-            fetchAdGroupDetails(navigation.adGroupId);
-        }
-    }, [navigation]);
+    const displayAccountName = useMemo(() => {
+        const mappedAccount = ACCOUNTS.find(acc => acc.id === selectedAccountId);
+        return mappedAccount ? mappedAccount.name : (account?.name || 'Account');
+    }, [selectedAccountId, account]);
 
-    const fetchData = async () => {
+    const filteredCampaignIds = useMemo(() => {
+        if (!categoryFilter) return undefined;
+        return campaigns
+            .filter(c => (getCampaignCategory as any)(c) === categoryFilter)
+            .map(c => String(c.id));
+    }, [campaigns, categoryFilter]);
+
+    // Calculate comparison date range
+    const getComparisonDateRange = (start: string, end: string) => {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Inclusive
+
+        const prevEndDate = new Date(startDate);
+        prevEndDate.setDate(prevEndDate.getDate() - 1);
+
+        const prevStartDate = new Date(prevEndDate);
+        prevStartDate.setDate(prevStartDate.getDate() - (diffDays - 1));
+
+        return {
+            start: prevStartDate.toISOString().split('T')[0],
+            end: prevEndDate.toISOString().split('T')[0]
+        };
+    };
+
+    const fetchCoreData = async () => {
+        console.log(`[fetchCoreData] Called with:`, { selectedAccountId, dateRange });
         setLoading(true);
-        setSelectedCampaignId(null);
+        setError(null);
         try {
-            if (dataSource === 'windsor') {
-                // Fetch Windsor.ai data
-                setLoadingMessage("Connecting to Windsor.ai...");
-                const camRes = await fetch("/api/windsor/campaigns");
-                setLoadingMessage("Processing campaign data...");
-                const camData = await camRes.json();
+            const statusParam = hideStopped ? '&status=ENABLED' : '';
+            const commonParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
 
-                if (camData.campaigns) {
-                    setCampaigns(camData.campaigns);
-                    setAccount({ name: 'Windsor.ai Data', id: 'windsor', currency: 'USD', timezone: 'America/New_York' });
-                }
-                // Ad groups not available from Windsor
-                setAdGroups([]);
-            } else {
-                // Fetch Google Ads API data
-                setLoadingMessage("Fetching Google Ads data...");
-                const [accRes, camRes, agRes] = await Promise.all([
-                    fetch("/api/google-ads/account"),
-                    fetch("/api/google-ads/campaigns"),
-                    fetch("/api/google-ads/ad-groups")
-                ]);
+            setLoadingMessage("Fetching Google Ads account...");
+            const [accRes, camRes] = await Promise.all([
+                fetch(`/api/google-ads/account?customerId=${selectedAccountId}`),
+                fetch(`/api/google-ads/campaigns?${commonParams}`)
+            ]);
 
-                setLoadingMessage("Processing data...");
-                const accData = await accRes.json();
-                const camData = await camRes.json();
-                const agData = await agRes.json();
+            const accData = await accRes.json();
+            const camData = await camRes.json();
 
-                if (accData.account) setAccount(accData.account);
-                if (camData.campaigns) setCampaigns(camData.campaigns);
-                if (agData.adGroups) setAdGroups(agData.adGroups);
+            if (accData.error) throw new Error(`Account Error: ${accData.error}`);
+            if (camData.error) throw new Error(`Campaigns Error: ${camData.error}`);
+
+            if (accData.account) setAccount(accData.account);
+            if (camData.campaigns) {
+                const categorizedCampaigns = camData.campaigns.map((c: any) => ({
+                    ...c,
+                    category: getCampaignCategory(c)
+                }));
+                setCampaigns(categorizedCampaigns);
+                setStrategicBreakdown(calculateStrategicBreakdown(categorizedCampaigns));
             }
-        } catch (error) {
-            console.error("Failed to fetch data:", error);
+
+            // Fetch Account Assets, Device Breakdown, and Search Terms
+            setLoadingMessage("Fetching Assets and Performance Data...");
+            const [assetsRes, deviceRes, searchRes] = await Promise.all([
+                fetch(`/api/google-ads/assets?${commonParams}`),
+                fetch(`/api/google-ads/device-breakdown?${commonParams}`),
+                fetch(`/api/google-ads/search-terms?${commonParams}`)
+            ]);
+
+            const assetsData = await assetsRes.json();
+            const deviceData = await deviceRes.json();
+            const searchData = await searchRes.json();
+
+            if (assetsData.assets) setAssets(assetsData.assets);
+            if (!deviceData.error && deviceData.deviceBreakdown) {
+                setDeviceBreakdown(deviceData.deviceBreakdown);
+            } else {
+                console.log('Device breakdown error or no data:', deviceData);
+                setDeviceBreakdown([]);
+            }
+            if (!searchData.error && searchData.searchTerms) {
+                setSearchTerms(searchData.searchTerms);
+            } else {
+                console.log('Search terms error or no data:', searchData);
+                setSearchTerms([]);
+            }
+        } catch (err: any) {
+            console.error("Failed to fetch core data:", err);
+            setError(err.message || "An unexpected error occurred");
         } finally {
             setLoading(false);
             setLoadingMessage("");
         }
     };
 
+    const fetchAdGroupData = async () => {
+        setLoading(true); // Show loading for ad groups
+        try {
+            setLoadingMessage("Fetching details...");
+            const statusParam = hideStopped ? '&status=ENABLED' : '';
+            const commonParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
+            const adGroupParams = navigation.campaignId ? `${commonParams}&campaignId=${navigation.campaignId}` : commonParams;
+
+            const agRes = await fetch(`/api/google-ads/ad-groups?${adGroupParams}`);
+            const agData = await agRes.json();
+            if (agData.error) throw new Error(`Ad Groups Error: ${agData.error}`);
+            if (agData.adGroups) setAdGroups(agData.adGroups);
+
+            // Fetch PMax assets if applicable
+            if (navigation.level === 'campaign' && navigation.campaignId) {
+                const campaign = campaigns.find(c => c.id === navigation.campaignId);
+                const isPMax = campaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                    campaign?.name?.toLowerCase().includes('pmax');
+
+                if (isPMax) {
+                    fetchAssetGroups(navigation.campaignId);
+                }
+            }
+        } catch (err: any) {
+            console.error("Failed to fetch ad group data:", err);
+            setError(err.message || "Failed to load ad groups");
+        } finally {
+            setLoading(false);
+            setLoadingMessage("");
+        }
+    };
+
+    useEffect(() => {
+        if (session) {
+            fetchCoreData();
+        }
+    }, [session, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
+
+    useEffect(() => {
+        if (session) {
+            fetchAdGroupData();
+        }
+    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
+
+
+    useEffect(() => {
+        if (session && navigation.level === 'adgroup' && navigation.adGroupId) {
+            fetchAdGroupDetails(navigation.adGroupId);
+        }
+    }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
+
+    const fetchAssetGroups = async (campaignId: string) => {
+        try {
+            const statusParam = hideStopped ? '&status=ENABLED' : '';
+            const queryParams = `?campaignId=${campaignId}&customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
+            const res = await fetch(`/api/google-ads/pmax-detailed${queryParams}`);
+            const data = await res.json();
+            if (data.assetGroups) {
+                setAssetGroups(data.assetGroups);
+                // Store extra PMax data for analysis
+                (window as any).__pmaxEnrichedData = {
+                    searchInsights: data.searchInsights || [],
+                    assetGroupDetails: data.assetGroups || []
+                };
+            }
+        } catch (error) {
+            console.error("Failed to fetch asset groups:", error);
+        }
+    };
+
     const fetchAdGroupDetails = async (adGroupId: string) => {
         try {
+            // Check if this is a PMax campaign (using asset groups)
+            const currentCampaign = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+            const isPMax = currentCampaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                currentCampaign?.name?.toLowerCase().includes('pmax');
+
+            if (isPMax) {
+                // Fetch PMax Assets
+                setLoadingMessage("Fetching Asset Group Assets...");
+                const res = await fetch(`/api/google-ads/pmax-assets?assetGroupId=${adGroupId}&customerId=${selectedAccountId}`);
+                if (!res.ok) throw new Error('Failed to fetch assets');
+                const data = await res.json();
+                setPmaxAssets(data.assets || []);
+                setAds([]); // Clear standard ads
+                setKeywords([]); // Clear standard keywords
+                return;
+            }
+
+            const statusParam = hideStopped ? '&status=ENABLED' : '';
+            const queryParams = `&customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
             const [nkRes, kwRes, adsRes] = await Promise.all([
-                fetch(`/api/google-ads/negative-keywords?adGroupId=${adGroupId}`),
-                fetch(`/api/google-ads/keywords?adGroupId=${adGroupId}`),
-                fetch(`/api/google-ads/ads?adGroupId=${adGroupId}`)
+                fetch(`/api/google-ads/negative-keywords?adGroupId=${adGroupId}&customerId=${selectedAccountId}`),
+                fetch(`/api/google-ads/keywords?adGroupId=${adGroupId}${queryParams}`),
+                fetch(`/api/google-ads/ads?adGroupId=${adGroupId}${queryParams}`)
             ]);
 
             const nkData = await nkRes.json();
@@ -96,41 +581,154 @@ export default function Dashboard() {
         }
     };
 
-    const runAnalysis = async () => {
-        const dataToAnalyze = getAnalysisContext();
+    // -----------------------------------------------------------------
+    // Fetch Account Health & N-Grams
+    // -----------------------------------------------------------------
+    useEffect(() => {
+        const fetchHealthData = async () => {
+            if (navigation.view !== 'diagnostics' || !selectedAccountId) return;
+
+            console.log(`[fetchHealthData] Fetching for customer: ${selectedAccountId}`, dateRange);
+            setLoadingHealth(true);
+            try {
+                const queryParams = new URLSearchParams({
+                    customerId: selectedAccountId,
+                    startDate: dateRange.start || '',
+                    endDate: dateRange.end || ''
+                });
+
+                const response = await fetch(`/api/google-ads/health?${queryParams.toString()}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Failed to fetch health data: ${response.status} ${errorText}`);
+                }
+                const data = await response.json();
+                console.log(`[fetchHealthData] Received:`, data);
+                setHealthData(data);
+            } catch (err) {
+                console.error("Error fetching health data:", err);
+            } finally {
+                setLoadingHealth(false);
+            }
+        };
+
+        fetchHealthData();
+    }, [navigation.view, selectedAccountId, dateRange]);
+
+
+    const runAnalysis = async (analysisType?: 'account-overview' | 'category' | 'campaign' | 'adgroup', category?: string) => {
+        let dataToAnalyze: any = getAnalysisContext();
         if (!dataToAnalyze) return;
+
+        // Add language, analysis type, and customerId to analysis data
+        dataToAnalyze.language = language;
+        dataToAnalyze.customerId = selectedAccountId;
+        dataToAnalyze.analysisType = analysisType || (navigation.level === 'account' ? 'account-overview' : navigation.level);
+
+        // If category-specific analysis, filter campaigns by category
+        if (analysisType === 'category' && category) {
+            const filteredCampaigns = campaigns.filter(c => getCampaignCategory(c) === category);
+            dataToAnalyze = {
+                campaigns: enrichWithSmartBidding(filteredCampaigns),
+                strategicBreakdown,
+                level: 'strategic_category',
+                category,
+                language
+            };
+        }
 
         setAnalyzing(true);
         try {
+            // --- Enrich with N-Gram Analysis (Account/Campaign Level) ---
+            if (navigation.level === 'account' || navigation.level === 'campaign') {
+                try {
+                    setLoadingMessage("Fetching search terms for N-Gram analysis...");
+                    const queryParams = `?customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}`;
+                    const stRes = await fetch(`/api/google-ads/search-terms${queryParams}`);
+                    if (stRes.ok) {
+                        const stData = await stRes.json();
+                        if (stData.searchTerms && stData.searchTerms.length > 0) {
+                            const nGramResult = processNGrams(stData.searchTerms);
+                            dataToAnalyze = {
+                                ...dataToAnalyze,
+                                nGramAnalysis: {
+                                    topWinning: nGramResult.topWinning,
+                                    topWasteful: nGramResult.topWasteful
+                                }
+                            };
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Failed to fetch search terms for N-Gram analysis", err);
+                }
+            }
+            // ------------------------------------------------------------
+
             const res = await fetch("/api/analyze", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(dataToAnalyze)
             });
             const data = await res.json();
-            setAnalysis(data.analysis);
-        } catch (error) {
+            if (data.error) {
+                setAnalysis(`Error: ${data.error}${data.details ? ` (${data.details})` : ''}`);
+            } else {
+                setAnalysis(data.analysis);
+            }
+        } catch (error: any) {
             console.error("Analysis failed:", error);
-            setAnalysis("Failed to generate analysis.");
+            setAnalysis(`Failed to generate analysis: ${error.message || 'Unknown error'}`);
         } finally {
             setAnalyzing(false);
+            setLoadingMessage(""); // Clear enrichment loading message
         }
     };
 
     const getAnalysisContext = () => {
-        // For Windsor mode with selected campaign
-        if (dataSource === 'windsor' && selectedCampaignId) {
-            const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
-            return { campaign: selectedCampaign, campaigns: [selectedCampaign], level: 'account' };
+        // Enriched Context Variable
+        let context: any = {};
+
+        if (navigation.level === 'account') {
+            // Priority 1: Specific Campaign Selected
+            if (selectedCampaignId) {
+                const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
+                return { campaign: selectedCampaign, campaigns: [selectedCampaign], strategicBreakdown, level: 'account' };
+            }
+
+            // Priority 2: Category Filter Active
+            if (categoryFilter) {
+                const filteredCampaigns = campaigns.filter(c => c.category === categoryFilter);
+                return {
+                    campaigns: filteredCampaigns,
+                    strategicBreakdown,
+                    level: 'account',
+                    context: `Filtered by category: ${categoryFilter}`
+                };
+            }
         }
 
         switch (navigation.level) {
             case 'account':
-                return { campaigns, level: 'account' };
+                return { campaigns: enrichWithSmartBidding(campaigns), strategicBreakdown, level: 'account' };
             case 'campaign':
-                const campaignAdGroups = adGroups.filter(ag => ag.campaignId === navigation.campaignId);
                 const campaign = campaigns.find(c => c.id === navigation.campaignId);
-                return { campaign, adGroups: campaignAdGroups, level: 'campaign' };
+                const isPMax = campaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                    campaign?.name?.toLowerCase().includes('pmax');
+
+                const campaignAdGroups = adGroups.filter(ag => ag.campaignId === navigation.campaignId);
+                // If we have asset groups (PMax), return them with enriched data
+                if (assetGroups.length > 0 && isPMax) {
+                    const pmaxData = (window as any).__pmaxEnrichedData || {};
+                    return {
+                        campaign: enrichWithSmartBidding(campaign ? [campaign] : [])[0],
+                        assetGroups,
+                        pmaxSearchInsights: pmaxData.searchInsights || [],
+                        pmaxAssetGroupDetails: pmaxData.assetGroupDetails || [],
+                        level: 'campaign'
+                    };
+                }
+
+                return { campaign: enrichWithSmartBidding(campaign ? [campaign] : [])[0], adGroups: campaignAdGroups, level: 'campaign' };
             case 'adgroup':
                 const adGroup = adGroups.find(ag => ag.id === navigation.adGroupId);
                 return { adGroup, negativeKeywords, keywords, ads, level: 'adgroup' };
@@ -174,27 +772,9 @@ export default function Dashboard() {
 
     if (!session) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col items-center justify-center space-y-8 px-4">
-                <div className="text-center space-y-4">
-                    <h1 className="text-5xl font-bold text-white tracking-tight">
-                        Google Ads Performance OS
-                    </h1>
-                    <p className="text-slate-400 text-lg max-w-md">
-                        Connect your Google Ads account and get AI-powered insights to optimize your campaigns.
-                    </p>
-                </div>
-                <button
-                    onClick={() => signIn("google")}
-                    className="flex items-center gap-3 rounded-lg bg-white px-8 py-4 font-semibold text-slate-900 shadow-lg transition hover:bg-slate-100 hover:shadow-xl"
-                >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                    </svg>
-                    Sign in with Google
-                </button>
+            <div className="min-h-screen flex items-center justify-center bg-slate-900">
+                {/* This should strictly be handled by app/page.tsx redirection, but as a fallback: */}
+                <div className="text-slate-400">Redirecting to login...</div>
             </div>
         );
     }
@@ -205,38 +785,114 @@ export default function Dashboard() {
             case 'account':
                 return campaigns;
             case 'campaign':
-                return adGroups.filter(ag => ag.campaignId === navigation.campaignId);
+                const currentCampaign = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                const isPMaxCampaignForCurrentLevel = currentCampaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                    currentCampaign?.name?.toLowerCase().includes('pmax') ||
+                    assetGroups.length > 0;
+
+                if (isPMaxCampaignForCurrentLevel && assetGroups.length > 0) {
+                    return assetGroups;
+                }
+
+                return adGroups.filter(ag => String(ag.campaignId) === String(navigation.campaignId));
             case 'adgroup':
+                const campaignForAdGroup = campaigns.find(c => c.id === navigation.campaignId);
+                const isPMaxCampForAdGroup = campaignForAdGroup?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                    campaignForAdGroup?.name?.toLowerCase().includes('pmax');
+
+                if (isPMaxCampForAdGroup) {
+                    return [assetGroups.find(ag => ag.id === navigation.adGroupId)].filter(Boolean);
+                }
                 return [adGroups.find(ag => ag.id === navigation.adGroupId)].filter(Boolean);
             default:
                 return [];
         }
     };
 
+    // Handle column sorting
+    const handleSort = (column: string) => {
+        if (sortBy === column) {
+            // Toggle direction if same column
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            // New column, default to descending
+            setSortBy(column);
+            setSortDirection('desc');
+        }
+    };
+
+    // Handle category filter
+    const handleCategoryFilter = (category: string) => {
+        if (categoryFilter === category) {
+            setCategoryFilter(null); // Toggle off
+        } else {
+            setCategoryFilter(category); // Set filter
+        }
+    };
+
     const currentData = getCurrentData();
-    const totalSpend = currentData.reduce((sum, item) => sum + (item?.cost || 0), 0);
-    const totalConversions = currentData.reduce((sum, item) => sum + (item?.conversions || 0), 0);
-    const totalClicks = currentData.reduce((sum, item) => sum + (item?.clicks || 0), 0);
-    const totalImpressions = currentData.reduce((sum, item) => sum + (item?.impressions || 0), 0);
+
+    // Filter data first
+    const filteredData = (currentData || []).filter(item => {
+        if (!item) return false;
+        if (!categoryFilter || navigation.level !== 'account') return true;
+        return (item as any).category === categoryFilter;
+    });
+
+    // Apply sorting
+    const sortedData = [...(filteredData || [])].sort((a, b) => {
+        if (!a || !b) return 0; // Guard against undefined items
+
+        let aVal: any = (a as any)[sortBy];
+        let bVal: any = (b as any)[sortBy];
+
+        // Custom handling for CVR
+        if (sortBy === 'cvr') {
+            aVal = a.clicks > 0 ? (a.conversions || 0) / a.clicks : 0;
+            bVal = b.clicks > 0 ? (b.conversions || 0) / b.clicks : 0;
+        }
+
+        // Handle null/undefined
+        if (aVal == null) aVal = -Infinity;
+        if (bVal == null) bVal = -Infinity;
+
+        // String comparison for name
+        if (sortBy === 'name') {
+            aVal = String(aVal).toLowerCase();
+            bVal = String(bVal).toLowerCase();
+            return sortDirection === 'asc'
+                ? aVal.localeCompare(bVal)
+                : bVal.localeCompare(aVal);
+        }
+
+        // Numeric comparison
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+    const totalSpend = sortedData.reduce((sum, item) => sum + (item?.cost || 0), 0);
+    const totalConversions = sortedData.reduce((sum, item) => sum + (item?.conversions || 0), 0);
+    const totalClicks = sortedData.reduce((sum, item) => sum + (item?.clicks || 0), 0);
+    const totalImpressions = sortedData.reduce((sum, item) => sum + (item?.impressions || 0), 0);
+    const totalConversionValue = sortedData.reduce((sum, item) => sum + (item?.conversionValue || 0), 0);
+    const totalROAS = totalSpend > 0 ? totalConversionValue / totalSpend : 0;
 
     // Current selected ad group for detail view
     const currentAdGroup = navigation.level === 'adgroup'
-        ? adGroups.find(ag => ag.id === navigation.adGroupId)
+        ? (adGroups.find(ag => String(ag.id) === String(navigation.adGroupId)) ||
+            assetGroups.find(ag => String(ag.id) === String(navigation.adGroupId)))
         : null;
 
     return (
-        <div className="min-h-screen bg-slate-900 flex">
-            {/* Sidebar */}
+        <div className="flex h-screen bg-slate-900 overflow-hidden">
             <Sidebar
                 campaigns={campaigns}
                 adGroups={adGroups}
-                navigation={navigation}
+                assetGroups={assetGroups}
                 onNavigate={setNavigation}
-                accountName={account?.name || ''}
+                navigation={navigation}
+                accountName={displayAccountName}
             />
-
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-h-screen overflow-hidden relative">
+            <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                 {/* Loading Overlay */}
                 {loading && (
                     <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -246,7 +902,7 @@ export default function Dashboard() {
                                 <div className="absolute inset-0 border-4 border-violet-500 rounded-full border-t-transparent animate-spin"></div>
                             </div>
                             <p className="text-white font-medium mb-1">
-                                {dataSource === 'windsor' ? 'Loading Windsor.ai Data' : 'Loading Google Ads Data'}
+                                Loading Google Ads Data
                             </p>
                             <p className="text-slate-400 text-sm">{loadingMessage || 'Please wait...'}</p>
                         </div>
@@ -264,7 +920,7 @@ export default function Dashboard() {
                                     className={`hover:text-white transition-colors ${navigation.level === 'account' ? 'text-white font-medium' : 'text-slate-400'
                                         }`}
                                 >
-                                    {account?.name || 'Account'}
+                                    {displayAccountName}
                                 </button>
                                 {navigation.campaignName && (
                                     <>
@@ -294,440 +950,840 @@ export default function Dashboard() {
                                 )}
                             </div>
                             <h1 className="text-xl font-bold text-white mt-1">
-                                {navigation.level === 'account' && 'All Campaigns'}
-                                {navigation.level === 'campaign' && 'Ad Groups'}
-                                {navigation.level === 'adgroup' && 'Ad Group Details'}
+                                {navigation.view === 'insights' ? 'Strategic Insights' :
+                                 navigation.view === 'reports' ? 'AI Reports' :
+                                 navigation.view === 'diagnostics' ? 'Diagnostics & N-Grams' :
+                                 navigation.level === 'campaign' ? (
+                                    (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                        campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
+                                        ? 'Asset Groups'
+                                        : 'Ad Groups'
+                                 ) :
+                                 navigation.level === 'adgroup' ? (
+                                    (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                        campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
+                                        ? 'Asset Group Details'
+                                        : 'Ad Group Details'
+                                 ) :
+                                 'All Campaigns'}
                             </h1>
                         </div>
                         <div className="flex items-center gap-3">
-                            {/* Data Source Selector */}
-                            <div className="flex items-center gap-2 bg-slate-700/50 rounded-lg p-1">
-                                <button
-                                    onClick={() => { setDataSource('google-ads'); fetchData(); }}
-                                    className={`text-xs px-3 py-1.5 rounded transition-all ${dataSource === 'google-ads'
-                                        ? 'bg-blue-600 text-white font-medium'
-                                        : 'text-slate-400 hover:text-white'
-                                        }`}
+                            {/* Account Selector */}
+                            <div className="bg-slate-700/50 rounded-lg px-3 py-1.5 flex items-center gap-2 border border-slate-600/50">
+                                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                </svg>
+                                <select
+                                    value={selectedAccountId}
+                                    onChange={(e) => {
+                                        const newId = e.target.value;
+                                        setSelectedAccountId(newId);
+                                        router.push(`/?customerId=${newId}`);
+                                    }}
+                                    className="bg-transparent text-xs text-white border-none focus:ring-0 cursor-pointer appearance-none hover:text-blue-400 transition-colors"
                                 >
-                                    Google Ads API
-                                </button>
-                                <button
-                                    onClick={() => { setDataSource('windsor'); fetchData(); }}
-                                    className={`text-xs px-3 py-1.5 rounded transition-all ${dataSource === 'windsor'
-                                        ? 'bg-violet-600 text-white font-medium'
-                                        : 'text-slate-400 hover:text-white'
-                                        }`}
-                                >
-                                    Windsor.ai
-                                </button>
+                                    {ACCOUNTS.map(acc => (
+                                        <option key={acc.id} value={acc.id} className="bg-slate-800 text-white">
+                                            {acc.name}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
+
+                            {/* Date Range Selector */}
+                            <div className="flex items-center gap-2">
+                                <div className="bg-slate-700/50 rounded-lg px-3 py-1.5 flex items-center gap-2 border border-slate-600/50">
+                                    <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    <select
+                                        value={dateRangeSelection}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setDateRangeSelection(val);
+                                            if (val === 'last-month') {
+                                                setDateRange(getLastMonthRange());
+                                            } else if (val === 'last-30') {
+                                                setDateRange({
+                                                    start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
+                                                    end: new Date().toISOString().split('T')[0]
+                                                });
+                                            } else if (val === 'last-7') {
+                                                setDateRange(getLast7DaysRange());
+                                            }
+                                        }}
+                                        className="bg-transparent text-xs text-white border-none focus:ring-0 cursor-pointer appearance-none hover:text-blue-400 transition-colors"
+                                    >
+                                        <option value="last-month" className="bg-slate-800">Last Month</option>
+                                        <option value="last-30" className="bg-slate-800">Last 30 Days</option>
+                                        <option value="last-7" className="bg-slate-800">Last 7 Days</option>
+                                        <option value="custom" className="bg-slate-800">Custom Range</option>
+                                    </select>
+                                </div>
+
+                                {dateRangeSelection === 'custom' && (
+                                    <div className="flex items-center gap-2 bg-slate-700/50 rounded-lg px-2 py-1 border border-slate-600/50 animate-in fade-in slide-in-from-left-2 duration-300">
+                                        <input
+                                            type="date"
+                                            value={dateRange.start}
+                                            onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                                            className="bg-transparent text-[10px] text-white border-none focus:ring-0 p-0 w-24 cursor-pointer hover:text-blue-400 transition-colors"
+                                        />
+                                        <span className="text-slate-500 text-[10px]">to</span>
+                                        <input
+                                            type="date"
+                                            value={dateRange.end}
+                                            onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                                            className="bg-transparent text-[10px] text-white border-none focus:ring-0 p-0 w-24 cursor-pointer hover:text-blue-400 transition-colors"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Hide Stopped Items Toggle */}
+                            <button
+                                onClick={() => setHideStopped(!hideStopped)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${hideStopped
+                                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                                    : 'bg-slate-700/50 border-slate-600/50 text-slate-400 hover:text-slate-300'
+                                    }`}
+                                title={hideStopped ? "Showing only Enabled items" : "Showing all items (including Paused)"}
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    {hideStopped ? (
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    ) : (
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    )}
+                                </svg>
+                                <span className="text-xs font-medium">
+                                    {hideStopped ? 'Enabled Only' : 'All Statuses'}
+                                </span>
+                            </button>
+
+                            {/* Windsor toggle hidden as requested */}
+
+                            {/* AI Analysis Button */}
+                            <button
+                                onClick={() => setShowAIModal(true)}
+                                className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg transition-all shadow-lg hover:shadow-violet-500/25 font-medium"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Analyze with AI
+                            </button>
+
                             <button
                                 onClick={() => signOut()}
                                 className="text-sm text-slate-400 hover:text-red-400 transition-colors px-4 py-2 rounded-lg hover:bg-slate-700/50"
                             >
                                 Sign out
                             </button>
+
+                            {session?.user?.role === 'admin' && (
+                                <a
+                                    href="/admin"
+                                    className="text-sm text-slate-400 hover:text-purple-400 transition-colors px-4 py-2 rounded-lg hover:bg-slate-700/50 flex items-center gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    Admin
+                                </a>
+                            )}
                         </div>
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-auto p-6 space-y-6">
-                    {/* KPI Cards */}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 shadow-lg">
-                            <p className="text-sm font-medium text-blue-100">Total Spend</p>
-                            <p className="text-2xl font-bold text-white mt-1">${totalSpend.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                {/* AI Insights Modal */}
+                <AIAnalysisModal
+                    isOpen={showAIModal}
+                    onClose={() => setShowAIModal(false)}
+                    analysis={analysis}
+                    analyzing={analyzing}
+                    onAnalyze={() => runAnalysis()}
+                    onAnalyzeStrategic={(category) => {
+                        runAnalysis('category', category);
+                    }}
+                    onClear={() => { setAnalysis(""); setAnalyzing(false); }}
+                    strategicBreakdown={strategicBreakdown}
+                    language={language}
+                    setLanguage={setLanguage}
+                />
+
+                {/* Error Alert */}
+                {error && (
+                    <div className="mx-6 mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between group animate-in slide-in-from-top-2 duration-300">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                                <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-red-400">API Connection Error</p>
+                                <p className="text-xs text-red-400/70 mt-0.5">
+                                    {error.includes('invalid_grant')
+                                        ? 'Your Google Ads Refresh Token has expired or been revoked. Please update the GOOGLE_ADS_REFRESH_TOKEN in .env.local'
+                                        : error}
+                                </p>
+                            </div>
                         </div>
-                        <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-5 shadow-lg">
-                            <p className="text-sm font-medium text-emerald-100">Conversions</p>
-                            <p className="text-2xl font-bold text-white mt-1">{totalConversions.toLocaleString()}</p>
-                        </div>
-                        <div className="rounded-xl bg-gradient-to-br from-violet-600 to-violet-700 p-5 shadow-lg">
-                            <p className="text-sm font-medium text-violet-100">Clicks</p>
-                            <p className="text-2xl font-bold text-white mt-1">{totalClicks.toLocaleString()}</p>
-                        </div>
-                        <div className="rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 p-5 shadow-lg">
-                            <p className="text-sm font-medium text-amber-100">Impressions</p>
-                            <p className="text-2xl font-bold text-white mt-1">{totalImpressions.toLocaleString()}</p>
-                        </div>
+                        <button
+                            onClick={() => setError(null)}
+                            className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                        >
+                            <svg className="w-4 h-4 text-red-400/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
+                )}
 
-                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                        {/* Data Table */}
-                        <div className="lg:col-span-2 space-y-6">
-                            <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
-                                <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                    <h2 className="font-semibold text-white">
-                                        {navigation.level === 'account' && 'Campaigns'}
-                                        {navigation.level === 'campaign' && 'Ad Groups'}
-                                        {navigation.level === 'adgroup' && 'Performance'}
-                                    </h2>
-                                    <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                        {currentData.length} {navigation.level === 'account' ? 'campaigns' : 'ad groups'}
-                                    </span>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                                            <tr>
-                                                <th className="px-4 py-3 font-medium">Name</th>
-                                                <th className="px-4 py-3 text-right font-medium">Cost</th>
-                                                <th className="px-4 py-3 text-right font-medium">CTR</th>
-                                                {navigation.level === 'account' && (
-                                                    <>
-                                                        <th className="px-4 py-3 text-right font-medium">Impr. Share</th>
-                                                        <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
-                                                    </>
-                                                )}
+                {navigation.view === 'insights' ? (
+                    <StrategicInsights
+                        campaigns={currentData as Campaign[]}
+                        adGroups={adGroups}
+                        strategicBreakdown={strategicBreakdown}
+                        dateRange={dateRange}
+                        selectedAccountId={selectedAccountId}
+                        onCategoryFilter={handleCategoryFilter}
+                        onClearFilter={() => setCategoryFilter(null)}
+                        categoryFilter={categoryFilter}
+                        enrichWithSmartBidding={enrichWithSmartBidding}
+                        language={language}
+                        setLanguage={setLanguage}
+                        deviceBreakdown={deviceBreakdown}
+                        searchTerms={searchTerms}
+                        customerId={selectedAccountId}
+                        filteredCampaignIds={filteredCampaignIds}
+                    />
+                ) : navigation.view === 'reports' ? (
+                    <main className="flex-1 overflow-auto p-6">
+                        <AIReportsHub
+                            campaigns={enrichWithSmartBidding(campaigns)}
+                            adGroups={adGroups}
+                            searchTerms={searchTerms}
+                            keywords={keywords}
+                            ads={ads}
+                            strategicBreakdown={strategicBreakdown}
+                            language={language}
+                            setLanguage={setLanguage}
+                            customerId={selectedAccountId}
+                        />
+                    </main>
+                ) : navigation.view === 'diagnostics' ? (
+                    <main className="flex-1 overflow-auto p-6 space-y-6">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                            <AccountHealthWidget
+                                data={healthData || { overallScore: 0, overallGrade: 'N/A', checks: [], summary: '' }}
+                                loading={loadingHealth}
+                            />
+                            <NGramInsights
+                                searchTerms={healthData?.searchTerms || []}
+                                loading={loadingHealth}
+                            />
+                        </div>
+                    </main>
+                ) : (
+                    <main className="flex-1 overflow-auto p-6 space-y-6">
+                        {/* KPI Cards */}
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                            <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 shadow-lg">
+                                <p className="text-sm font-medium text-blue-100">Total Spend</p>
+                                <p className="text-2xl font-bold text-white mt-1">€{totalSpend.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                            </div>
+                            <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-5 shadow-lg">
+                                <p className="text-sm font-medium text-emerald-100">Conversions</p>
+                                <p className="text-2xl font-bold text-white mt-1">{totalConversions.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                            </div>
+                            <div className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 p-5 shadow-lg">
+                                <p className="text-sm font-medium text-purple-100">Conv. Value</p>
+                                <p className="text-2xl font-bold text-white mt-1">€{totalConversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                            </div>
+                            <div className="rounded-xl bg-gradient-to-br from-pink-600 to-pink-700 p-5 shadow-lg">
+                                <p className="text-sm font-medium text-pink-100">ROAS</p>
+                                <p className="text-2xl font-bold text-white mt-1">{totalROAS.toFixed(2)}x</p>
+                            </div>
+                            <div className="rounded-xl bg-gradient-to-br from-violet-600 to-violet-700 p-5 shadow-lg">
+                                <p className="text-sm font-medium text-violet-100">Clicks</p>
+                                <p className="text-2xl font-bold text-white mt-1">{totalClicks.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-6">
+                            {/* Data Table */}
+                            <div className="w-full space-y-6">
+                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                        <div className="flex items-center gap-3">
+                                            <h2 className="font-semibold text-white">
+                                                {navigation.level === 'account' && 'Campaigns'}
                                                 {navigation.level === 'campaign' && (
-                                                    <>
-                                                        <th className="px-4 py-3 text-right font-medium">Avg QS</th>
-                                                        <th className="px-4 py-3 text-right font-medium">Poor Ads</th>
-                                                    </>
+                                                    (campaigns.find(c => c.id === navigation.campaignId)?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                                        campaigns.find(c => c.id === navigation.campaignId)?.name.toLowerCase().includes('pmax'))
+                                                        ? 'Asset Groups'
+                                                        : 'Ad Groups'
                                                 )}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-700">
-                                            {currentData.map((item: any) => (
-                                                <tr
-                                                    key={item.id}
-                                                    className={`hover:bg-slate-700/30 transition-colors cursor-pointer ${
-                                                        dataSource === 'windsor' && selectedCampaignId === item.id
-                                                            ? 'bg-violet-600/20 ring-1 ring-violet-500'
-                                                            : ''
-                                                        }`}
-                                                    onClick={() => {
-                                                        // Windsor mode: select campaign for analysis
-                                                        if (dataSource === 'windsor' && navigation.level === 'account') {
-                                                            setSelectedCampaignId(selectedCampaignId === item.id ? null : item.id);
-                                                            return;
-                                                        }
-
-                                                        if (navigation.level === 'account') {
-                                                            setNavigation({
-                                                                level: 'campaign',
-                                                                campaignId: item.id,
-                                                                campaignName: item.name,
-                                                            });
-                                                        } else if (navigation.level === 'campaign') {
-                                                            setNavigation({
-                                                                level: 'adgroup',
-                                                                campaignId: navigation.campaignId,
-                                                                campaignName: navigation.campaignName,
-                                                                adGroupId: item.id,
-                                                                adGroupName: item.name,
-                                                            });
-                                                        }
-                                                    }}
-                                                >
-                                                    <td className="px-4 py-4 font-medium text-white">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`w-2 h-2 rounded-full ${item.status === 'ENABLED' ? 'bg-emerald-400' : 'bg-slate-500'
-                                                                }`} />
-                                                            {item.name}
-                                                            {navigation.level !== 'adgroup' && !(dataSource === 'windsor' && navigation.level === 'account') && (
-                                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                                </svg>
+                                                {navigation.level === 'adgroup' && 'Performance'}
+                                            </h2>
+                                            {categoryFilter && navigation.level === 'account' && (
+                                                <div className="flex items-center gap-2 bg-violet-500/20 border border-violet-500/30 rounded-lg px-3 py-1">
+                                                    <span className="text-xs text-violet-300">Filtered: {
+                                                        categoryFilter === 'pmax_sale' ? 'PMax – Sale' :
+                                                        categoryFilter === 'pmax_aon' ? 'PMax – AON' :
+                                                        categoryFilter === 'search_dsa' ? 'Search – DSA' :
+                                                        categoryFilter === 'search_nonbrand' ? 'Search – NonBrand' :
+                                                        categoryFilter === 'shopping' ? 'Shopping' :
+                                                        categoryFilter === 'upper_funnel' ? 'Video/Display' :
+                                                        categoryFilter === 'brand' ? 'Brand' : categoryFilter
+                                                    }</span>
+                                                    <button
+                                                        onClick={() => setCategoryFilter(null)}
+                                                        className="text-violet-400 hover:text-white transition-colors"
+                                                    >
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                            {sortedData.length} {
+                                                navigation.level === 'account' ? 'campaigns' :
+                                                    (navigation.level === 'campaign' && assetGroups.length > 0) ? 'asset groups' : 'ad groups'
+                                            }
+                                        </span>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm">
+                                            <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                <tr>
+                                                    <th className="px-4 py-3 font-medium">
+                                                        <button onClick={() => handleSort('name')} className="flex items-center gap-1 hover:text-white">
+                                                            Name
+                                                            {sortBy === 'name' && (
+                                                                <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
                                                             )}
-                                                            {dataSource === 'windsor' && navigation.level === 'account' && selectedCampaignId === item.id && (
-                                                                <span className="text-xs text-violet-400 font-medium ml-1">Selected for analysis</span>
+                                                        </button>
+                                                    </th>
+                                                    <th className="px-4 py-3 text-right font-medium">
+                                                        <button onClick={() => handleSort('cost')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                            Cost
+                                                            {sortBy === 'cost' && (
+                                                                <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
                                                             )}
-                                                            {dataSource === 'windsor' && navigation.level === 'account' && selectedCampaignId !== item.id && (
-                                                                <span className="text-xs text-slate-500 italic ml-1">(click to select)</span>
+                                                        </button>
+                                                    </th>
+                                                    <th className="px-4 py-3 text-right font-medium">
+                                                        <button onClick={() => handleSort('ctr')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                            CTR
+                                                            {sortBy === 'ctr' && (
+                                                                <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
                                                             )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-4 text-right text-slate-200">${item.cost.toFixed(2)}</td>
-                                                    <td className="px-4 py-4 text-right">
-                                                        <span className={`font-medium ${item.ctr >= 0.05 ? 'text-emerald-400' :
-                                                            item.ctr >= 0.02 ? 'text-amber-400' : 'text-red-400'
-                                                            }`}>
-                                                            {(item.ctr * 100).toFixed(2)}%
-                                                        </span>
-                                                    </td>
+                                                        </button>
+                                                    </th>
                                                     {navigation.level === 'account' && (
                                                         <>
-                                                            <td className="px-4 py-4 text-right">
-                                                                <span className={`font-medium ${getISColor(item.searchImpressionShare)}`}>
-                                                                    {item.searchImpressionShare !== null
-                                                                        ? `${(item.searchImpressionShare * 100).toFixed(0)}%`
-                                                                        : '—'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-4 text-right">
-                                                                {item.searchLostISRank !== null && item.searchLostISRank > 0.15 ? (
-                                                                    <span className="text-red-400 font-medium">
-                                                                        {(item.searchLostISRank * 100).toFixed(1)}% ⚠️
-                                                                    </span>
-                                                                ) : item.searchLostISRank !== null ? (
-                                                                    <span className="text-slate-400">
-                                                                        {(item.searchLostISRank * 100).toFixed(1)}%
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-slate-500">—</span>
-                                                                )}
-                                                            </td>
+                                                            <th className="px-4 py-3 text-right font-medium">
+                                                                <button onClick={() => handleSort('conversions')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                    Conversions
+                                                                    {sortBy === 'conversions' && (
+                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                    )}
+                                                                </button>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-right font-medium">
+                                                                <button onClick={() => handleSort('cvr')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                    CVR
+                                                                    {sortBy === 'cvr' && (
+                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                    )}
+                                                                </button>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-right font-medium">
+                                                                <button onClick={() => handleSort('conversionValue')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                    Conv. Value
+                                                                    {sortBy === 'conversionValue' && (
+                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                    )}
+                                                                </button>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-right font-medium">
+                                                                <button onClick={() => handleSort('roas')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                    ROAS
+                                                                    {sortBy === 'roas' && (
+                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                    )}
+                                                                </button>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
+                                                            <th className="px-4 py-3 text-center font-medium">Type</th>
+                                                            <th className="px-4 py-3 text-center font-medium">Bidding</th>
                                                         </>
                                                     )}
                                                     {navigation.level === 'campaign' && (
-                                                        <>
-                                                            <td className="px-4 py-4 text-right">
-                                                                <span className={`font-medium ${getQSColor(item.avgQualityScore)}`}>
-                                                                    {item.avgQualityScore !== null
-                                                                        ? item.avgQualityScore.toFixed(1)
-                                                                        : '—'}
-                                                                </span>
-                                                                {item.keywordsWithLowQS > 0 && (
-                                                                    <span className="ml-1 text-xs text-red-400">
-                                                                        ({item.keywordsWithLowQS} low)
-                                                                    </span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-4 text-right">
-                                                                {item.poorAdsCount > 0 ? (
-                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">
-                                                                        {item.poorAdsCount}/{item.adsCount}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-slate-400">{item.adsCount} ads</span>
-                                                                )}
-                                                            </td>
-                                                        </>
+                                                        (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                                            campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax')) ? (
+                                                            <>
+                                                                <th className="px-4 py-3 text-right font-medium">Ad Strength</th>
+                                                                <th className="px-4 py-3 text-right font-medium"></th>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    {(() => {
+                                                                        const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                                                        const isDisplay = camp?.advertisingChannelType === 'DISPLAY' ||
+                                                                            camp?.name.toLowerCase().includes('remarketing') ||
+                                                                            camp?.category?.includes('upper_funnel');
+                                                                        return isDisplay ? 'Rel. CTR' : 'Avg QS';
+                                                                    })()}
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium">Ad Strength</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Poor Ads</th>
+                                                            </>
+                                                        )
                                                     )}
                                                 </tr>
-                                            ))}
-                                            {currentData.length === 0 && (
-                                                <tr>
-                                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-                                                        No data found.
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-700">
+                                                {sortedData.map((item: any) => (
+                                                    <tr
+                                                        key={item.id}
+                                                        className="hover:bg-slate-700/30 transition-colors cursor-pointer"
+                                                        onClick={() => {
+                                                            // Standard navigation
 
-                            {/* Ad Group Detail Sections */}
-                            {navigation.level === 'adgroup' && currentAdGroup && (
-                                <>
-                                    {/* Keywords with QS */}
-                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
-                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                            <h2 className="font-semibold text-white">Keywords & Quality Score</h2>
-                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                {keywords.length} keywords
-                                            </span>
-                                        </div>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left text-sm">
-                                                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                                                    <tr>
-                                                        <th className="px-4 py-3 font-medium">Keyword</th>
-                                                        <th className="px-4 py-3 text-center font-medium">QS</th>
-                                                        <th className="px-4 py-3 text-center font-medium">Exp. CTR</th>
-                                                        <th className="px-4 py-3 text-center font-medium">Ad Rel.</th>
-                                                        <th className="px-4 py-3 text-center font-medium">LP Exp.</th>
+                                                            if (navigation.level === 'account') {
+                                                                setNavigation({
+                                                                    level: 'campaign',
+                                                                    campaignId: item.id,
+                                                                    campaignName: item.name,
+                                                                });
+                                                            } else if (navigation.level === 'campaign') {
+                                                                setNavigation({
+                                                                    level: 'adgroup',
+                                                                    campaignId: navigation.campaignId,
+                                                                    campaignName: navigation.campaignName,
+                                                                    adGroupId: item.id,
+                                                                    adGroupName: item.name,
+                                                                });
+                                                            }
+                                                        }}
+                                                    >
+                                                        <td className="px-4 py-4 font-medium text-white">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm mr-1">
+                                                                    {(item.status === 'ENABLED' || item.status === 'enabled') ? '✅' : `⚠️ ${item.status || ''}`}
+                                                                </span>
+                                                                {item.name}
+                                                                {navigation.level !== 'adgroup' && (
+                                                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                    </svg>
+                                                                )}
+                                                                {navigation.level === 'account' && selectedCampaignId === item.id && (
+                                                                    <span className="text-xs text-violet-400 font-medium ml-1">Selected for analysis</span>
+                                                                )}
+                                                                {navigation.level === 'account' && selectedCampaignId !== item.id && (
+                                                                    <span className="text-xs text-slate-500 italic ml-1">(click to select)</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-4 text-right text-slate-200">
+                                                            <MetricCell
+                                                                value={item.cost}
+                                                                previous={item.previous?.cost}
+                                                                format={(v) => `€${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+                                                                invertColor={true}
+                                                            />
+                                                        </td>
+                                                        <td className="px-4 py-4 text-right">
+                                                            <span className={`font-medium ${item.ctr >= 0.05 ? 'text-emerald-400' :
+                                                                item.ctr >= 0.02 ? 'text-amber-400' : 'text-red-400'
+                                                                }`}>
+                                                                {(item.ctr * 100).toFixed(2)}%
+                                                            </span>
+                                                        </td>
+                                                        {navigation.level === 'account' && (
+                                                            <>
+                                                                <td className="px-4 py-4 text-right text-slate-200">
+                                                                    <MetricCell
+                                                                        value={item.conversions || 0}
+                                                                        previous={item.previous?.conversions}
+                                                                        format={(v) => v.toLocaleString('en-US')}
+                                                                    />
+                                                                </td>
+                                                                <td className="px-4 py-4 text-right text-slate-400">
+                                                                    {item.clicks > 0 ? ((item.conversions || 0) / item.clicks * 100).toFixed(2) : '0.00'}%
+                                                                </td>
+                                                                <td className="px-4 py-4 text-right">
+                                                                    {item.conversionValue != null && item.conversionValue > 0 ? (
+                                                                        <span className="text-slate-200">€{item.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                                                    ) : (
+                                                                        <span className="text-slate-500">—</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-4 text-right">
+                                                                    <div className="flex flex-col items-end">
+                                                                        {item.roas != null ? (
+                                                                            <span className={`font-medium ${item.roas >= 3 ? 'text-emerald-400' : item.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
+                                                                                {item.roas.toFixed(2)}x
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500">—</span>
+                                                                        )}
+                                                                        {item.roas != null && item.previous?.roas && (
+                                                                            (() => {
+                                                                                const delta = ((item.roas - item.previous.roas) / item.previous.roas) * 100;
+                                                                                if (Math.abs(delta) < 0.5) return null;
+                                                                                const color = delta > 0 ? 'text-emerald-400' : 'text-red-400';
+                                                                                const arrow = delta > 0 ? '↑' : '↓';
+                                                                                return (
+                                                                                    <span className={`text-[10px] ${color} flex items-center`}>
+                                                                                        {arrow} {Math.abs(delta).toFixed(0)}%
+                                                                                    </span>
+                                                                                );
+                                                                            })()
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-4 text-right">
+                                                                    {item.searchLostISRank != null && item.searchLostISRank > 0.15 ? (
+                                                                        <span className="text-red-400 font-medium">
+                                                                            {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                        </span>
+                                                                    ) : item.searchLostISRank != null ? (
+                                                                        <span className="text-slate-400">
+                                                                            {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-500">—</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-4 text-center">
+                                                                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${item.category === 'pmax_sale' || item.category === 'pmax_aon' ? 'bg-purple-500/20 text-purple-400' :
+                                                                        item.category === 'search_nonbrand' || item.category === 'search_dsa' ? 'bg-blue-500/20 text-blue-400' :
+                                                                            item.category === 'upper_funnel' ? 'bg-orange-500/20 text-orange-400' :
+                                                                                item.category === 'brand' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                                    'bg-slate-600/50 text-slate-400'
+                                                                        }`}>
+                                                                        {item.category === 'pmax_sale' ? 'PMax – Sale' :
+                                                                            item.category === 'pmax_aon' ? 'PMax – AON' :
+                                                                                item.category === 'search_dsa' ? 'Search – DSA' :
+                                                                                    item.category === 'search_nonbrand' ? 'Search' :
+                                                                                        item.category === 'upper_funnel' ? 'Video/Display' :
+                                                                                            item.category === 'brand' ? 'Brand' :
+                                                                                                CHANNEL_TYPE_LABELS[String(item.advertisingChannelType).toUpperCase()] ||
+                                                                                                CHANNEL_TYPE_LABELS[String(item.advertisingChannelType)] ||
+                                                                                                (String(item.advertisingChannelType).toUpperCase().includes('MULTI_CHANNEL') ? 'PMax (Multi)' :
+                                                                                                    String(item.advertisingChannelType).toUpperCase().includes('DISPLAY') ? 'Display' :
+                                                                                                        item.advertisingChannelType || 'Other')}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-4 text-center">
+                                                                    {(item as Campaign).biddingStrategyType ? (
+                                                                        <span className="text-xs text-slate-300 bg-slate-700 px-2 py-1 rounded">
+                                                                            {BIDDING_STRATEGY_LABELS[String((item as Campaign).biddingStrategyType).toUpperCase()] ||
+                                                                                BIDDING_STRATEGY_LABELS[String((item as Campaign).biddingStrategyType)] ||
+                                                                                String((item as Campaign).biddingStrategyType).replace('TARGET_', 't').replace('MAXIMIZE_', 'Max ').replace(/_/g, ' ')}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-500 text-xs">—</span>
+                                                                    )}
+                                                                </td>
+                                                            </>
+                                                        )}
+                                                        {navigation.level === 'campaign' && (
+                                                            (campaigns.find(c => c.id === navigation.campaignId)?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                                                campaigns.find(c => c.id === navigation.campaignId)?.name.toLowerCase().includes('pmax')) ? (
+                                                                <>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor((item as any).strength || (item as any).adStrength || 'UNSPECIFIED')}`}>
+                                                                            {(item as any).strength || (item as any).adStrength || 'UNSPECIFIED'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right"></td>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {(() => {
+                                                                            const camp = campaigns.find(c => c.id === navigation.campaignId);
+                                                                            const isDisplay = camp?.advertisingChannelType === 'DISPLAY' ||
+                                                                                camp?.name.toLowerCase().includes('remarketing') ||
+                                                                                camp?.category?.includes('upper_funnel');
+
+                                                                            if (isDisplay) {
+                                                                                return item.relativeCtr != null ? (
+                                                                                    <span className={`font-medium ${item.relativeCtr >= 1 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                                                        {item.relativeCtr.toFixed(1)}x
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-slate-500">—</span>
+                                                                                );
+                                                                            }
+
+                                                                            return (
+                                                                                <>
+                                                                                    <span className={`font-medium ${getQSColor(item.avgQualityScore)}`}>
+                                                                                        {item.avgQualityScore !== null
+                                                                                            ? item.avgQualityScore.toFixed(1)
+                                                                                            : '—'}
+                                                                                    </span>
+                                                                                    {item.keywordsWithLowQS > 0 && (
+                                                                                        <span className="ml-1 text-xs text-red-400">
+                                                                                            ({item.keywordsWithLowQS} low)
+                                                                                        </span>
+                                                                                    )}
+                                                                                </>
+                                                                            );
+                                                                        })()}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
+                                                                            {(item as any).adStrength || 'UNSPECIFIED'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {item.poorAdsCount > 0 ? (
+                                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">
+                                                                                {item.poorAdsCount}/{item.adsCount}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500 text-xs">0</span>
+                                                                        )}
+                                                                    </td>
+                                                                </>
+                                                            )
+                                                        )}
                                                     </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-700">
-                                                    {keywords.map((kw) => (
-                                                        <tr key={kw.id} className="hover:bg-slate-700/30">
-                                                            <td className="px-4 py-3 text-white">
-                                                                <span className="text-xs text-slate-500 mr-1">[{kw.matchType}]</span>
-                                                                {kw.text}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-center">
-                                                                <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)}`}>
-                                                                    {kw.qualityScore ?? '—'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-center">
-                                                                <span className={`text-xs px-2 py-0.5 rounded ${kw.expectedCtr === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                    kw.expectedCtr === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
-                                                                        'bg-red-500/20 text-red-400'
-                                                                    }`}>
-                                                                    {kw.expectedCtr.replace('_', ' ')}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-center">
-                                                                <span className={`text-xs px-2 py-0.5 rounded ${kw.adRelevance === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                    kw.adRelevance === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
-                                                                        'bg-red-500/20 text-red-400'
-                                                                    }`}>
-                                                                    {kw.adRelevance.replace('_', ' ')}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-center">
-                                                                <span className={`text-xs px-2 py-0.5 rounded ${kw.landingPageExperience === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                    kw.landingPageExperience === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
-                                                                        'bg-red-500/20 text-red-400'
-                                                                    }`}>
-                                                                    {kw.landingPageExperience.replace('_', ' ')}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                    {keywords.length === 0 && (
-                                                        <tr>
-                                                            <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                                                                No keywords found.
-                                                            </td>
-                                                        </tr>
-                                                    )}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                                ))}
+                                                {sortedData.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                                                            No data found.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
                                     </div>
+                                </div>
 
-                                    {/* Ads with Strength */}
-                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
-                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                            <h2 className="font-semibold text-white">Ads & Ad Strength</h2>
-                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                {ads.length} ads
-                                            </span>
-                                        </div>
-                                        <div className="p-4 space-y-4">
-                                            {ads.map((ad) => (
-                                                <div key={ad.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
-                                                            {ad.adStrength}
+                                {/* Ad Group Detail Sections */}
+                                {navigation.level === 'adgroup' && currentAdGroup && (
+                                    <>
+                                        {pmaxAssets.length > 0 ? (
+                                            <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
+                                                <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                    <h2 className="font-semibold text-white">Asset Group Assets</h2>
+                                                    <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                        {pmaxAssets.length} assets
+                                                    </span>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-left text-sm">
+                                                        <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                            <tr>
+                                                                <th className="px-4 py-3 font-medium">Asset Type</th>
+                                                                <th className="px-4 py-3 font-medium">Content</th>
+                                                                <th className="px-4 py-3 text-center font-medium">Perf. Label</th>
+                                                                <th className="px-4 py-3 text-center font-medium">Status</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-700">
+                                                            {pmaxAssets.map((asset) => (
+                                                                <tr key={`${asset.id}-${asset.fieldType}`} className="hover:bg-slate-700/30">
+                                                                    <td className="px-4 py-3 text-white">
+                                                                        <span className="bg-slate-700 text-slate-300 px-2 py-1 rounded text-xs border border-slate-600">
+                                                                            {ASSET_FIELD_TYPE_LABELS[asset.fieldType] || asset.fieldType}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-white max-w-md truncate" title={asset.text}>
+                                                                        {asset.type === 'IMAGE' || asset.type === 'MARKETING_IMAGE' || asset.fieldType === 'MARKETING_IMAGE' || asset.fieldType === '5' ? (
+                                                                            <span className="text-blue-400">Marketing Image</span>
+                                                                        ) : (
+                                                                            asset.text || asset.name || "—"
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        <span className={`px-2 py-1 rounded text-xs font-bold ${(asset.performanceLabel === 'BEST' || asset.performanceLabel === 'GOOD') ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                            (asset.performanceLabel === 'LOW') ? 'bg-red-500/20 text-red-400' :
+                                                                                'bg-slate-600/50 text-slate-400'
+                                                                            }`}>
+                                                                            {PERFORMANCE_LABEL_LABELS[asset.performanceLabel || 'UNKNOWN'] || asset.performanceLabel || 'Pending'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-center text-xs text-slate-400">
+                                                                        {asset.status === 'ENABLED' ? '✅ ENABLED' : '⚠️ ' + asset.status}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {/* Keywords with QS */}
+                                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                        <h2 className="font-semibold text-white">Keywords & Quality Score</h2>
+                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                            {keywords.length} keywords
                                                         </span>
-                                                        <div className="flex items-center gap-4 text-sm">
-                                                            <span className={`${ad.headlinesCount < 10 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                Headlines: <strong>{ad.headlinesCount}</strong>/15
-                                                                {ad.headlinesCount < 10 && ' ⚠️'}
-                                                            </span>
-                                                            <span className={`${ad.descriptionsCount < 3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                Descriptions: <strong>{ad.descriptionsCount}</strong>/4
-                                                                {ad.descriptionsCount < 3 && ' ⚠️'}
-                                                            </span>
-                                                        </div>
                                                     </div>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {ad.headlines.slice(0, 6).map((headline, idx) => (
-                                                            <span key={idx} className="text-xs bg-slate-600/50 text-slate-300 px-2 py-1 rounded">
-                                                                {headline}
-                                                            </span>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full text-left text-sm">
+                                                            <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                                <tr>
+                                                                    <th className="px-4 py-3 font-medium">Keyword</th>
+                                                                    <th className="px-4 py-3 text-center font-medium">QS</th>
+                                                                    <th className="px-4 py-3 text-center font-medium">Exp. CTR</th>
+                                                                    <th className="px-4 py-3 text-center font-medium">Ad Rel.</th>
+                                                                    <th className="px-4 py-3 text-center font-medium">LP Exp.</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-700">
+                                                                {keywords.map((kw) => (
+                                                                    <tr key={kw.id} className="hover:bg-slate-700/30">
+                                                                        <td className="px-4 py-3 text-white">
+                                                                            <span className="text-xs text-slate-500 mr-1">[{kw.matchType}]</span>
+                                                                            {kw.text}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-center">
+                                                                            <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)}`}>
+                                                                                {kw.qualityScore ?? '—'}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-center">
+                                                                            <span className={`text-xs px-2 py-0.5 rounded ${kw.expectedCtr === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                                kw.expectedCtr === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
+                                                                                    'bg-red-500/20 text-red-400'
+                                                                                }`}>
+                                                                                {kw.expectedCtr.replace('_', ' ')}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-center">
+                                                                            <span className={`text-xs px-2 py-0.5 rounded ${kw.adRelevance === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                                kw.adRelevance === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
+                                                                                    'bg-red-500/20 text-red-400'
+                                                                                }`}>
+                                                                                {kw.adRelevance.replace('_', ' ')}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-center">
+                                                                            <span className={`text-xs px-2 py-0.5 rounded ${kw.landingPageExperience === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                                kw.landingPageExperience === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
+                                                                                    'bg-red-500/20 text-red-400'
+                                                                                }`}>
+                                                                                {kw.landingPageExperience.replace('_', ' ')}
+                                                                            </span>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                                {keywords.length === 0 && (
+                                                                    <tr>
+                                                                        <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                                                                            No keywords found.
+                                                                        </td>
+                                                                    </tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+
+                                                {/* Ads with Strength */}
+                                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                        <h2 className="font-semibold text-white">Ads & Ad Strength</h2>
+                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                            {ads.length} ads
+                                                        </span>
+                                                    </div>
+                                                    <div className="p-4 space-y-4">
+                                                        {ads.map((ad) => (
+                                                            <div key={ad.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
+                                                                <div className="flex items-center justify-between mb-3">
+                                                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
+                                                                        {ad.adStrength}
+                                                                    </span>
+                                                                    <div className="flex items-center gap-4 text-sm">
+                                                                        <span className={`${ad.headlinesCount < 10 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                            Headlines: <strong>{ad.headlinesCount}</strong>/15
+                                                                            {ad.headlinesCount < 10 && ' ⚠️'}
+                                                                        </span>
+                                                                        <span className={`${ad.descriptionsCount < 3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                            Descriptions: <strong>{ad.descriptionsCount}</strong>/4
+                                                                            {ad.descriptionsCount < 3 && ' ⚠️'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {ad.headlines.slice(0, 6).map((headline, idx) => (
+                                                                        <span key={idx} className="text-xs bg-slate-600/50 text-slate-300 px-2 py-1 rounded">
+                                                                            {headline}
+                                                                        </span>
+                                                                    ))}
+                                                                    {ad.headlines.length > 6 && (
+                                                                        <span className="text-xs text-slate-500">
+                                                                            +{ad.headlines.length - 6} more
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         ))}
-                                                        {ad.headlines.length > 6 && (
-                                                            <span className="text-xs text-slate-500">
-                                                                +{ad.headlines.length - 6} more
-                                                            </span>
+                                                        {ads.length === 0 && (
+                                                            <p className="text-slate-500 text-sm text-center py-4">No ads found.</p>
                                                         )}
                                                     </div>
                                                 </div>
-                                            ))}
-                                            {ads.length === 0 && (
-                                                <p className="text-slate-500 text-sm text-center py-4">No ads found.</p>
-                                            )}
-                                        </div>
-                                    </div>
 
-                                    {/* Negative Keywords */}
-                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
-                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                            <h2 className="font-semibold text-white">Negative Keywords</h2>
-                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                {negativeKeywords.length} keywords
-                                            </span>
-                                        </div>
-                                        <div className="p-4">
-                                            {negativeKeywords.length > 0 ? (
-                                                <div className="flex flex-wrap gap-2">
-                                                    {negativeKeywords.map((kw) => (
-                                                        <span
-                                                            key={kw.id}
-                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-sm border border-red-500/20"
-                                                        >
-                                                            <span className="text-xs text-red-500/70">[{kw.matchType}]</span>
-                                                            {kw.text}
+                                                {/* Negative Keywords */}
+                                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                        <h2 className="font-semibold text-white">Negative Keywords</h2>
+                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                            {negativeKeywords.length} keywords
                                                         </span>
-                                                    ))}
+                                                    </div>
+                                                    <div className="p-4">
+                                                        {negativeKeywords.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {negativeKeywords.map((kw) => (
+                                                                    <span
+                                                                        key={kw.id}
+                                                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-sm border border-red-500/20"
+                                                                    >
+                                                                        <span className="text-xs text-red-500/70">[{kw.matchType}]</span>
+                                                                        {kw.text}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-slate-500 text-sm">No negative keywords configured.</p>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            ) : (
-                                                <p className="text-slate-500 text-sm">No negative keywords configured.</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </>
-                            )}
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
                         </div>
 
-                        {/* AI Insights Panel */}
-                        <div className="lg:col-span-1">
-                            <div className="rounded-xl bg-gradient-to-br from-slate-800 to-slate-800/50 border border-slate-700 p-6 shadow-lg sticky top-24">
-                                <div className="flex justify-between items-center mb-4">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></div>
-                                        <h2 className="font-semibold text-white">AI Insights</h2>
-                                    </div>
-                                    <button
-                                        onClick={runAnalysis}
-                                        disabled={analyzing || currentData.length === 0}
-                                        className="text-xs bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {analyzing ? (
-                                            <span className="flex items-center gap-2">
-                                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                </svg>
-                                                Analyzing...
-                                            </span>
-                                        ) : 'Analyze'}
-                                    </button>
-                                </div>
-                                <div className="text-xs text-slate-500 mb-3 px-2 py-1 bg-slate-700/30 rounded">
-                                    Context: {
-                                        dataSource === 'windsor' && selectedCampaignId
-                                            ? `Campaign: ${campaigns.find(c => c.id === selectedCampaignId)?.name || 'Selected'}`
-                                            : navigation.level === 'account' ? 'All Campaigns'
-                                            : navigation.level === 'campaign' ? navigation.campaignName
-                                            : navigation.adGroupName
-                                    }
-                                </div>
-                                <div className="text-sm text-slate-300 min-h-[240px] whitespace-pre-wrap leading-relaxed">
-                                    {analysis || (
-                                        <div className="text-slate-500 space-y-3">
-                                            <p>Click 'Analyze' to get AI insights for the current view.</p>
-                                            <div className="border-t border-slate-700 pt-3 space-y-2">
-                                                <p className="text-xs text-slate-600">Analysis includes:</p>
-                                                <ul className="text-xs text-slate-600 space-y-1">
-                                                    {navigation.level === 'account' && (
-                                                        <>
-                                                            <li>• Impression Share analysis</li>
-                                                            <li>• Rank loss opportunities</li>
-                                                            <li>• Budget recommendations</li>
-                                                        </>
-                                                    )}
-                                                    {navigation.level === 'campaign' && (
-                                                        <>
-                                                            <li>• Quality Score insights</li>
-                                                            <li>• Ad Strength improvements</li>
-                                                            <li>• Performance bottlenecks</li>
-                                                        </>
-                                                    )}
-                                                    {navigation.level === 'adgroup' && (
-                                                        <>
-                                                            <li>• Keyword QS breakdown</li>
-                                                            <li>• Ad copy recommendations</li>
-                                                            <li>• Negative keyword suggestions</li>
-                                                        </>
-                                                    )}
-                                                </ul>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </main>
-            </div>
-        </div>
+                    </main>
+                )
+                }
+            </div >
+        </div >
     );
 }

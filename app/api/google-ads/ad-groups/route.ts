@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import { getAdGroups } from "@/lib/google-ads";
 
 // Mock data for demonstration
@@ -37,6 +37,7 @@ const mockAdGroups = [
         keywordsWithLowQS: 3,
         adsCount: 2,
         poorAdsCount: 1,  // One ad with poor strength
+        adStrength: "AVERAGE",
     },
     // Product Launch Campaign (id: 2)
     {
@@ -86,6 +87,7 @@ const mockAdGroups = [
         keywordsWithLowQS: 4,
         adsCount: 1,
         poorAdsCount: 1,
+        adStrength: "POOR",
     },
     // Retargeting Campaign (id: 3)
     {
@@ -103,6 +105,7 @@ const mockAdGroups = [
         keywordsWithLowQS: 0,
         adsCount: 4,
         poorAdsCount: 0,
+        adStrength: "GOOD",
     },
     {
         id: "302",
@@ -136,6 +139,7 @@ const mockAdGroups = [
         keywordsWithLowQS: 5,
         adsCount: 2,
         poorAdsCount: 2,  // Both ads are poor!
+        adStrength: "POOR",
     },
     {
         id: "402",
@@ -152,6 +156,7 @@ const mockAdGroups = [
         keywordsWithLowQS: 2,
         adsCount: 2,
         poorAdsCount: 1,
+        adStrength: "AVERAGE",
     },
     {
         id: "403",
@@ -168,6 +173,7 @@ const mockAdGroups = [
         keywordsWithLowQS: 1,
         adsCount: 1,
         poorAdsCount: 0,
+        adStrength: "GOOD",
     },
     // Display Campaign (id: 5)
     {
@@ -208,7 +214,7 @@ export async function GET(request: Request) {
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session?.refreshToken) {
+        if (!session?.user) {
             return NextResponse.json(
                 { error: "Unauthorized - Please sign in" },
                 { status: 401 }
@@ -217,9 +223,38 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url);
         const campaignId = searchParams.get("campaignId");
+        let customerId = searchParams.get('customerId') || undefined;
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
+        const status = searchParams.get('status');
+        const onlyEnabled = status === 'ENABLED';
+        const dateRange = (startDate && endDate) ? { start: startDate, end: endDate } : undefined;
+
+        // Access Control
+        const allowedIds = session.user.allowedCustomerIds || [];
+        if (session.user.role !== 'admin') {
+            if (!customerId && allowedIds.length > 0) {
+                customerId = allowedIds[0];
+            }
+            if (customerId && !allowedIds.includes('*') && !allowedIds.includes(customerId)) {
+                return NextResponse.json(
+                    { error: "Forbidden - Access to this account is denied" },
+                    { status: 403 }
+                );
+            }
+        }
 
         try {
-            const adGroups = await getAdGroups(session.refreshToken, campaignId || undefined);
+            console.log(`Fetching ad groups for customerId: ${customerId}, campaignId: ${campaignId}, onlyEnabled: ${onlyEnabled}`);
+            const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
+            if (!refreshToken) {
+                return NextResponse.json(
+                    { error: "Configuration Error - Missing Refresh Token" },
+                    { status: 500 }
+                );
+            }
+            const adGroups = await getAdGroups(refreshToken, campaignId || undefined, customerId, dateRange, onlyEnabled);
+            console.log(`Fetched ${adGroups.length} ad groups`);
             return NextResponse.json({ adGroups });
         } catch (apiError) {
             console.error("Google Ads API error, using mock data:", apiError);
