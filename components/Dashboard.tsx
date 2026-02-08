@@ -541,14 +541,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         if (session) {
             fetchAdGroupData();
         }
-    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
+    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns]);
 
 
     useEffect(() => {
         if (session && navigation.level === 'adgroup' && navigation.adGroupId) {
             fetchAdGroupDetails(navigation.adGroupId);
         }
-    }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
+    }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns]);
 
     const fetchAssetGroups = async (campaignId: string) => {
         try {
