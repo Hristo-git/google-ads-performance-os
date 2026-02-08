@@ -377,6 +377,33 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         }
     }, [customerId, selectedAccountId]);
 
+    // Derived state for filtered accounts based on permissions
+    const filteredAccounts = useMemo(() => {
+        if (!session?.user) return [];
+        const allowedIds = session.user.allowedCustomerIds || [];
+        const role = session.user.role;
+        const isAdmin = role === 'admin' || allowedIds.includes('*');
+
+        if (isAdmin) return ACCOUNTS;
+        return ACCOUNTS.filter(acc => allowedIds.includes(acc.id));
+    }, [session]);
+
+    // Auto-select allowed account if current selection is forbidden
+    useEffect(() => {
+        if (status === 'loading' || !session) return;
+
+        // If we have accounts but the current selection isn't one of them
+        if (filteredAccounts.length > 0) {
+            const isAllowed = filteredAccounts.some(acc => acc.id === selectedAccountId);
+            if (!isAllowed) {
+                console.warn(`[Dashboard] Selected account ${selectedAccountId} is not allowed. Switching to ${filteredAccounts[0].id}`);
+                const newId = filteredAccounts[0].id;
+                setSelectedAccountId(newId);
+                router.replace(`/?customerId=${newId}`);
+            }
+        }
+    }, [session, status, filteredAccounts, selectedAccountId, router]);
+
     const displayAccountName = useMemo(() => {
         const mappedAccount = ACCOUNTS.find(acc => acc.id === selectedAccountId);
         return mappedAccount ? mappedAccount.name : (account?.name || 'Account');
@@ -951,21 +978,21 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             </div>
                             <h1 className="text-xl font-bold text-white mt-1">
                                 {navigation.view === 'insights' ? 'Strategic Insights' :
-                                 navigation.view === 'reports' ? 'AI Reports' :
-                                 navigation.view === 'diagnostics' ? 'Diagnostics & N-Grams' :
-                                 navigation.level === 'campaign' ? (
-                                    (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
-                                        campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
-                                        ? 'Asset Groups'
-                                        : 'Ad Groups'
-                                 ) :
-                                 navigation.level === 'adgroup' ? (
-                                    (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
-                                        campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
-                                        ? 'Asset Group Details'
-                                        : 'Ad Group Details'
-                                 ) :
-                                 'All Campaigns'}
+                                    navigation.view === 'reports' ? 'AI Reports' :
+                                        navigation.view === 'diagnostics' ? 'Diagnostics & N-Grams' :
+                                            navigation.level === 'campaign' ? (
+                                                (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                                    campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
+                                                    ? 'Asset Groups'
+                                                    : 'Ad Groups'
+                                            ) :
+                                                navigation.level === 'adgroup' ? (
+                                                    (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                                        campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
+                                                        ? 'Asset Group Details'
+                                                        : 'Ad Group Details'
+                                                ) :
+                                                    'All Campaigns'}
                             </h1>
                         </div>
                         <div className="flex items-center gap-3">
@@ -983,7 +1010,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                     }}
                                     className="bg-transparent text-xs text-white border-none focus:ring-0 cursor-pointer appearance-none hover:text-blue-400 transition-colors"
                                 >
-                                    {ACCOUNTS.map(acc => (
+                                    {filteredAccounts.map(acc => (
                                         <option key={acc.id} value={acc.id} className="bg-slate-800 text-white">
                                             {acc.name}
                                         </option>
@@ -1234,12 +1261,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                 <div className="flex items-center gap-2 bg-violet-500/20 border border-violet-500/30 rounded-lg px-3 py-1">
                                                     <span className="text-xs text-violet-300">Filtered: {
                                                         categoryFilter === 'pmax_sale' ? 'PMax – Sale' :
-                                                        categoryFilter === 'pmax_aon' ? 'PMax – AON' :
-                                                        categoryFilter === 'search_dsa' ? 'Search – DSA' :
-                                                        categoryFilter === 'search_nonbrand' ? 'Search – NonBrand' :
-                                                        categoryFilter === 'shopping' ? 'Shopping' :
-                                                        categoryFilter === 'upper_funnel' ? 'Video/Display' :
-                                                        categoryFilter === 'brand' ? 'Brand' : categoryFilter
+                                                            categoryFilter === 'pmax_aon' ? 'PMax – AON' :
+                                                                categoryFilter === 'search_dsa' ? 'Search – DSA' :
+                                                                    categoryFilter === 'search_nonbrand' ? 'Search – NonBrand' :
+                                                                        categoryFilter === 'shopping' ? 'Shopping' :
+                                                                            categoryFilter === 'upper_funnel' ? 'Video/Display' :
+                                                                                categoryFilter === 'brand' ? 'Brand' : categoryFilter
                                                     }</span>
                                                     <button
                                                         onClick={() => setCategoryFilter(null)}

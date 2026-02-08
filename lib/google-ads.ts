@@ -775,13 +775,14 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
 
     try {
         // Query asset_group_asset to get the assets linked to this group
-        // Note: metrics are not directly available per asset in the same way, usually just performance label
+        // performance_label is available on asset_group_asset
         const result = await customer.query(`
     SELECT
     asset_group_asset.asset_group,
         asset_group_asset.asset,
         asset_group_asset.field_type,
         asset_group_asset.status,
+        asset_group_asset.performance_label,
         asset.id,
         asset.name,
         asset.type,
@@ -804,7 +805,7 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
                 text: asset?.text_asset?.text || asset?.name || "",
                 name: asset?.name || "",
                 status: mapStatus(link?.status),
-                performanceLabel: "UNKNOWN", // Field removed due to API error
+                performanceLabel: String((link as any)?.performance_label) || "UNKNOWN",
             };
         });
     } catch (error: unknown) {

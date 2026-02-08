@@ -24,7 +24,9 @@ interface WastefulTerm {
     clicks: number;
     cost: number;
     conversions: number;
+    conversionValue: number;
     cpc: number;
+    ctr: number;
     campaigns: string[];
     campaignIds: string[];
     monthlyCost: number;
@@ -33,7 +35,7 @@ interface WastefulTerm {
 
 type ScopeFilter = 'all' | 'account' | 'campaign';
 type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
-type SortKey = 'cost' | 'clicks' | 'impressions' | 'monthlyCost' | 'cpc';
+type SortKey = 'cost' | 'clicks' | 'impressions' | 'monthlyCost' | 'cpc' | 'ctr' | 'conversions';
 
 export default function NegativeKeywordMiner({ customerId, dateRange }: NegativeKeywordMinerProps) {
     const [rawData, setRawData] = useState<SearchTermRow[]>([]);
@@ -82,21 +84,29 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
         fetchData();
     }, [customerId, dateRange.start, dateRange.end]);
 
-    // Compute average CPA from converting terms for confidence scoring
-    const avgCPA = useMemo(() => {
-        const byTerm: Record<string, { cost: number; conversions: number }> = {};
+    // Compute average CPA and CTR from all terms for confidence scoring
+    const { avgCPA, avgCTR } = useMemo(() => {
+        const byTerm: Record<string, { cost: number; conversions: number; clicks: number; impressions: number }> = {};
         rawData.forEach(item => {
             if (item.searchTerm.includes('[PMax Insight]')) return;
             const key = item.searchTerm.toLowerCase().trim();
-            if (!byTerm[key]) byTerm[key] = { cost: 0, conversions: 0 };
+            if (!byTerm[key]) byTerm[key] = { cost: 0, conversions: 0, clicks: 0, impressions: 0 };
             byTerm[key].cost += item.cost;
             byTerm[key].conversions += item.conversions;
+            byTerm[key].clicks += item.clicks;
+            byTerm[key].impressions += item.impressions;
         });
-        const converting = Object.values(byTerm).filter(t => t.conversions > 0);
-        if (converting.length === 0) return 50; // default fallback
+        const all = Object.values(byTerm);
+        const converting = all.filter(t => t.conversions > 0);
         const totalCost = converting.reduce((s, t) => s + t.cost, 0);
         const totalConv = converting.reduce((s, t) => s + t.conversions, 0);
-        return totalConv > 0 ? totalCost / totalConv : 50;
+        const cpa = totalConv > 0 ? totalCost / totalConv : 50;
+
+        const totalClicks = all.reduce((s, t) => s + t.clicks, 0);
+        const totalImpressions = all.reduce((s, t) => s + t.impressions, 0);
+        const ctr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+
+        return { avgCPA: cpa, avgCTR: ctr };
     }, [rawData]);
 
     // Aggregate and score search terms
@@ -134,13 +144,29 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
             .filter(t => t.conversions === 0 && t.cost >= minCost && t.clicks >= minClicks)
             .map(t => {
                 const cpc = t.clicks > 0 ? t.cost / t.clicks : 0;
+                const ctr = t.impressions > 0 ? t.clicks / t.impressions : 0;
                 const monthlyCost = periodDays > 0 ? (t.cost / periodDays) * 30 : 0;
 
-                // Confidence: high if cost > avgCPA (spent enough for a conversion but got 0),
-                // medium if clicks >= 5, low if clicks < 5
+                // Smarter confidence scoring:
+                // - High CTR (above avg) suggests the term IS relevant but just didn't convert in this period
+                // - Short periods (< 14 days) with high CTR should downgrade confidence
+                // - Very high clicks + low CPC = likely a broad/relevant term
+                const isHighCTR = ctr > avgCTR * 1.2; // CTR 20% above average = relevant term
+                const isShortPeriod = periodDays < 14;
+                const isHighVolume = t.clicks >= 20;
+
                 let confidence: 'high' | 'medium' | 'low';
-                if (t.cost >= avgCPA) {
+                if (isHighCTR && isShortPeriod) {
+                    // High CTR in short period = likely relevant, just needs more data
+                    confidence = 'low';
+                } else if (isHighCTR && isHighVolume) {
+                    // High CTR + high volume = popular relevant term, not wasteful
+                    confidence = 'low';
+                } else if (t.cost >= avgCPA * 2) {
+                    // Spent 2x CPA with 0 conversions = more likely wasteful
                     confidence = 'high';
+                } else if (t.cost >= avgCPA) {
+                    confidence = isHighCTR ? 'low' : 'medium';
                 } else if (t.clicks >= 5) {
                     confidence = 'medium';
                 } else {
@@ -153,14 +179,16 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                     clicks: t.clicks,
                     cost: t.cost,
                     conversions: t.conversions,
+                    conversionValue: 0,
                     cpc,
+                    ctr,
                     campaigns: Array.from(t.campaigns),
                     campaignIds: Array.from(t.campaignIds),
                     monthlyCost,
                     confidence,
                 };
             });
-    }, [rawData, minCost, minClicks, periodDays, avgCPA]);
+    }, [rawData, minCost, minClicks, periodDays, avgCPA, avgCTR]);
 
     const accountLevel = useMemo(() => wastefulTerms.filter(t => t.campaigns.length >= 2), [wastefulTerms]);
     const campaignLevel = useMemo(() => wastefulTerms.filter(t => t.campaigns.length === 1), [wastefulTerms]);
@@ -230,9 +258,9 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
     }, [selectedTerms]);
 
     const exportCSV = useCallback(() => {
-        const header = 'Search Term,Cost,Monthly Cost Est.,Clicks,Impressions,CPC,Confidence,Campaigns,Scope';
+        const header = 'Search Term,Impressions,Clicks,CTR,Cost,CPC,Conversions,Monthly Cost Est.,Confidence,Campaigns,Scope';
         const rows = selectedTerms.map(t =>
-            `"${t.searchTerm.replace(/"/g, '""')}",${t.cost.toFixed(2)},${t.monthlyCost.toFixed(2)},${t.clicks},${t.impressions},${t.cpc.toFixed(2)},${t.confidence},"${t.campaigns.join('; ')}",${t.campaigns.length >= 2 ? 'Account' : 'Campaign'}`
+            `"${t.searchTerm.replace(/"/g, '""')}",${t.impressions},${t.clicks},${(t.ctr * 100).toFixed(1)}%,${t.cost.toFixed(2)},${t.cpc.toFixed(2)},${t.conversions},${t.monthlyCost.toFixed(2)},${t.confidence},"${t.campaigns.join('; ')}",${t.campaigns.length >= 2 ? 'Account' : 'Campaign'}`
         );
         const csv = [header, ...rows].join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -301,7 +329,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                     </div>
                     <div className="text-xl font-bold text-white mt-1">{highConfCount}</div>
                     <div className="text-xs text-red-400/60 mt-0.5">
-                        Cost &ge; avg CPA (&euro;{avgCPA.toFixed(0)})
+                        Cost &ge; 2x CPA, low CTR
                     </div>
                 </div>
                 <div className="rounded-lg p-3 bg-amber-500/10 border border-amber-500/20 cursor-pointer hover:border-amber-400/40 transition-colors"
@@ -312,7 +340,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                     </div>
                     <div className="text-xl font-bold text-white mt-1">{medConfCount}</div>
                     <div className="text-xs text-amber-400/60 mt-0.5">
-                        5+ clicks, under CPA
+                        5+ clicks, normal CTR
                     </div>
                 </div>
                 <div className="rounded-lg p-3 bg-slate-700/30 border border-slate-600 cursor-pointer hover:border-slate-500 transition-colors"
@@ -323,17 +351,29 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                     </div>
                     <div className="text-xl font-bold text-white mt-1">{lowConfCount}</div>
                     <div className="text-xs text-slate-400/60 mt-0.5">
-                        {minClicks}-4 clicks, needs more data
+                        High CTR / short period / few clicks
                     </div>
                 </div>
             </div>
 
+            {/* Short Period Warning */}
+            {periodDays < 14 && (
+                <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-400 flex items-start gap-2">
+                    <span className="text-lg leading-none mt-[-2px]">&#9888;</span>
+                    <div>
+                        <span className="font-bold">Short analysis period ({periodDays} days).</span>{' '}
+                        Core business terms may show 0 conversions simply because the period is too short.
+                        Use <b>30+ days</b> for accurate negative keyword identification. Terms with high CTR are automatically downgraded in confidence.
+                    </div>
+                </div>
+            )}
+
             {/* Info Banner */}
             <div className="rounded-lg bg-slate-800 border border-slate-700 p-3 text-xs text-slate-400">
                 <span className="text-slate-300 font-medium">How confidence works:</span>{' '}
-                <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span> High</span> = spent more than 1 CPA (&euro;{avgCPA.toFixed(0)}) with 0 conversions — almost certainly wasteful.{' '}
-                <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span> Medium</span> = 5+ clicks but under CPA — likely wasteful.{' '}
-                <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span> Low</span> = few clicks — review before adding as negative.
+                <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span> High</span> = spent 2x+ CPA (&euro;{(avgCPA * 2).toFixed(0)}+) with 0 conversions and below-average CTR.{' '}
+                <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span> Medium</span> = spent 1x CPA or 5+ clicks with normal CTR.{' '}
+                <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span> Low / Review</span> = few clicks, high CTR (likely relevant), or short period — review before adding.
             </div>
 
             {/* Selection Actions Bar */}
@@ -478,13 +518,8 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                 <th className="px-3 py-3 font-medium">Confidence</th>
                                 <th className="px-3 py-3 font-medium">Scope</th>
                                 <th className="px-3 py-3 text-right font-medium">
-                                    <button onClick={() => handleSort('cost')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                        Cost {sortBy === 'cost' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
-                                    </button>
-                                </th>
-                                <th className="px-3 py-3 text-right font-medium">
-                                    <button onClick={() => handleSort('monthlyCost')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                        Est./Mo {sortBy === 'monthlyCost' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
+                                    <button onClick={() => handleSort('impressions')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                        Impr. {sortBy === 'impressions' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
                                     </button>
                                 </th>
                                 <th className="px-3 py-3 text-right font-medium">
@@ -493,8 +528,28 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                     </button>
                                 </th>
                                 <th className="px-3 py-3 text-right font-medium">
+                                    <button onClick={() => handleSort('ctr')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                        CTR {sortBy === 'ctr' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
+                                    </button>
+                                </th>
+                                <th className="px-3 py-3 text-right font-medium">
+                                    <button onClick={() => handleSort('cost')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                        Cost {sortBy === 'cost' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
+                                    </button>
+                                </th>
+                                <th className="px-3 py-3 text-right font-medium">
                                     <button onClick={() => handleSort('cpc')} className="flex items-center gap-1 ml-auto hover:text-white">
                                         CPC {sortBy === 'cpc' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
+                                    </button>
+                                </th>
+                                <th className="px-3 py-3 text-right font-medium">
+                                    <button onClick={() => handleSort('conversions')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                        Conv. {sortBy === 'conversions' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
+                                    </button>
+                                </th>
+                                <th className="px-3 py-3 text-right font-medium">
+                                    <button onClick={() => handleSort('monthlyCost')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                        Est./Mo {sortBy === 'monthlyCost' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
                                     </button>
                                 </th>
                                 <th className="px-3 py-3 font-medium">Campaigns</th>
@@ -538,19 +593,30 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                                 {isAccountScope ? 'Account' : 'Campaign'}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-2.5 text-right text-red-400 font-medium">
-                                            &euro;{item.cost.toFixed(2)}
-                                        </td>
-                                        <td className="px-3 py-2.5 text-right text-amber-400 text-xs">
-                                            &euro;{item.monthlyCost.toFixed(1)}/mo
+                                        <td className="px-3 py-2.5 text-right text-slate-400 text-xs">
+                                            {item.impressions.toLocaleString()}
                                         </td>
                                         <td className="px-3 py-2.5 text-right text-slate-300">
                                             {item.clicks.toLocaleString()}
                                         </td>
+                                        <td className="px-3 py-2.5 text-right">
+                                            <span className={`text-xs font-medium ${item.ctr > avgCTR * 1.2 ? 'text-emerald-400' : item.ctr > avgCTR * 0.8 ? 'text-slate-300' : 'text-slate-500'}`}>
+                                                {(item.ctr * 100).toFixed(1)}%
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right text-red-400 font-medium">
+                                            &euro;{item.cost.toFixed(2)}
+                                        </td>
                                         <td className="px-3 py-2.5 text-right text-slate-400">
                                             &euro;{item.cpc.toFixed(2)}
                                         </td>
-                                        <td className="px-3 py-2.5 text-slate-400 text-xs max-w-[180px]">
+                                        <td className="px-3 py-2.5 text-right text-slate-600 font-medium">
+                                            {item.conversions}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right text-amber-400 text-xs">
+                                            &euro;{item.monthlyCost.toFixed(1)}/mo
+                                        </td>
+                                        <td className="px-3 py-2.5 text-slate-400 text-xs max-w-[160px]">
                                             <span className="truncate block" title={item.campaigns.join(', ')}>
                                                 {item.campaigns.length > 2
                                                     ? `${item.campaigns[0]} +${item.campaigns.length - 1} more`
