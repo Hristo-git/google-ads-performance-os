@@ -60,6 +60,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
+            setRawData([]); // Clear previous data immediately
             setError(null);
             try {
                 const params = new URLSearchParams({
@@ -200,7 +201,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
     const displayData = useMemo(() => {
         let data = scopeFilter === 'account' ? accountLevel
             : scopeFilter === 'campaign' ? campaignLevel
-            : wastefulTerms;
+                : wastefulTerms;
 
         if (confidenceFilter !== 'all') {
             data = data.filter(t => t.confidence === confidenceFilter);
@@ -418,7 +419,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                     className={`px-3 py-1 rounded text-xs font-medium transition-colors ${scopeFilter === value
                                         ? 'bg-violet-600 text-white'
                                         : 'text-slate-400 hover:text-white'
-                                    }`}
+                                        }`}
                                 >
                                     {label}
                                 </button>
@@ -589,7 +590,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                             <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${isAccountScope
                                                 ? 'bg-violet-500/20 text-violet-400'
                                                 : 'bg-blue-500/20 text-blue-400'
-                                            }`}>
+                                                }`}>
                                                 {isAccountScope ? 'Account' : 'Campaign'}
                                             </span>
                                         </td>
