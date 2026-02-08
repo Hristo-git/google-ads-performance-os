@@ -1743,13 +1743,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         {ad.adStrength}
                                                                     </span>
                                                                     <div className="flex items-center gap-4 text-sm">
-                                                                        <span className={`${ad.headlinesCount < 10 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                            Headlines: <strong>{ad.headlinesCount}</strong>/15
-                                                                            {ad.headlinesCount < 10 && ' ⚠️'}
+                                                                        <span className={`${ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) ? 'text-amber-400' : 'text-slate-400'}`}>
+                                                                            Headlines: <strong>{ad.headlinesCount}</strong>/
+                                                                            {ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
+                                                                            {ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) && ' ⚠️'}
                                                                         </span>
-                                                                        <span className={`${ad.descriptionsCount < 3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                            Descriptions: <strong>{ad.descriptionsCount}</strong>/4
-                                                                            {ad.descriptionsCount < 3 && ' ⚠️'}
+                                                                        <span className={`${ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) ? 'text-amber-400' : 'text-slate-400'}`}>
+                                                                            Descriptions: <strong>{ad.descriptionsCount}</strong>/
+                                                                            {ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
+                                                                            {ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) && ' ⚠️'}
                                                                         </span>
                                                                     </div>
                                                                 </div>
