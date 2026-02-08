@@ -269,240 +269,11 @@ export default function AIReportsHub({
         structure: language === 'en' ? 'Structure & Organization' : 'Структура и организация',
     };
 
-    return (
-        <div className="h-full flex gap-6">
-            {/* Template Gallery Sidebar */}
-            <div className="w-96 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
-                {/* Settings Panel */}
-                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                    <h3 className="text-sm font-bold text-white mb-3">{language === 'en' ? 'Settings' : 'Настройки'}</h3>
-
-                    {/* Language */}
-                    <div className="mb-3">
-                        <label className="text-xs text-slate-400 block mb-1">{language === 'en' ? 'Language' : 'Език'}</label>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setLanguage('bg')}
-                                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${language === 'bg' ? 'bg-violet-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                    }`}
-                            >
-                                🇧🇬 Български
-                            </button>
-                            <button
-                                onClick={() => setLanguage('en')}
-                                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${language === 'en' ? 'bg-violet-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                    }`}
-                            >
-                                🇬🇧 English
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Audience */}
-                    <div className="mb-3">
-                        <label className="text-xs text-slate-400 block mb-1">{language === 'en' ? 'Audience' : 'Аудитория'}</label>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setSettings({ ...settings, audience: 'internal' })}
-                                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${settings.audience === 'internal' ? 'bg-violet-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                    }`}
-                            >
-                                {language === 'en' ? 'Internal' : 'Вътрешен'}
-                            </button>
-                            <button
-                                onClick={() => setSettings({ ...settings, audience: 'client' })}
-                                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${settings.audience === 'client' ? 'bg-violet-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                    }`}
-                            >
-                                {language === 'en' ? 'Client' : 'Клиент'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Expert Mode */}
-                    <div className="flex items-center justify-between">
-                        <label className="text-xs text-slate-400">{language === 'en' ? 'Expert Mode (2-Pass)' : 'Експертен режим (2 прохода)'}</label>
-                        <button
-                            onClick={() => setSettings({ ...settings, expertMode: !settings.expertMode })}
-                            className={`w-11 h-6 rounded-full transition-colors ${settings.expertMode ? 'bg-violet-600' : 'bg-slate-700'
-                                }`}
-                        >
-                            <div className={`w-4 h-4 bg-white rounded-full transition-transform ${settings.expertMode ? 'translate-x-6' : 'translate-x-1'
-                                }`} />
-                        </button>
-                    </div>
-                </div>
-
-                {/* History Section Toggle */}
-                <div className="border-t border-slate-700 pt-4 mt-2">
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${showHistory
-                            ? 'bg-slate-700 border-slate-600'
-                            : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700'
-                            }`}
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="text-xl">📜</span>
-                            <span className="text-sm font-bold text-white">
-                                {language === 'en' ? 'Report History' : 'История на анализите'}
-                            </span>
-                        </div>
-                        <svg className={`w-4 h-4 text-slate-400 transition-transform ${showHistory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </button>
-
-                    {showHistory && (
-                        <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                            {/* History Search */}
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder={language === 'en' ? 'Search history...' : 'Търси в историята...'}
-                                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500"
-                                    value={historySearchQuery}
-                                    onChange={(e) => setHistorySearchQuery(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSearchHistory()}
-                                />
-                                <button
-                                    onClick={handleSearchHistory}
-                                    disabled={searchingHistory}
-                                    className="bg-violet-600 hover:bg-violet-500 p-2 rounded-lg text-white transition-colors disabled:opacity-50"
-                                >
-                                    {searchingHistory ? (
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    ) : (
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                        </svg>
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* History Results */}
-                            <div className="max-h-80 overflow-y-auto space-y-2 custom-scrollbar pr-1">
-                                {historyResults.length > 0 ? (
-                                    historyResults.map((report) => (
-                                        <button
-                                            key={report.id}
-                                            onClick={() => handleViewHistoryReport(report)}
-                                            className="w-full text-left p-2.5 rounded-lg bg-slate-800 border border-slate-700 hover:border-violet-500/50 hover:bg-slate-700/50 transition-all group"
-                                        >
-                                            <div className="flex justify-between items-start mb-1">
-                                                <span className="text-[10px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider truncate max-w-[200px]">
-                                                    {report.reportTitle || report.templateId?.replace(/_/g, ' ')}
-                                                </span>
-                                                <span className="text-[9px] text-slate-500 ml-2 whitespace-nowrap">
-                                                    {new Date(report.timestamp).toLocaleDateString(language === 'en' ? 'en-US' : 'bg-BG')}
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed group-hover:text-white transition-colors">
-                                                {report.analysis?.slice(0, 100).replace(/[#*`]/g, '')}...
-                                            </p>
-                                        </button>
-                                    ))
-                                ) : historySearchQuery && !searchingHistory ? (
-                                    <div className="text-center py-4">
-                                        <p className="text-xs text-slate-500">{language === 'en' ? 'No reports found.' : 'Няма намерени анализи.'}</p>
-                                    </div>
-                                ) : !historySearchQuery && (
-                                    <div className="text-center py-4 bg-slate-900/50 rounded-lg border border-slate-800 border-dashed">
-                                        <p className="text-[10px] text-slate-500 px-4">
-                                            {language === 'en'
-                                                ? 'Type a topic and hit enter to search through your past insights semantically.'
-                                                : 'Въведи тема и натисни Enter, за да търсиш семантично в старите си анализи.'}
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Template Gallery */}
-                <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-                    {Object.entries(templatesByCategory).map(([category, templates]) => (
-                        templates.length > 0 && (
-                            <div key={category}>
-                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                                    {categoryLabels[category as keyof typeof categoryLabels]}
-                                </h4>
-                                <div className="space-y-2">
-                                    {templates.map(template => (
-                                        <button
-                                            key={template.id}
-                                            onClick={() => setSelectedTemplate(template)}
-                                            className={`w-full text-left p-3 rounded-lg transition-all border ${selectedTemplate?.id === template.id
-                                                ? 'bg-violet-600 border-violet-500 text-white'
-                                                : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-600'
-                                                }`}
-                                        >
-                                            <div className="flex items-start gap-2">
-                                                <span className="text-xl">{template.icon}</span>
-                                                <div className="flex-1 min-w-0">
-                                                    <h5 className="text-sm font-semibold truncate">
-                                                        {language === 'en' ? template.nameEN : template.nameBG}
-                                                    </h5>
-                                                    <p className={`text-xs mt-0.5 line-clamp-2 ${selectedTemplate?.id === template.id ? 'text-violet-100' : 'text-slate-400'
-                                                        }`}>
-                                                        {language === 'en' ? template.descriptionEN : template.descriptionBG}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )
-                    ))}
-                </div>
-
-                {/* Generate Button Area */}
-                <div className="mt-auto pt-4 shadow-[0_-12px_12px_-4px_rgba(15,23,42,0.8)]">
-                    {selectedTemplate && (
-                        <button
-                            onClick={handleGenerateReport}
-                            disabled={generating}
-                            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white py-4 rounded-xl font-bold tracking-wide transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20"
-                        >
-                            {generating ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    {language === 'en' ? 'Generating Analysis...' : 'Генериране на анализ...'}
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                    </svg>
-                                    {language === 'en' ? 'Generate Expert Analysis' : 'Генерирай експертен анализ'}
-                                </>
-                            )}
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {/* Report Output Area */}
-            <div className="flex-1 bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col shadow-2xl">
-                {!currentReport && !error ? (
-                    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800/50 to-slate-900">
-                        <div className="w-24 h-24 bg-violet-600/10 rounded-3xl flex items-center justify-center mb-6 border border-violet-500/20 shadow-inner">
-                            <svg className="w-12 h-12 text-violet-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                        </div>
-                        <h3 className="text-xl font-bold text-white mb-2">
-                            {language === 'en' ? 'AI Performance Consultant' : 'AI консултант по представянето'}
-                        </h3>
-                        <p className="text-slate-400 max-w-sm text-sm leading-relaxed">
-                            {language === 'en'
-                                ? 'Select a specialized template or search your history to access deep account insights.'
-                                : 'Избери специализиран шаблон или търси в историята за задълбочени прозрения.'}
-                        </p>
-                    </div>
-                ) : error ? (
+    // ─── REPORT VIEW (full-width when a report is open) ───
+    if (currentReport || error) {
+        return (
+            <div className="h-full flex flex-col bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-2xl">
+                {error ? (
                     <div className="flex-1 flex items-center justify-center p-12">
                         <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-8 max-w-lg shadow-xl">
                             <div className="flex items-start gap-4">
@@ -529,14 +300,24 @@ export default function AIReportsHub({
                 ) : currentReport && (
                     <>
                         {/* Report Header */}
-                        <div className="p-6 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                        <div className="px-6 py-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-violet-600 rounded-xl flex items-center justify-center text-2xl shadow-lg shadow-violet-900/20">
+                                <button
+                                    onClick={() => { setCurrentReport(null); setSelectedTemplate(null); }}
+                                    className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm font-medium"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    {language === 'en' ? 'Templates' : 'Шаблони'}
+                                </button>
+                                <div className="w-px h-6 bg-slate-700" />
+                                <div className="w-10 h-10 bg-violet-600 rounded-lg flex items-center justify-center text-xl shadow-lg shadow-violet-900/20">
                                     {REPORT_TEMPLATE_DEFINITIONS.find(t => t.id === currentReport.templateId)?.icon || '📊'}
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-white tracking-tight">{currentReport.templateName}</h2>
-                                    <div className="flex items-center gap-2 mt-1">
+                                    <h2 className="text-lg font-bold text-white tracking-tight">{currentReport.templateName}</h2>
+                                    <div className="flex items-center gap-2 mt-0.5">
                                         <span className="text-[10px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded font-bold uppercase">
                                             {currentReport.settings.audience}
                                         </span>
@@ -546,24 +327,10 @@ export default function AIReportsHub({
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        setCurrentReport(null);
-                                        setSelectedTemplate(null);
-                                    }}
-                                    className="text-slate-400 hover:text-white transition-colors p-2.5 hover:bg-slate-700/50 rounded-xl border border-transparent hover:border-slate-600"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
                         </div>
 
                         {/* Report Content */}
                         <div className="flex-1 overflow-y-auto custom-scrollbar bg-[radial-gradient(circle_at_top_right,_rgba(124,58,237,0.03),_transparent)]">
-                            {/* Tab Navigation (only show if two documents exist) */}
                             {hasTwo && (
                                 <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-8 py-3 z-10">
                                     <div className="flex gap-2">
@@ -663,6 +430,225 @@ export default function AIReportsHub({
                     </>
                 )}
             </div>
+        );
+    }
+
+    // ─── TEMPLATE SELECTION VIEW (full-width grid) ───
+    return (
+        <div className="h-full flex flex-col gap-5 overflow-y-auto custom-scrollbar">
+            {/* Compact Settings Bar */}
+            <div className="bg-slate-800 rounded-xl border border-slate-700 px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-3">
+                {/* Language */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{language === 'en' ? 'Lang' : 'Език'}</span>
+                    <div className="flex bg-slate-700/50 rounded-lg p-0.5">
+                        <button
+                            onClick={() => setLanguage('bg')}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${language === 'bg' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            BG
+                        </button>
+                        <button
+                            onClick={() => setLanguage('en')}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${language === 'en' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            EN
+                        </button>
+                    </div>
+                </div>
+
+                <div className="w-px h-5 bg-slate-700" />
+
+                {/* Audience */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{language === 'en' ? 'Audience' : 'Аудитория'}</span>
+                    <div className="flex bg-slate-700/50 rounded-lg p-0.5">
+                        <button
+                            onClick={() => setSettings({ ...settings, audience: 'internal' })}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${settings.audience === 'internal' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            {language === 'en' ? 'Internal' : 'Вътрешен'}
+                        </button>
+                        <button
+                            onClick={() => setSettings({ ...settings, audience: 'client' })}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${settings.audience === 'client' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            {language === 'en' ? 'Client' : 'Клиент'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="w-px h-5 bg-slate-700" />
+
+                {/* Expert Mode */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{language === 'en' ? 'Expert' : 'Експерт'}</span>
+                    <button
+                        onClick={() => setSettings({ ...settings, expertMode: !settings.expertMode })}
+                        className={`w-9 h-5 rounded-full transition-colors ${settings.expertMode ? 'bg-violet-600' : 'bg-slate-700'}`}
+                    >
+                        <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform ${settings.expertMode ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                    </button>
+                </label>
+
+                {/* Spacer */}
+                <div className="flex-1" />
+
+                {/* History Toggle */}
+                <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showHistory
+                        ? 'bg-violet-600 text-white border-violet-500'
+                        : 'text-slate-400 hover:text-white border-slate-600 hover:border-slate-500'
+                        }`}
+                >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {language === 'en' ? 'History' : 'История'}
+                    {historyResults.length > 0 && (
+                        <span className="bg-slate-600 text-slate-300 text-[9px] px-1.5 py-0.5 rounded-full font-bold">{historyResults.length}</span>
+                    )}
+                </button>
+            </div>
+
+            {/* Template Grid */}
+            <div className="space-y-6">
+                {Object.entries(templatesByCategory).map(([category, templates]) => (
+                    templates.length > 0 && (
+                        <div key={category}>
+                            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-3">
+                                {categoryLabels[category as keyof typeof categoryLabels]}
+                            </h4>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                                {templates.map(template => {
+                                    const isSelected = selectedTemplate?.id === template.id;
+                                    return (
+                                        <button
+                                            key={template.id}
+                                            onClick={() => setSelectedTemplate(isSelected ? null : template)}
+                                            className={`text-left p-5 rounded-xl transition-all border-2 group ${isSelected
+                                                ? 'border-violet-500 bg-violet-500/5 ring-2 ring-violet-500/20'
+                                                : 'border-slate-700 bg-slate-800 hover:border-slate-500 hover:bg-slate-700/50'
+                                                }`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-2xl shrink-0 ${isSelected ? 'bg-violet-600 shadow-lg shadow-violet-900/30' : 'bg-slate-700/50'}`}>
+                                                    {template.icon}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h5 className={`text-sm font-bold ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>
+                                                        {language === 'en' ? template.nameEN : template.nameBG}
+                                                    </h5>
+                                                    <p className={`text-xs mt-1.5 leading-relaxed ${isSelected ? 'text-violet-200' : 'text-slate-400'}`}>
+                                                        {language === 'en' ? template.descriptionEN : template.descriptionBG}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )
+                ))}
+            </div>
+
+            {/* Generate Button */}
+            {selectedTemplate && (
+                <div className="flex justify-center py-2">
+                    <button
+                        onClick={handleGenerateReport}
+                        disabled={generating}
+                        className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-10 py-3.5 rounded-xl font-bold tracking-wide transition-all active:scale-95 flex items-center gap-2.5 shadow-lg shadow-emerald-900/20"
+                    >
+                        {generating ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                {language === 'en' ? 'Generating Analysis...' : 'Генериране на анализ...'}
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                {language === 'en'
+                                    ? `Generate: ${selectedTemplate.nameEN}`
+                                    : `Генерирай: ${selectedTemplate.nameBG}`}
+                            </>
+                        )}
+                    </button>
+                </div>
+            )}
+
+            {/* History Section (collapsible, below templates) */}
+            {showHistory && (
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                            <svg className="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {language === 'en' ? 'Report History' : 'История на анализите'}
+                        </h4>
+                        <div className="flex gap-2 flex-1 max-w-sm ml-4">
+                            <input
+                                type="text"
+                                placeholder={language === 'en' ? 'Search history...' : 'Търси в историята...'}
+                                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500"
+                                value={historySearchQuery}
+                                onChange={(e) => setHistorySearchQuery(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSearchHistory()}
+                            />
+                            <button
+                                onClick={handleSearchHistory}
+                                disabled={searchingHistory}
+                                className="bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg text-white transition-colors disabled:opacity-50"
+                            >
+                                {searchingHistory ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+
+                    {historyResults.length > 0 ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {historyResults.map((report) => (
+                                <button
+                                    key={report.id}
+                                    onClick={() => handleViewHistoryReport(report)}
+                                    className="text-left p-3.5 rounded-lg bg-slate-900/50 border border-slate-700 hover:border-violet-500/50 hover:bg-slate-700/50 transition-all group"
+                                >
+                                    <div className="flex justify-between items-start mb-1.5">
+                                        <span className="text-[10px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider truncate max-w-[250px]">
+                                            {report.reportTitle || report.templateId?.replace(/_/g, ' ')}
+                                        </span>
+                                        <span className="text-[9px] text-slate-500 ml-2 whitespace-nowrap">
+                                            {new Date(report.timestamp).toLocaleDateString(language === 'en' ? 'en-US' : 'bg-BG')}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed group-hover:text-white transition-colors">
+                                        {report.analysis?.slice(0, 120).replace(/[#*`]/g, '')}...
+                                    </p>
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-6 bg-slate-900/30 rounded-lg border border-slate-800 border-dashed">
+                            <p className="text-xs text-slate-500">
+                                {language === 'en'
+                                    ? 'Type a topic and hit enter to search through your past insights semantically.'
+                                    : 'Въведи тема и натисни Enter, за да търсиш семантично в старите си анализи.'}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
