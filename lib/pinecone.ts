@@ -4,6 +4,11 @@ if (!process.env.PINECONE_API_KEY) {
     console.warn('PINECONE_API_KEY is not defined in environment variables');
 }
 
+console.log(`[Pinecone] Initializing with:
+  - API Key: ${process.env.PINECONE_API_KEY ? "Present" : "MISSING"}
+  - Index Name: ${process.env.PINECONE_INDEX || 'google-ads-reports'} (Env var: ${process.env.PINECONE_INDEX})
+`);
+
 const pc = new Pinecone({
     apiKey: process.env.PINECONE_API_KEY || '',
 });

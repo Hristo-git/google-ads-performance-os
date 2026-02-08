@@ -8,6 +8,7 @@ import DayHourHeatmap from "./DayHourHeatmap";
 import LandingPagesTab from "./LandingPagesTab";
 import ConversionBreakdown from "./ConversionBreakdown";
 import GeographicPerformance from "./GeographicPerformance";
+import NegativeKeywordMiner from "./NegativeKeywordMiner";
 import ReactMarkdown from 'react-markdown';
 import { Campaign, AdGroup, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
 
@@ -48,7 +49,7 @@ export default function StrategicInsights({
 }: StrategicInsightsProps) {
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
-    const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic'>('breakdown');
+    const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives'>('breakdown');
 
     const runAnalysis = async () => {
         setAnalyzing(true);
@@ -232,6 +233,9 @@ export default function StrategicInsights({
                 </button>
                 <button onClick={() => setActiveTab('geographic')} className={tabClass('geographic')}>
                     Geographic
+                </button>
+                <button onClick={() => setActiveTab('negatives')} className={tabClass('negatives')}>
+                    Neg. Keywords
                 </button>
             </div>
 
@@ -424,6 +428,13 @@ export default function StrategicInsights({
 
                 {activeTab === 'geographic' && (
                     <GeographicPerformance
+                        customerId={customerId}
+                        dateRange={dateRange}
+                    />
+                )}
+
+                {activeTab === 'negatives' && (
+                    <NegativeKeywordMiner
                         customerId={customerId}
                         dateRange={dateRange}
                     />

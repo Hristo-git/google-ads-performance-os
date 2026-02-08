@@ -49,3 +49,6 @@ windsor-test-*.json
 .claude/
 .next_new/
 repro_plan.md
+
+.vercel
+.env*.local
