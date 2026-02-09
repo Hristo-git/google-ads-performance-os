@@ -782,7 +782,6 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
         asset_group_asset.asset,
         asset_group_asset.field_type,
         asset_group_asset.status,
-        asset_group_asset.performance_label,
         asset.id,
         asset.name,
         asset.type,
@@ -805,7 +804,7 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
                 text: asset?.text_asset?.text || asset?.name || "",
                 name: asset?.name || "",
                 status: mapStatus(link?.status),
-                performanceLabel: String((link as any)?.performance_label) || "UNKNOWN",
+                performanceLabel: "UNKNOWN", // Field not available in this API version
             };
         });
     } catch (error: unknown) {
