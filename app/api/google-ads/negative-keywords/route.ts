@@ -72,16 +72,12 @@ export async function GET(request: Request) {
             }
             const negativeKeywords = await getNegativeKeywords(refreshToken, adGroupId || undefined, customerId);
             return NextResponse.json({ negativeKeywords });
-        } catch (apiError) {
-            console.error("Google Ads API error, using mock data:", apiError);
-            // Filter mock data by adGroupId if provided
-            const filteredKeywords = adGroupId
-                ? mockNegativeKeywords.filter(kw => kw.adGroupId === adGroupId)
-                : mockNegativeKeywords;
+        } catch (apiError: any) {
+            console.error("Google Ads API error fetching negative keywords:", apiError);
             return NextResponse.json({
-                negativeKeywords: filteredKeywords,
-                _mock: true
-            });
+                error: "Failed to fetch negative keywords from Google Ads",
+                details: apiError?.message || String(apiError)
+            }, { status: 500 });
         }
     } catch (error) {
         console.error("Error fetching negative keywords:", error);

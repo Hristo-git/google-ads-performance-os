@@ -50,15 +50,16 @@ export async function GET(request: Request) {
             const account = await getAccountInfo(refreshToken, customerId);
 
             if (!account) {
-                // Return mock data if no account found
-                return NextResponse.json({ account: mockAccount, _mock: true });
+                return NextResponse.json({ error: "Account not found" }, { status: 404 });
             }
 
             return NextResponse.json({ account });
-        } catch (apiError) {
-            console.error("Google Ads API error, using mock data:", apiError);
-            // Return mock data when API fails
-            return NextResponse.json({ account: mockAccount, _mock: true });
+        } catch (apiError: any) {
+            console.error("Google Ads API error fetching account:", apiError);
+            return NextResponse.json({
+                error: "Failed to fetch account from Google Ads",
+                details: apiError?.message || String(apiError)
+            }, { status: 500 });
         }
     } catch (error) {
         console.error("Error fetching account info:", error);

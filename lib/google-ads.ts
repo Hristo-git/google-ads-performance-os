@@ -383,10 +383,14 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
         let ads: AdWithStrength[] = [];
 
         if (adGroupIds.length > 0) {
-            [keywords, ads] = await Promise.all([
-                getKeywordsWithQS(refreshToken, undefined, customerId, dateRange, adGroupIds, undefined, undefined, onlyEnabled),
-                getAdsWithStrength(refreshToken, undefined, customerId, adGroupIds, dateRange, onlyEnabled)
-            ]);
+            try {
+                [keywords, ads] = await Promise.all([
+                    getKeywordsWithQS(refreshToken, undefined, customerId, dateRange, adGroupIds, undefined, undefined, onlyEnabled),
+                    getAdsWithStrength(refreshToken, undefined, customerId, adGroupIds, dateRange, onlyEnabled)
+                ]);
+            } catch (enrichErr: unknown) {
+                console.error("[getAdGroups] Keywords/Ads enrichment failed (returning basic metrics):", enrichErr);
+            }
         }
 
         return adGroups.map((row) => {

@@ -202,15 +202,12 @@ export async function GET(request: Request) {
             }
             const keywords = await getKeywordsWithQS(refreshToken, adGroupId || undefined, customerId, dateRange, undefined, minQS, maxQS, onlyEnabled);
             return NextResponse.json({ keywords });
-        } catch (apiError) {
-            console.error("Google Ads API error, using mock data:", apiError);
-            const filteredKeywords = adGroupId
-                ? mockKeywords.filter(kw => kw.adGroupId === adGroupId)
-                : mockKeywords;
+        } catch (apiError: any) {
+            console.error("Google Ads API error fetching keywords:", apiError);
             return NextResponse.json({
-                keywords: filteredKeywords,
-                _mock: true
-            });
+                error: "Failed to fetch keywords from Google Ads",
+                details: apiError?.message || String(apiError)
+            }, { status: 500 });
         }
     } catch (error) {
         console.error("Error fetching keywords:", error);

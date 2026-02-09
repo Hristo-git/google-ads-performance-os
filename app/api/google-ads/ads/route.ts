@@ -251,15 +251,12 @@ export async function GET(request: Request) {
             // Note: getAdsWithStrength expects adGroupIds as the 4th argument, so we pass undefined there
             const ads = await getAdsWithStrength(refreshToken, adGroupId || undefined, customerId, undefined, dateRange, onlyEnabled);
             return NextResponse.json({ ads });
-        } catch (apiError) {
-            console.error("Google Ads API error, using mock data:", apiError);
-            const filteredAds = adGroupId
-                ? mockAds.filter(ad => ad.adGroupId === adGroupId)
-                : mockAds;
+        } catch (apiError: any) {
+            console.error("Google Ads API error fetching ads:", apiError);
             return NextResponse.json({
-                ads: filteredAds,
-                _mock: true
-            });
+                error: "Failed to fetch ads from Google Ads",
+                details: apiError?.message || String(apiError)
+            }, { status: 500 });
         }
     } catch (error) {
         console.error("Error fetching ads:", error);

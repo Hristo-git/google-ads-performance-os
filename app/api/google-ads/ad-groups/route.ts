@@ -256,16 +256,12 @@ export async function GET(request: Request) {
             const adGroups = await getAdGroups(refreshToken, campaignId || undefined, customerId, dateRange, onlyEnabled);
             console.log(`Fetched ${adGroups.length} ad groups`);
             return NextResponse.json({ adGroups });
-        } catch (apiError) {
-            console.error("Google Ads API error, using mock data:", apiError);
-            // Filter mock data by campaignId if provided
-            const filteredAdGroups = campaignId
-                ? mockAdGroups.filter(ag => ag.campaignId === campaignId)
-                : mockAdGroups;
+        } catch (apiError: any) {
+            console.error("Google Ads API error fetching ad groups:", apiError);
             return NextResponse.json({
-                adGroups: filteredAdGroups,
-                _mock: true
-            });
+                error: "Failed to fetch ad groups from Google Ads",
+                details: apiError?.message || String(apiError)
+            }, { status: 500 });
         }
     } catch (error) {
         console.error("Error fetching ad groups:", error);

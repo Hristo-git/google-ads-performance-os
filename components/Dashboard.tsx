@@ -525,7 +525,10 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             }
         } catch (err: any) {
             console.error("Failed to fetch ad group data:", err);
-            setError(err.message || "Failed to load ad groups");
+            // Only show error to user when they're actually viewing ad groups
+            if (navigation.level === 'campaign' || navigation.level === 'adgroup') {
+                setError(err.message || "Failed to load ad groups");
+            }
         } finally {
             setLoading(false);
             setLoadingMessage("");

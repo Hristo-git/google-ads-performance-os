@@ -192,12 +192,12 @@ export async function GET(request: Request) {
 
             return NextResponse.json({ campaigns: enrichedCampaigns });
 
-        } catch (apiError) {
-            console.error("Google Ads API error, using mock data:", apiError);
+        } catch (apiError: any) {
+            console.error("Google Ads API error fetching campaigns:", apiError);
             return NextResponse.json({
-                campaigns: mockCampaigns, // Fallback to mock data
-                _mock: true
-            });
+                error: "Failed to fetch campaigns from Google Ads",
+                details: apiError?.message || String(apiError)
+            }, { status: 500 });
         }
     } catch (error) {
         console.error("Error fetching campaigns:", error);
