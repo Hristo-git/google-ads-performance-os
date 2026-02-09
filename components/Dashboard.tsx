@@ -789,6 +789,60 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         return 'text-red-400';
     };
 
+    // Tooltip component for hover recommendations
+    const Tip = ({ children, text, pos = 'top' }: { children: React.ReactNode; text: string; pos?: 'top' | 'bottom' | 'right' }) => (
+        <span className="relative group/tip inline-flex cursor-help">
+            {children}
+            <span className={`absolute z-[60] px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-[11px] text-slate-200 leading-relaxed opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none w-60 text-left shadow-2xl font-normal normal-case tracking-normal ${
+                pos === 'top' ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' :
+                pos === 'bottom' ? 'top-full left-1/2 -translate-x-1/2 mt-2' :
+                'left-full top-1/2 -translate-y-1/2 ml-2'
+            }`}>
+                {text}
+            </span>
+        </span>
+    );
+
+    // Recommendation text helpers
+    const getAdStrengthTip = (strength: string, headlinesCount?: number, descriptionsCount?: number, adType?: string) => {
+        const isDisplay = adType === 'RESPONSIVE_DISPLAY_AD';
+        const maxH = isDisplay ? 5 : 15;
+        const maxD = isDisplay ? 5 : 4;
+        const minH = isDisplay ? 5 : 10;
+        const minD = isDisplay ? 5 : 3;
+        switch (strength) {
+            case 'POOR': return `Ad strength is Poor. Add more unique headlines (aim for ${minH}+/${maxH}) and descriptions (${minD}+/${maxD}). Use diverse messaging angles, include keywords, and add a clear call-to-action.`;
+            case 'AVERAGE': return `Ad strength is Average. Add more unique headlines${headlinesCount ? ` (currently ${headlinesCount}/${maxH})` : ''} and descriptions${descriptionsCount ? ` (currently ${descriptionsCount}/${maxD})` : ''}. Each headline should offer a unique selling point. Avoid repetition.`;
+            case 'GOOD': return `Good ad strength. Consider adding 1-2 more unique headlines for even better rotation and testing.`;
+            default: return '';
+        }
+    };
+
+    const getQSComponentTip = (component: string, value: string) => {
+        if (value !== 'BELOW_AVERAGE') return '';
+        switch (component) {
+            case 'expectedCtr': return 'Expected CTR is below average. Write more compelling headlines with strong calls-to-action. Use ad extensions (sitelinks, callouts) to increase visibility and click appeal.';
+            case 'adRelevance': return 'Ad relevance is below average. Include the target keyword in your headlines. Ensure ad copy directly addresses what users are searching for. Consider tighter ad group theming.';
+            case 'landingPageExperience': return 'Landing page experience is below average. Improve page load speed, ensure mobile-friendliness, match landing page content to ad messaging, and add clear CTAs.';
+            default: return '';
+        }
+    };
+
+    const getQSValueTip = (qs: number | null) => {
+        if (qs === null) return '';
+        if (qs <= 4) return `Quality Score ${qs}/10 is low. This increases CPC and reduces ad rank. Review Expected CTR, Ad Relevance, and Landing Page Experience for this keyword.`;
+        if (qs <= 6) return `Quality Score ${qs}/10 is average. Improving the below-average components can lower CPC and improve ad position.`;
+        return '';
+    };
+
+    const getPMaxPerfTip = (label: string) => {
+        switch (label) {
+            case 'LOW': return 'This asset is underperforming compared to others. Consider replacing it with a different creative, text variation, or image to improve results.';
+            case 'PENDING': case 'LEARNING': return 'Google is still evaluating this asset. Allow 1-2 weeks for enough data to accumulate before making changes.';
+            default: return '';
+        }
+    };
+
     if (status === "loading") {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -1558,30 +1612,48 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                                                                             return (
                                                                                 <>
-                                                                                    <span className={`font-medium ${getQSColor(item.avgQualityScore)}`}>
-                                                                                        {item.avgQualityScore !== null
-                                                                                            ? item.avgQualityScore.toFixed(1)
-                                                                                            : '—'}
-                                                                                    </span>
-                                                                                    {item.keywordsWithLowQS > 0 && (
-                                                                                        <span className="ml-1 text-xs text-red-400">
-                                                                                            ({item.keywordsWithLowQS} low)
+                                                                                    {item.avgQualityScore !== null && item.avgQualityScore <= 6 ? (
+                                                                                        <Tip text={getQSValueTip(item.avgQualityScore)} pos="bottom">
+                                                                                            <span className={`font-medium ${getQSColor(item.avgQualityScore)} border-b border-dashed ${item.avgQualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
+                                                                                                {item.avgQualityScore.toFixed(1)}
+                                                                                            </span>
+                                                                                        </Tip>
+                                                                                    ) : (
+                                                                                        <span className={`font-medium ${getQSColor(item.avgQualityScore)}`}>
+                                                                                            {item.avgQualityScore !== null ? item.avgQualityScore.toFixed(1) : '—'}
                                                                                         </span>
+                                                                                    )}
+                                                                                    {item.keywordsWithLowQS > 0 && (
+                                                                                        <Tip text={`${item.keywordsWithLowQS} keyword${item.keywordsWithLowQS > 1 ? 's' : ''} with Quality Score below 5. Click into this ad group to see which keywords need attention.`} pos="bottom">
+                                                                                            <span className="ml-1 text-xs text-red-400 border-b border-dashed border-red-400/40">
+                                                                                                ({item.keywordsWithLowQS} low)
+                                                                                            </span>
+                                                                                        </Tip>
                                                                                     )}
                                                                                 </>
                                                                             );
                                                                         })()}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
-                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
-                                                                            {(item as any).adStrength || 'UNSPECIFIED'}
-                                                                        </span>
+                                                                        {((item as any).adStrength === 'POOR' || (item as any).adStrength === 'AVERAGE') ? (
+                                                                            <Tip text={getAdStrengthTip((item as any).adStrength || 'UNSPECIFIED')} pos="bottom">
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border-b border-dashed ${(item as any).adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
+                                                                                    {(item as any).adStrength || 'UNSPECIFIED'}
+                                                                                </span>
+                                                                            </Tip>
+                                                                        ) : (
+                                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
+                                                                                {(item as any).adStrength || 'UNSPECIFIED'}
+                                                                            </span>
+                                                                        )}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.poorAdsCount > 0 ? (
-                                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">
-                                                                                {item.poorAdsCount}/{item.adsCount}
-                                                                            </span>
+                                                                            <Tip text={`${item.poorAdsCount} of ${item.adsCount} ad${item.adsCount > 1 ? 's' : ''} have Poor or Average strength. Click into this ad group to review and improve headline/description diversity.`} pos="bottom">
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
+                                                                                    {item.poorAdsCount}/{item.adsCount}
+                                                                                </span>
+                                                                            </Tip>
                                                                         ) : (
                                                                             <span className="text-slate-500 text-xs">0</span>
                                                                         )}
@@ -1640,12 +1712,19 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         )}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-center">
-                                                                        <span className={`px-2 py-1 rounded text-xs font-bold ${(asset.performanceLabel === 'BEST' || asset.performanceLabel === 'GOOD') ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                            (asset.performanceLabel === 'LOW') ? 'bg-red-500/20 text-red-400' :
-                                                                                'bg-slate-600/50 text-slate-400'
-                                                                            }`}>
-                                                                            {PERFORMANCE_LABEL_LABELS[asset.performanceLabel || 'UNKNOWN'] || asset.performanceLabel || 'Pending'}
-                                                                        </span>
+                                                                        {(asset.performanceLabel === 'LOW' || asset.performanceLabel === 'PENDING' || asset.performanceLabel === 'LEARNING') ? (
+                                                                            <Tip text={getPMaxPerfTip(asset.performanceLabel)}>
+                                                                                <span className={`px-2 py-1 rounded text-xs font-bold border-b border-dashed ${
+                                                                                    asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400 border-red-400/40' : 'bg-slate-600/50 text-slate-400 border-slate-400/40'
+                                                                                }`}>
+                                                                                    {PERFORMANCE_LABEL_LABELS[asset.performanceLabel] || asset.performanceLabel}
+                                                                                </span>
+                                                                            </Tip>
+                                                                        ) : (
+                                                                            <span className={`px-2 py-1 rounded text-xs font-bold ${(asset.performanceLabel === 'BEST' || asset.performanceLabel === 'GOOD') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-400'}`}>
+                                                                                {PERFORMANCE_LABEL_LABELS[asset.performanceLabel || 'UNKNOWN'] || asset.performanceLabel || 'Pending'}
+                                                                            </span>
+                                                                        )}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-center text-xs text-slate-400">
                                                                         {asset.status === 'ENABLED' ? '✅ ENABLED' : '⚠️ ' + asset.status}
@@ -1685,33 +1764,62 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             {kw.text}
                                                                         </td>
                                                                         <td className="px-4 py-3 text-center">
-                                                                            <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)}`}>
-                                                                                {kw.qualityScore ?? '—'}
-                                                                            </span>
+                                                                            {kw.qualityScore !== null && kw.qualityScore <= 6 ? (
+                                                                                <Tip text={getQSValueTip(kw.qualityScore)} pos={kw.qualityScore <= 4 ? 'right' : 'top'}>
+                                                                                    <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)} border-b border-dashed ${kw.qualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
+                                                                                        {kw.qualityScore}
+                                                                                    </span>
+                                                                                </Tip>
+                                                                            ) : (
+                                                                                <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)}`}>
+                                                                                    {kw.qualityScore ?? '—'}
+                                                                                </span>
+                                                                            )}
                                                                         </td>
                                                                         <td className="px-4 py-3 text-center">
-                                                                            <span className={`text-xs px-2 py-0.5 rounded ${kw.expectedCtr === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                                kw.expectedCtr === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
-                                                                                    'bg-red-500/20 text-red-400'
-                                                                                }`}>
-                                                                                {kw.expectedCtr.replace('_', ' ')}
-                                                                            </span>
+                                                                            {kw.expectedCtr ? (
+                                                                                kw.expectedCtr === 'BELOW_AVERAGE' ? (
+                                                                                    <Tip text={getQSComponentTip('expectedCtr', kw.expectedCtr)}>
+                                                                                        <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
+                                                                                            BELOW AVG
+                                                                                        </span>
+                                                                                    </Tip>
+                                                                                ) : (
+                                                                                    <span className={`text-xs px-2 py-0.5 rounded ${kw.expectedCtr === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
+                                                                                        {kw.expectedCtr.replace('_', ' ')}
+                                                                                    </span>
+                                                                                )
+                                                                            ) : <span className="text-slate-600">—</span>}
                                                                         </td>
                                                                         <td className="px-4 py-3 text-center">
-                                                                            <span className={`text-xs px-2 py-0.5 rounded ${kw.adRelevance === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                                kw.adRelevance === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
-                                                                                    'bg-red-500/20 text-red-400'
-                                                                                }`}>
-                                                                                {kw.adRelevance.replace('_', ' ')}
-                                                                            </span>
+                                                                            {kw.adRelevance ? (
+                                                                                kw.adRelevance === 'BELOW_AVERAGE' ? (
+                                                                                    <Tip text={getQSComponentTip('adRelevance', kw.adRelevance)}>
+                                                                                        <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
+                                                                                            BELOW AVG
+                                                                                        </span>
+                                                                                    </Tip>
+                                                                                ) : (
+                                                                                    <span className={`text-xs px-2 py-0.5 rounded ${kw.adRelevance === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
+                                                                                        {kw.adRelevance.replace('_', ' ')}
+                                                                                    </span>
+                                                                                )
+                                                                            ) : <span className="text-slate-600">—</span>}
                                                                         </td>
                                                                         <td className="px-4 py-3 text-center">
-                                                                            <span className={`text-xs px-2 py-0.5 rounded ${kw.landingPageExperience === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                                kw.landingPageExperience === 'AVERAGE' ? 'bg-slate-600/50 text-slate-300' :
-                                                                                    'bg-red-500/20 text-red-400'
-                                                                                }`}>
-                                                                                {kw.landingPageExperience.replace('_', ' ')}
-                                                                            </span>
+                                                                            {kw.landingPageExperience ? (
+                                                                                kw.landingPageExperience === 'BELOW_AVERAGE' ? (
+                                                                                    <Tip text={getQSComponentTip('landingPageExperience', kw.landingPageExperience)}>
+                                                                                        <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
+                                                                                            BELOW AVG
+                                                                                        </span>
+                                                                                    </Tip>
+                                                                                ) : (
+                                                                                    <span className={`text-xs px-2 py-0.5 rounded ${kw.landingPageExperience === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
+                                                                                        {kw.landingPageExperience.replace('_', ' ')}
+                                                                                    </span>
+                                                                                )
+                                                                            ) : <span className="text-slate-600">—</span>}
                                                                         </td>
                                                                     </tr>
                                                                 ))}
@@ -1739,20 +1847,40 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         {ads.map((ad) => (
                                                             <div key={ad.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
                                                                 <div className="flex items-center justify-between mb-3">
-                                                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
-                                                                        {ad.adStrength}
-                                                                    </span>
+                                                                    {(ad.adStrength === 'POOR' || ad.adStrength === 'AVERAGE') ? (
+                                                                        <Tip text={getAdStrengthTip(ad.adStrength, ad.headlinesCount, ad.descriptionsCount, ad.type)}>
+                                                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border-b border-dashed ${ad.adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor(ad.adStrength)}`}>
+                                                                                {ad.adStrength}
+                                                                            </span>
+                                                                        </Tip>
+                                                                    ) : (
+                                                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
+                                                                            {ad.adStrength}
+                                                                        </span>
+                                                                    )}
                                                                     <div className="flex items-center gap-4 text-sm">
-                                                                        <span className={`${ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) ? 'text-amber-400' : 'text-slate-400'}`}>
-                                                                            Headlines: <strong>{ad.headlinesCount}</strong>/
-                                                                            {ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
-                                                                            {ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) && ' ⚠️'}
-                                                                        </span>
-                                                                        <span className={`${ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) ? 'text-amber-400' : 'text-slate-400'}`}>
-                                                                            Descriptions: <strong>{ad.descriptionsCount}</strong>/
-                                                                            {ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
-                                                                            {ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) && ' ⚠️'}
-                                                                        </span>
+                                                                        {ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) ? (
+                                                                            <Tip text={`Add more headlines (currently ${ad.headlinesCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 15}). Aim for at least ${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10} unique headlines with diverse messaging and keywords.`} pos="bottom">
+                                                                                <span className="text-amber-400 border-b border-dashed border-amber-400/40">
+                                                                                    Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
+                                                                                </span>
+                                                                            </Tip>
+                                                                        ) : (
+                                                                            <span className="text-slate-400">
+                                                                                Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
+                                                                            </span>
+                                                                        )}
+                                                                        {ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) ? (
+                                                                            <Tip text={`Add more descriptions (currently ${ad.descriptionsCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 4}). Each description should highlight a unique benefit or call-to-action.`} pos="bottom">
+                                                                                <span className="text-amber-400 border-b border-dashed border-amber-400/40">
+                                                                                    Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
+                                                                                </span>
+                                                                            </Tip>
+                                                                        ) : (
+                                                                            <span className="text-slate-400">
+                                                                                Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-wrap gap-2">
