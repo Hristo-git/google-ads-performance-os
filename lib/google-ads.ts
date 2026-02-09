@@ -345,35 +345,37 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
     const dateFilter = getDateFilter(dateRange);
 
     try {
-        const statusFilter = onlyEnabled
-            ? `AND ad_group.status = 'ENABLED'`
-            : `AND ad_group.status != 'REMOVED'`;
+        const statusClause = onlyEnabled
+            ? `ad_group.status = 'ENABLED'`
+            : `ad_group.status != 'REMOVED'`;
 
-        const whereClause = campaignId
-            ? `WHERE campaign.id IN(${campaignId}) ${statusFilter} `
-            : `WHERE 1 = 1 ${statusFilter} `;
+        const campaignClause = campaignId
+            ? `AND campaign.id = ${campaignId}`
+            : '';
 
-        console.log(`GAQL whereClause: ${whereClause} `);
-
-        const adGroups = await customer.query(`
-    SELECT
-    ad_group.id,
-        ad_group.name,
-        ad_group.status,
-        campaign.id,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.ctr,
-        metrics.average_cpc,
-        metrics.conversions_value,
-        metrics.relative_ctr
+        const query = `
+            SELECT
+                ad_group.id,
+                ad_group.name,
+                ad_group.status,
+                campaign.id,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.ctr,
+                metrics.average_cpc,
+                metrics.conversions_value,
+                metrics.relative_ctr
             FROM ad_group
-            ${whereClause} ${dateFilter}
+            WHERE ${statusClause} ${campaignClause} ${dateFilter}
             ORDER BY metrics.impressions DESC
             LIMIT 5000
-        `);
+        `;
+
+        console.log(`[getAdGroups] customerId=${customerId}, campaignId=${campaignId || 'ALL'}`);
+
+        const adGroups = await customer.query(query);
 
         console.log(`GAQL found ${adGroups.length} ad groups`);
 
@@ -703,32 +705,32 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
     const dateFilter = getDateFilter(dateRange);
 
     try {
-        const statusFilter = onlyEnabled
-            ? `AND asset_group.status = 'ENABLED'`
-            : `AND asset_group.status != 'REMOVED'`;
+        const statusClause = onlyEnabled
+            ? `asset_group.status = 'ENABLED'`
+            : `asset_group.status != 'REMOVED'`;
 
-        const whereClause = campaignId
-            ? `WHERE campaign.id IN(${campaignId}) ${statusFilter} `
-            : `WHERE 1 = 1 ${statusFilter} `;
+        const campaignClause = campaignId
+            ? `AND campaign.id = ${campaignId}`
+            : '';
 
-        console.log(`PMax GAQL whereClause: ${whereClause} `);
+        console.log(`[getAssetGroups] customerId=${customerId}, campaignId=${campaignId || 'ALL'}`);
 
         const result = await customer.query(`
-    SELECT
-    asset_group.id,
-        asset_group.name,
-        asset_group.status,
-        asset_group.ad_strength,
-        campaign.id,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.ctr,
-        metrics.average_cpc,
-        metrics.conversions_value
+            SELECT
+                asset_group.id,
+                asset_group.name,
+                asset_group.status,
+                asset_group.ad_strength,
+                campaign.id,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.ctr,
+                metrics.average_cpc,
+                metrics.conversions_value
             FROM asset_group
-            ${whereClause} ${dateFilter}
+            WHERE ${statusClause} ${campaignClause} ${dateFilter}
             ORDER BY metrics.impressions DESC
             LIMIT 1000
         `);
