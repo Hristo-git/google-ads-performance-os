@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { getConversionActions } from "@/lib/google-ads";
+import { getConversionActions, getConversionActionTrends } from "@/lib/google-ads";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -29,8 +29,15 @@ export async function GET(request: Request) {
         if (!refreshToken) {
             return NextResponse.json({ error: "Missing Refresh Token" }, { status: 500 });
         }
-        const data = await getConversionActions(refreshToken, customerId, dateRange);
-        return NextResponse.json({ conversionActions: data });
+        const [data, trends] = await Promise.all([
+            getConversionActions(refreshToken, customerId, dateRange),
+            getConversionActionTrends(refreshToken, customerId, dateRange)
+        ]);
+
+        return NextResponse.json({
+            conversionActions: data,
+            conversionTrends: trends
+        });
     } catch (error) {
         console.error("Error fetching conversion actions:", error);
         return NextResponse.json({ error: "Failed to fetch conversion actions" }, { status: 500 });

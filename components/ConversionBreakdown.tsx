@@ -62,8 +62,25 @@ const CATEGORY_COLORS: Record<string, string> = {
     'CONVERTED_LEAD': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
 };
 
+// Helper to calculate Pearson correlation
+function calculateCorrelation(x: number[], y: number[]): number {
+    const n = x.length;
+    if (n !== y.length || n === 0) return 0;
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, val, i) => sum + val * y[i], 0);
+    const sumX2 = x.reduce((sum, val) => sum + val * val, 0);
+    const sumY2 = y.reduce((sum, val) => sum + val * val, 0);
+
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+
+    return denominator === 0 ? 0 : numerator / denominator;
+}
+
 export default function ConversionBreakdown({ customerId, dateRange }: ConversionBreakdownProps) {
     const [data, setData] = useState<ConversionAction[]>([]);
+    const [trends, setTrends] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<'conversions' | 'conversionValue' | 'conversionAction'>('conversions');
@@ -85,6 +102,7 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
                     setError(json.error);
                 } else {
                     setData(json.conversionActions || []);
+                    setTrends(json.conversionTrends || []);
                 }
             } catch (err: any) {
                 setError(err.message || 'Failed to load conversion data');
@@ -131,6 +149,50 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
 
         return result;
     }, [data, sortBy, sortDir]);
+
+    // Analyze Duplication Risk
+    const duplicationAnalysis = useMemo(() => {
+        if (aggregated.length < 2 || trends.length === 0) return null;
+
+        // Get top 2 conversion actions by volume
+        const topActions = [...aggregated].sort((a, b) => b.conversions - a.conversions).slice(0, 2);
+        const action1 = topActions[0].action;
+        const action2 = topActions[1].action;
+
+        // Map daily data
+        const dates = Array.from(new Set(trends.map(t => t.date))).sort();
+        const series1 = dates.map(d => {
+            const entry = trends.find(t => t.date === d && t.conversionAction === action1);
+            return entry ? entry.conversions : 0;
+        });
+        const series2 = dates.map(d => {
+            const entry = trends.find(t => t.date === d && t.conversionAction === action2);
+            return entry ? entry.conversions : 0;
+        });
+
+        const correlation = calculateCorrelation(series1, series2);
+        const ratio = topActions[1].conversions / topActions[0].conversions;
+
+        let risk = 'LOW';
+        let message = 'Likely different conversion events.';
+
+        if (correlation > 0.9) {
+            risk = 'HIGH';
+            message = `High correlation (${correlation.toFixed(2)}) suggests these actions might be tracking the same events. Check if they trigger simultaneously.`;
+        } else if (correlation > 0.7) {
+            risk = 'MEDIUM';
+            message = `Moderate correlation (${correlation.toFixed(2)}). Possible partial overlap.`;
+        }
+
+        return {
+            action1,
+            action2,
+            correlation,
+            risk,
+            message
+        };
+
+    }, [aggregated, trends]);
 
     // Category summary
     const categorySummary = useMemo(() => {
@@ -212,6 +274,25 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
                     </div>
                 ))}
             </div>
+
+            {/* Duplication Analysis */}
+            {duplicationAnalysis && duplicationAnalysis.risk !== 'LOW' && (
+                <div className={`rounded-xl border p-4 flex items-start gap-3 ${duplicationAnalysis.risk === 'HIGH' ? 'bg-red-500/10 border-red-500/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
+                    <div className={`mt-0.5 ${duplicationAnalysis.risk === 'HIGH' ? 'text-red-400' : 'text-amber-400'}`}>
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h4 className={`font-semibold text-sm ${duplicationAnalysis.risk === 'HIGH' ? 'text-red-400' : 'text-amber-400'}`}>
+                            Potential {duplicationAnalysis.risk === 'HIGH' ? 'Critical' : 'Moderate'} Duplication Detected
+                        </h4>
+                        <p className="text-sm text-slate-300 mt-1">
+                            Comparison between <strong>{duplicationAnalysis.action1}</strong> and <strong>{duplicationAnalysis.action2}</strong>: {duplicationAnalysis.message}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Totals Bar */}
             <div className="rounded-xl bg-slate-800 border border-slate-700 p-4 flex items-center justify-between">

@@ -1227,6 +1227,55 @@ export async function getConversionActions(
     }
 }
 
+
+export interface ConversionActionTrend {
+    date: string;
+    conversionAction: string;
+    actionCategory: string;
+    conversions: number;
+    conversionValue: number;
+}
+
+export async function getConversionActionTrends(
+    refreshToken: string,
+    customerId?: string,
+    dateRange?: DateRange // Default to 30 days if not provided
+): Promise<ConversionActionTrend[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    let dateFilter = getDateFilter(dateRange);
+
+    if (!dateRange) {
+        // Default to last 30 days if no range provided
+        dateFilter = " AND segments.date DURING LAST_30_DAYS";
+    }
+
+    try {
+        const result = await customer.query(`
+            SELECT
+                segments.date,
+                segments.conversion_action_name,
+                segments.conversion_action_category,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM campaign
+            WHERE campaign.status != 'REMOVED' ${dateFilter}
+                AND metrics.conversions > 0
+            ORDER BY segments.date ASC
+        `);
+
+        return result.map((row) => ({
+            date: row.segments?.date || "",
+            conversionAction: row.segments?.conversion_action_name || "Unknown",
+            actionCategory: String(row.segments?.conversion_action_category) || "UNKNOWN",
+            conversions: Number(row.metrics?.conversions) || 0,
+            conversionValue: Number(row.metrics?.conversions_value) || 0,
+        }));
+    } catch (error: unknown) {
+        logApiError("getConversionActionTrends", error);
+        return [];
+    }
+}
+
 // ============================================
 // PRIORITY 3: Auction Insights (Competitive Analysis)
 // ============================================
