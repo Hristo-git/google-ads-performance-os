@@ -12,6 +12,7 @@ import StrategicInsights from "./StrategicInsights";
 import AIReportsHub from "./AIReportsHub";
 import AccountHealthWidget from "./AccountHealthWidget";
 import NGramInsights from "./NGramInsights";
+import Tooltip from "./Tooltip";
 
 const Sparkline = ({ data, color = "#a78bfa" }: { data: number[], color?: string }) => {
     if (!data || data.length < 2) return null;
@@ -788,20 +789,6 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         if (is >= 0.5) return 'text-amber-400';
         return 'text-red-400';
     };
-
-    // Tooltip component for hover recommendations
-    const Tip = ({ children, text, pos = 'top' }: { children: React.ReactNode; text: string; pos?: 'top' | 'bottom' | 'right' }) => (
-        <span className="relative group/tip inline-flex cursor-help">
-            {children}
-            <span className={`absolute z-[60] px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-[11px] text-slate-200 leading-relaxed opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none w-60 text-left shadow-2xl font-normal normal-case tracking-normal ${
-                pos === 'top' ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' :
-                pos === 'bottom' ? 'top-full left-1/2 -translate-x-1/2 mt-2' :
-                'left-full top-1/2 -translate-y-1/2 ml-2'
-            }`}>
-                {text}
-            </span>
-        </span>
-    );
 
     // Recommendation text helpers
     const getAdStrengthTip = (strength: string, headlinesCount?: number, descriptionsCount?: number, adType?: string) => {
@@ -1613,22 +1600,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             return (
                                                                                 <>
                                                                                     {item.avgQualityScore !== null && item.avgQualityScore <= 6 ? (
-                                                                                        <Tip text={getQSValueTip(item.avgQualityScore)} pos="bottom">
+                                                                                        <Tooltip text={getQSValueTip(item.avgQualityScore)}>
                                                                                             <span className={`font-medium ${getQSColor(item.avgQualityScore)} border-b border-dashed ${item.avgQualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
                                                                                                 {item.avgQualityScore.toFixed(1)}
                                                                                             </span>
-                                                                                        </Tip>
+                                                                                        </Tooltip>
                                                                                     ) : (
                                                                                         <span className={`font-medium ${getQSColor(item.avgQualityScore)}`}>
                                                                                             {item.avgQualityScore !== null ? item.avgQualityScore.toFixed(1) : '—'}
                                                                                         </span>
                                                                                     )}
                                                                                     {item.keywordsWithLowQS > 0 && (
-                                                                                        <Tip text={`${item.keywordsWithLowQS} keyword${item.keywordsWithLowQS > 1 ? 's' : ''} with Quality Score below 5. Click into this ad group to see which keywords need attention.`} pos="bottom">
+                                                                                        <Tooltip text={`${item.keywordsWithLowQS} keyword${item.keywordsWithLowQS > 1 ? 's' : ''} with Quality Score below 5. Click into this ad group to see which keywords need attention.`}>
                                                                                             <span className="ml-1 text-xs text-red-400 border-b border-dashed border-red-400/40">
                                                                                                 ({item.keywordsWithLowQS} low)
                                                                                             </span>
-                                                                                        </Tip>
+                                                                                        </Tooltip>
                                                                                     )}
                                                                                 </>
                                                                             );
@@ -1636,11 +1623,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {((item as any).adStrength === 'POOR' || (item as any).adStrength === 'AVERAGE') ? (
-                                                                            <Tip text={getAdStrengthTip((item as any).adStrength || 'UNSPECIFIED')} pos="bottom">
+                                                                            <Tooltip text={getAdStrengthTip((item as any).adStrength || 'UNSPECIFIED')}>
                                                                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border-b border-dashed ${(item as any).adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
                                                                                     {(item as any).adStrength || 'UNSPECIFIED'}
                                                                                 </span>
-                                                                            </Tip>
+                                                                            </Tooltip>
                                                                         ) : (
                                                                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
                                                                                 {(item as any).adStrength || 'UNSPECIFIED'}
@@ -1649,11 +1636,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.poorAdsCount > 0 ? (
-                                                                            <Tip text={`${item.poorAdsCount} of ${item.adsCount} ad${item.adsCount > 1 ? 's' : ''} have Poor or Average strength. Click into this ad group to review and improve headline/description diversity.`} pos="bottom">
+                                                                            <Tooltip text={`${item.poorAdsCount} of ${item.adsCount} ad${item.adsCount > 1 ? 's' : ''} have Poor or Average strength. Click into this ad group to review and improve headline/description diversity.`}>
                                                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
                                                                                     {item.poorAdsCount}/{item.adsCount}
                                                                                 </span>
-                                                                            </Tip>
+                                                                            </Tooltip>
                                                                         ) : (
                                                                             <span className="text-slate-500 text-xs">0</span>
                                                                         )}
@@ -1713,13 +1700,13 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     </td>
                                                                     <td className="px-4 py-3 text-center">
                                                                         {(asset.performanceLabel === 'LOW' || asset.performanceLabel === 'PENDING' || asset.performanceLabel === 'LEARNING') ? (
-                                                                            <Tip text={getPMaxPerfTip(asset.performanceLabel)}>
+                                                                            <Tooltip text={getPMaxPerfTip(asset.performanceLabel)}>
                                                                                 <span className={`px-2 py-1 rounded text-xs font-bold border-b border-dashed ${
                                                                                     asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400 border-red-400/40' : 'bg-slate-600/50 text-slate-400 border-slate-400/40'
                                                                                 }`}>
                                                                                     {PERFORMANCE_LABEL_LABELS[asset.performanceLabel] || asset.performanceLabel}
                                                                                 </span>
-                                                                            </Tip>
+                                                                            </Tooltip>
                                                                         ) : (
                                                                             <span className={`px-2 py-1 rounded text-xs font-bold ${(asset.performanceLabel === 'BEST' || asset.performanceLabel === 'GOOD') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-400'}`}>
                                                                                 {PERFORMANCE_LABEL_LABELS[asset.performanceLabel || 'UNKNOWN'] || asset.performanceLabel || 'Pending'}
@@ -1765,11 +1752,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         </td>
                                                                         <td className="px-4 py-3 text-center">
                                                                             {kw.qualityScore !== null && kw.qualityScore <= 6 ? (
-                                                                                <Tip text={getQSValueTip(kw.qualityScore)} pos={kw.qualityScore <= 4 ? 'right' : 'top'}>
+                                                                                <Tooltip text={getQSValueTip(kw.qualityScore)}>
                                                                                     <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)} border-b border-dashed ${kw.qualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
                                                                                         {kw.qualityScore}
                                                                                     </span>
-                                                                                </Tip>
+                                                                                </Tooltip>
                                                                             ) : (
                                                                                 <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)}`}>
                                                                                     {kw.qualityScore ?? '—'}
@@ -1779,11 +1766,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <td className="px-4 py-3 text-center">
                                                                             {kw.expectedCtr ? (
                                                                                 kw.expectedCtr === 'BELOW_AVERAGE' ? (
-                                                                                    <Tip text={getQSComponentTip('expectedCtr', kw.expectedCtr)}>
+                                                                                    <Tooltip text={getQSComponentTip('expectedCtr', kw.expectedCtr)}>
                                                                                         <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
                                                                                             BELOW AVG
                                                                                         </span>
-                                                                                    </Tip>
+                                                                                    </Tooltip>
                                                                                 ) : (
                                                                                     <span className={`text-xs px-2 py-0.5 rounded ${kw.expectedCtr === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
                                                                                         {kw.expectedCtr.replace('_', ' ')}
@@ -1794,11 +1781,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <td className="px-4 py-3 text-center">
                                                                             {kw.adRelevance ? (
                                                                                 kw.adRelevance === 'BELOW_AVERAGE' ? (
-                                                                                    <Tip text={getQSComponentTip('adRelevance', kw.adRelevance)}>
+                                                                                    <Tooltip text={getQSComponentTip('adRelevance', kw.adRelevance)}>
                                                                                         <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
                                                                                             BELOW AVG
                                                                                         </span>
-                                                                                    </Tip>
+                                                                                    </Tooltip>
                                                                                 ) : (
                                                                                     <span className={`text-xs px-2 py-0.5 rounded ${kw.adRelevance === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
                                                                                         {kw.adRelevance.replace('_', ' ')}
@@ -1809,11 +1796,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <td className="px-4 py-3 text-center">
                                                                             {kw.landingPageExperience ? (
                                                                                 kw.landingPageExperience === 'BELOW_AVERAGE' ? (
-                                                                                    <Tip text={getQSComponentTip('landingPageExperience', kw.landingPageExperience)}>
+                                                                                    <Tooltip text={getQSComponentTip('landingPageExperience', kw.landingPageExperience)}>
                                                                                         <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
                                                                                             BELOW AVG
                                                                                         </span>
-                                                                                    </Tip>
+                                                                                    </Tooltip>
                                                                                 ) : (
                                                                                     <span className={`text-xs px-2 py-0.5 rounded ${kw.landingPageExperience === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
                                                                                         {kw.landingPageExperience.replace('_', ' ')}
@@ -1848,11 +1835,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                             <div key={ad.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
                                                                 <div className="flex items-center justify-between mb-3">
                                                                     {(ad.adStrength === 'POOR' || ad.adStrength === 'AVERAGE') ? (
-                                                                        <Tip text={getAdStrengthTip(ad.adStrength, ad.headlinesCount, ad.descriptionsCount, ad.type)}>
+                                                                        <Tooltip text={getAdStrengthTip(ad.adStrength, ad.headlinesCount, ad.descriptionsCount, ad.type)}>
                                                                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border-b border-dashed ${ad.adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor(ad.adStrength)}`}>
                                                                                 {ad.adStrength}
                                                                             </span>
-                                                                        </Tip>
+                                                                        </Tooltip>
                                                                     ) : (
                                                                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
                                                                             {ad.adStrength}
@@ -1860,22 +1847,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     )}
                                                                     <div className="flex items-center gap-4 text-sm">
                                                                         {ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) ? (
-                                                                            <Tip text={`Add more headlines (currently ${ad.headlinesCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 15}). Aim for at least ${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10} unique headlines with diverse messaging and keywords.`} pos="bottom">
+                                                                            <Tooltip text={`Add more headlines (currently ${ad.headlinesCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 15}). Aim for at least ${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10} unique headlines with diverse messaging and keywords.`}>
                                                                                 <span className="text-amber-400 border-b border-dashed border-amber-400/40">
                                                                                     Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
                                                                                 </span>
-                                                                            </Tip>
+                                                                            </Tooltip>
                                                                         ) : (
                                                                             <span className="text-slate-400">
                                                                                 Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
                                                                             </span>
                                                                         )}
                                                                         {ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) ? (
-                                                                            <Tip text={`Add more descriptions (currently ${ad.descriptionsCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 4}). Each description should highlight a unique benefit or call-to-action.`} pos="bottom">
+                                                                            <Tooltip text={`Add more descriptions (currently ${ad.descriptionsCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 4}). Each description should highlight a unique benefit or call-to-action.`}>
                                                                                 <span className="text-amber-400 border-b border-dashed border-amber-400/40">
                                                                                     Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
                                                                                 </span>
-                                                                            </Tip>
+                                                                            </Tooltip>
                                                                         ) : (
                                                                             <span className="text-slate-400">
                                                                                 Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
