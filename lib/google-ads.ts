@@ -8,15 +8,15 @@ interface CacheEntry { data: unknown; expiresAt: number; }
 const apiCache = new Map<string, CacheEntry>();
 
 const CACHE_TTL = {
-    account:  30 * 60 * 1000,  // 30 min - account info rarely changes
+    account: 30 * 60 * 1000,  // 30 min - account info rarely changes
     campaigns: 5 * 60 * 1000,  // 5 min
-    adGroups:  5 * 60 * 1000,
-    assets:    5 * 60 * 1000,
-    keywords:  5 * 60 * 1000,
-    ads:       5 * 60 * 1000,
-    device:    5 * 60 * 1000,
-    search:    5 * 60 * 1000,
-    default:   5 * 60 * 1000,
+    adGroups: 5 * 60 * 1000,
+    assets: 5 * 60 * 1000,
+    keywords: 5 * 60 * 1000,
+    ads: 5 * 60 * 1000,
+    device: 5 * 60 * 1000,
+    search: 5 * 60 * 1000,
+    default: 5 * 60 * 1000,
 };
 
 async function withCache<T>(category: keyof typeof CACHE_TTL, keyParts: unknown[], fn: () => Promise<T>): Promise<T> {
@@ -312,41 +312,41 @@ export async function getCampaigns(refreshToken: string, customerId?: string, da
             `);
 
             return result.map((row) => {
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
 
-            return {
-                id: row.campaign?.id?.toString() || "",
-                name: row.campaign?.name || "",
-                status: mapStatus(row.campaign?.status),
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost,
-                conversions,
-                ctr: Number(row.metrics?.ctr) || 0,
-                cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
-                searchImpressionShare: row.metrics?.search_impression_share ?? null,
-                searchTopImpressionShare: row.metrics?.search_top_impression_share ?? null,
-                searchLostISRank: row.metrics?.search_rank_lost_impression_share ?? null,
-                searchLostISBudget: row.metrics?.search_budget_lost_impression_share ?? null,
-                conversionValue,
-                roas: cost > 0 ? conversionValue / cost : null,
-                cpa: conversions > 0 ? cost / conversions : null,
-                biddingStrategyType: String(row.campaign?.bidding_strategy_type || 'UNKNOWN'),
-                advertisingChannelType: String(row.campaign?.advertising_channel_type || 'UNKNOWN'),
-                targetRoas: row.campaign?.target_roas?.target_roas ?? undefined,
-                targetCpa: row.campaign?.target_cpa?.target_cpa_micros ? Number(row.campaign.target_cpa.target_cpa_micros) / 1_000_000 : undefined,
-                // NEW - Budget & Optimization
-                dailyBudget: row.campaign_budget?.amount_micros
-                    ? Number(row.campaign_budget.amount_micros) / 1_000_000
-                    : null,
-                budgetDeliveryMethod: String(row.campaign_budget?.delivery_method || 'STANDARD'),
-                budgetStatus: String(row.campaign_budget?.status || 'UNKNOWN'),
-                optimizationScore: row.campaign?.optimization_score ?? null,
-                searchAbsTopIS: row.metrics?.search_absolute_top_impression_share ?? null,
-            };
-        });
+                return {
+                    id: row.campaign?.id?.toString() || "",
+                    name: row.campaign?.name || "",
+                    status: mapStatus(row.campaign?.status),
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    ctr: Number(row.metrics?.ctr) || 0,
+                    cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+                    searchImpressionShare: row.metrics?.search_impression_share ?? null,
+                    searchTopImpressionShare: row.metrics?.search_top_impression_share ?? null,
+                    searchLostISRank: row.metrics?.search_rank_lost_impression_share ?? null,
+                    searchLostISBudget: row.metrics?.search_budget_lost_impression_share ?? null,
+                    conversionValue,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null,
+                    biddingStrategyType: String(row.campaign?.bidding_strategy_type || 'UNKNOWN'),
+                    advertisingChannelType: String(row.campaign?.advertising_channel_type || 'UNKNOWN'),
+                    targetRoas: row.campaign?.target_roas?.target_roas ?? undefined,
+                    targetCpa: row.campaign?.target_cpa?.target_cpa_micros ? Number(row.campaign.target_cpa.target_cpa_micros) / 1_000_000 : undefined,
+                    // NEW - Budget & Optimization
+                    dailyBudget: row.campaign_budget?.amount_micros
+                        ? Number(row.campaign_budget.amount_micros) / 1_000_000
+                        : null,
+                    budgetDeliveryMethod: String(row.campaign_budget?.delivery_method || 'STANDARD'),
+                    budgetStatus: String(row.campaign_budget?.status || 'UNKNOWN'),
+                    optimizationScore: row.campaign?.optimization_score ?? null,
+                    searchAbsTopIS: row.metrics?.search_absolute_top_impression_share ?? null,
+                };
+            });
         } catch (error: unknown) {
             logApiError("getCampaigns", error);
             throw error;
@@ -407,19 +407,19 @@ export async function getAccountInfo(refreshToken: string, customerId?: string) 
 
 export async function getAdGroups(refreshToken: string, campaignId?: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false): Promise<AdGroupPerformance[]> {
     return withCache('adGroups', [campaignId, customerId, dateRange, onlyEnabled], async () => {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
 
-    try {
-        const statusClause = onlyEnabled
-            ? `ad_group.status = 'ENABLED'`
-            : `ad_group.status != 'REMOVED'`;
+        try {
+            const statusClause = onlyEnabled
+                ? `ad_group.status = 'ENABLED'`
+                : `ad_group.status != 'REMOVED'`;
 
-        const campaignClause = campaignId
-            ? `AND campaign.id = ${campaignId}`
-            : '';
+            const campaignClause = campaignId
+                ? `AND campaign.id = ${campaignId}`
+                : '';
 
-        const query = `
+            const query = `
             SELECT
                 ad_group.id,
                 ad_group.name,
@@ -439,110 +439,110 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
             LIMIT 5000
         `;
 
-        console.log(`[getAdGroups] customerId=${customerId}, campaignId=${campaignId || 'ALL'}`);
+            console.log(`[getAdGroups] customerId=${customerId}, campaignId=${campaignId || 'ALL'}`);
 
-        const adGroups = await customer.query(query);
+            const adGroups = await customer.query(query);
 
-        console.log(`GAQL found ${adGroups.length} ad groups`);
+            console.log(`GAQL found ${adGroups.length} ad groups`);
 
-        const adGroupIds = adGroups.map(ag => ag.ad_group?.id?.toString()).filter((id): id is string => !!id);
+            const adGroupIds = adGroups.map(ag => ag.ad_group?.id?.toString()).filter((id): id is string => !!id);
 
-        let keywords: KeywordWithQS[] = [];
-        let ads: AdWithStrength[] = [];
+            let keywords: KeywordWithQS[] = [];
+            let ads: AdWithStrength[] = [];
 
-        if (adGroupIds.length > 0) {
-            try {
-                [keywords, ads] = await Promise.all([
-                    getKeywordsWithQS(refreshToken, undefined, customerId, dateRange, adGroupIds, undefined, undefined, onlyEnabled),
-                    getAdsWithStrength(refreshToken, undefined, customerId, adGroupIds, dateRange, onlyEnabled)
-                ]);
-            } catch (enrichErr: unknown) {
-                console.error("[getAdGroups] Keywords/Ads enrichment failed (returning basic metrics):", enrichErr);
-            }
-        }
-
-        return adGroups.map((row) => {
-            const id = row.ad_group?.id?.toString() || "";
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
-
-            const groupKeywords = keywords.filter(k => k.adGroupId === id);
-            const groupAds = ads.filter(a => a.adGroupId === id);
-
-            let totalWeightedQS = 0;
-            let totalImpressionsForQS = 0;
-            let keywordsWithLowQS = 0;
-
-            groupKeywords.forEach(k => {
-                if (k.qualityScore !== null) {
-                    totalWeightedQS += k.qualityScore * k.impressions;
-                    totalImpressionsForQS += k.impressions;
-                    if (k.qualityScore < 5) keywordsWithLowQS++;
+            if (adGroupIds.length > 0) {
+                try {
+                    [keywords, ads] = await Promise.all([
+                        getKeywordsWithQS(refreshToken, undefined, customerId, dateRange, adGroupIds, undefined, undefined, onlyEnabled),
+                        getAdsWithStrength(refreshToken, undefined, customerId, adGroupIds, dateRange, onlyEnabled)
+                    ]);
+                } catch (enrichErr: unknown) {
+                    console.error("[getAdGroups] Keywords/Ads enrichment failed (returning basic metrics):", enrichErr);
                 }
+            }
+
+            return adGroups.map((row) => {
+                const id = row.ad_group?.id?.toString() || "";
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+
+                const groupKeywords = keywords.filter(k => k.adGroupId === id);
+                const groupAds = ads.filter(a => a.adGroupId === id);
+
+                let totalWeightedQS = 0;
+                let totalImpressionsForQS = 0;
+                let keywordsWithLowQS = 0;
+
+                groupKeywords.forEach(k => {
+                    if (k.qualityScore !== null) {
+                        totalWeightedQS += k.qualityScore * k.impressions;
+                        totalImpressionsForQS += k.impressions;
+                        if (k.qualityScore < 5) keywordsWithLowQS++;
+                    }
+                });
+
+                const avgQualityScore = totalImpressionsForQS > 0
+                    ? Number((totalWeightedQS / totalImpressionsForQS).toFixed(1))
+                    : null;
+
+                const AD_STRENGTH_MAP: Record<string, string> = {
+                    '4': 'POOR',
+                    '5': 'AVERAGE',
+                    '6': 'GOOD',
+                    '7': 'EXCELLENT',
+                    'POOR': 'POOR',
+                    'AVERAGE': 'AVERAGE',
+                    'GOOD': 'GOOD',
+                    'EXCELLENT': 'EXCELLENT'
+                };
+
+                const normalizedAds = groupAds.map(ad => ({
+                    ...ad,
+                    adStrength: AD_STRENGTH_MAP[ad.adStrength] || ad.adStrength
+                }));
+
+                const poorAdsCount = normalizedAds.filter(a => a.adStrength === 'POOR').length;
+
+                // Calculate aggregate Ad Strength (representative)
+                let adStrength = 'UNSPECIFIED';
+                if (normalizedAds.length > 0) {
+                    const strengthValues: Record<string, number> = { 'POOR': 1, 'AVERAGE': 2, 'GOOD': 3, 'EXCELLENT': 4 };
+                    const reverseMapping: Record<number, string> = { 1: 'POOR', 2: 'AVERAGE', 3: 'GOOD', 4: 'EXCELLENT' };
+
+                    const validAds = normalizedAds.filter(a => strengthValues[a.adStrength]);
+                    if (validAds.length > 0) {
+                        const avgValue = Math.round(validAds.reduce((sum, a) => sum + strengthValues[a.adStrength], 0) / validAds.length);
+                        adStrength = reverseMapping[avgValue] || 'UNSPECIFIED';
+                    }
+                }
+
+                return {
+                    id,
+                    campaignId: row.campaign?.id?.toString() || "",
+                    name: row.ad_group?.name || "",
+                    status: mapStatus(row.ad_group?.status),
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    ctr: Number(row.metrics?.ctr) || 0,
+                    cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+                    relativeCtr: Number(row.metrics?.relative_ctr) || null,
+                    avgQualityScore,
+                    keywordsWithLowQS,
+                    adsCount: groupAds.length,
+                    poorAdsCount,
+                    adStrength,
+                    conversionValue,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null,
+                };
             });
-
-            const avgQualityScore = totalImpressionsForQS > 0
-                ? Number((totalWeightedQS / totalImpressionsForQS).toFixed(1))
-                : null;
-
-            const AD_STRENGTH_MAP: Record<string, string> = {
-                '4': 'POOR',
-                '5': 'AVERAGE',
-                '6': 'GOOD',
-                '7': 'EXCELLENT',
-                'POOR': 'POOR',
-                'AVERAGE': 'AVERAGE',
-                'GOOD': 'GOOD',
-                'EXCELLENT': 'EXCELLENT'
-            };
-
-            const normalizedAds = groupAds.map(ad => ({
-                ...ad,
-                adStrength: AD_STRENGTH_MAP[ad.adStrength] || ad.adStrength
-            }));
-
-            const poorAdsCount = normalizedAds.filter(a => a.adStrength === 'POOR').length;
-
-            // Calculate aggregate Ad Strength (representative)
-            let adStrength = 'UNSPECIFIED';
-            if (normalizedAds.length > 0) {
-                const strengthValues: Record<string, number> = { 'POOR': 1, 'AVERAGE': 2, 'GOOD': 3, 'EXCELLENT': 4 };
-                const reverseMapping: Record<number, string> = { 1: 'POOR', 2: 'AVERAGE', 3: 'GOOD', 4: 'EXCELLENT' };
-
-                const validAds = normalizedAds.filter(a => strengthValues[a.adStrength]);
-                if (validAds.length > 0) {
-                    const avgValue = Math.round(validAds.reduce((sum, a) => sum + strengthValues[a.adStrength], 0) / validAds.length);
-                    adStrength = reverseMapping[avgValue] || 'UNSPECIFIED';
-                }
-            }
-
-            return {
-                id,
-                campaignId: row.campaign?.id?.toString() || "",
-                name: row.ad_group?.name || "",
-                status: mapStatus(row.ad_group?.status),
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost,
-                conversions,
-                ctr: Number(row.metrics?.ctr) || 0,
-                cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
-                relativeCtr: Number(row.metrics?.relative_ctr) || null,
-                avgQualityScore,
-                keywordsWithLowQS,
-                adsCount: groupAds.length,
-                poorAdsCount,
-                adStrength,
-                conversionValue,
-                roas: cost > 0 ? conversionValue / cost : null,
-                cpa: conversions > 0 ? cost / conversions : null,
-            };
-        });
-    } catch (error: unknown) {
-        logApiError("API call", error);
-        throw error;
-    }
+        } catch (error: unknown) {
+            logApiError("API call", error);
+            throw error;
+        }
     });
 }
 
@@ -600,32 +600,32 @@ export async function getKeywordsWithQS(
     onlyEnabled: boolean = false
 ): Promise<KeywordWithQS[]> {
     return withCache('keywords', [adGroupId, customerId, dateRange, adGroupIds, onlyEnabled], async () => {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
 
-    try {
-        // Base filter - always exclude removed
-        let whereClause = `WHERE ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'`;
+        try {
+            // Base filter - always exclude removed
+            let whereClause = `WHERE ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'`;
 
-        if (onlyEnabled) {
-            whereClause += ` AND ad_group_criterion.status = 'ENABLED'`;
-        }
+            if (onlyEnabled) {
+                whereClause += ` AND ad_group_criterion.status = 'ENABLED'`;
+            }
 
-        if (adGroupId) {
-            whereClause += ` AND ad_group.id = ${adGroupId} `;
-        } else if (adGroupIds && adGroupIds.length > 0) {
-            whereClause += ` AND ad_group.id IN(${adGroupIds.join(',')})`;
-        }
+            if (adGroupId) {
+                whereClause += ` AND ad_group.id = ${adGroupId} `;
+            } else if (adGroupIds && adGroupIds.length > 0) {
+                whereClause += ` AND ad_group.id IN(${adGroupIds.join(',')})`;
+            }
 
-        // Add Quality Score filtering
-        if (minQualityScore !== undefined) {
-            whereClause += ` AND ad_group_criterion.quality_info.quality_score >= ${minQualityScore} `;
-        }
-        if (maxQualityScore !== undefined) {
-            whereClause += ` AND ad_group_criterion.quality_info.quality_score <= ${maxQualityScore} `;
-        }
+            // Add Quality Score filtering
+            if (minQualityScore !== undefined) {
+                whereClause += ` AND ad_group_criterion.quality_info.quality_score >= ${minQualityScore} `;
+            }
+            if (maxQualityScore !== undefined) {
+                whereClause += ` AND ad_group_criterion.quality_info.quality_score <= ${maxQualityScore} `;
+            }
 
-        const keywords = await customer.query(`
+            const keywords = await customer.query(`
     SELECT
     ad_group_criterion.criterion_id,
         ad_group.id,
@@ -648,29 +648,29 @@ export async function getKeywordsWithQS(
             LIMIT 10000
         `);
 
-        const validKeywords = keywords.map((row) => ({
-            id: row.ad_group_criterion?.criterion_id?.toString() || "",
-            adGroupId: row.ad_group?.id?.toString() || "",
-            text: row.ad_group_criterion?.keyword?.text || "",
-            matchType: String(row.ad_group_criterion?.keyword?.match_type) || "",
-            status: mapStatus(row.ad_group_criterion?.status),
-            qualityScore: row.ad_group_criterion?.quality_info?.quality_score ?? null,
-            expectedCtr: String(row.ad_group_criterion?.quality_info?.search_predicted_ctr) || "UNSPECIFIED",
-            landingPageExperience: String(row.ad_group_criterion?.quality_info?.post_click_quality_score) || "UNSPECIFIED",
-            adRelevance: String(row.ad_group_criterion?.quality_info?.creative_quality_score) || "UNSPECIFIED",
-            impressions: Number(row.metrics?.impressions) || 0,
-            clicks: Number(row.metrics?.clicks) || 0,
-            cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
-            conversions: Number(row.metrics?.conversions) || 0,
-            conversionValue: Number(row.metrics?.conversions_value) || 0,
-            cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
-        }));
+            const validKeywords = keywords.map((row) => ({
+                id: row.ad_group_criterion?.criterion_id?.toString() || "",
+                adGroupId: row.ad_group?.id?.toString() || "",
+                text: row.ad_group_criterion?.keyword?.text || "",
+                matchType: String(row.ad_group_criterion?.keyword?.match_type) || "",
+                status: mapStatus(row.ad_group_criterion?.status),
+                qualityScore: row.ad_group_criterion?.quality_info?.quality_score ?? null,
+                expectedCtr: String(row.ad_group_criterion?.quality_info?.search_predicted_ctr) || "UNSPECIFIED",
+                landingPageExperience: String(row.ad_group_criterion?.quality_info?.post_click_quality_score) || "UNSPECIFIED",
+                adRelevance: String(row.ad_group_criterion?.quality_info?.creative_quality_score) || "UNSPECIFIED",
+                impressions: Number(row.metrics?.impressions) || 0,
+                clicks: Number(row.metrics?.clicks) || 0,
+                cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
+                conversions: Number(row.metrics?.conversions) || 0,
+                conversionValue: Number(row.metrics?.conversions_value) || 0,
+                cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+            }));
 
-        return validKeywords;
-    } catch (error: unknown) {
-        logApiError("API call", error);
-        throw error;
-    }
+            return validKeywords;
+        } catch (error: unknown) {
+            logApiError("API call", error);
+            throw error;
+        }
     });
 }
 
@@ -684,23 +684,23 @@ export async function getAdsWithStrength(
     onlyEnabled: boolean = false
 ): Promise<AdWithStrength[]> {
     return withCache('ads', [adGroupId, customerId, adGroupIds, dateRange, onlyEnabled], async () => {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
 
-    try {
-        let whereClause = `WHERE ad_group_ad.status != 'REMOVED'`;
+        try {
+            let whereClause = `WHERE ad_group_ad.status != 'REMOVED'`;
 
-        if (onlyEnabled) {
-            whereClause += ` AND ad_group_ad.status = 'ENABLED'`;
-        }
+            if (onlyEnabled) {
+                whereClause += ` AND ad_group_ad.status = 'ENABLED'`;
+            }
 
-        if (adGroupId) {
-            whereClause += ` AND ad_group.id = ${adGroupId} `;
-        } else if (adGroupIds && adGroupIds.length > 0) {
-            whereClause += ` AND ad_group.id IN(${adGroupIds.join(',')})`;
-        }
+            if (adGroupId) {
+                whereClause += ` AND ad_group.id = ${adGroupId} `;
+            } else if (adGroupIds && adGroupIds.length > 0) {
+                whereClause += ` AND ad_group.id IN(${adGroupIds.join(',')})`;
+            }
 
-        const ads = await customer.query(`
+            const ads = await customer.query(`
     SELECT
     ad_group_ad.ad.id,
         ad_group.id,
@@ -723,51 +723,51 @@ export async function getAdsWithStrength(
             LIMIT 10000
         `);
 
-        const AD_STRENGTH_MAP: Record<string, string> = {
-            '4': 'POOR',
-            '5': 'AVERAGE',
-            '6': 'GOOD',
-            '7': 'EXCELLENT',
-            'POOR': 'POOR',
-            'AVERAGE': 'AVERAGE',
-            'GOOD': 'GOOD',
-            'EXCELLENT': 'EXCELLENT'
-        };
-
-        return ads.map((row) => {
-            const rawStrength = String(row.ad_group_ad?.ad_strength);
-            const rsa = row.ad_group_ad?.ad?.responsive_search_ad;
-            const rda = row.ad_group_ad?.ad?.responsive_display_ad;
-            const headlines = rsa?.headlines || rda?.headlines || [];
-            const descriptions = rsa?.descriptions || rda?.descriptions || [];
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
-
-            return {
-                id: row.ad_group_ad?.ad?.id?.toString() || "",
-                adGroupId: row.ad_group?.id?.toString() || "",
-                type: String(row.ad_group_ad?.ad?.type) || "",
-                status: mapStatus(row.ad_group_ad?.status),
-                adStrength: AD_STRENGTH_MAP[rawStrength] || "UNSPECIFIED",
-                headlinesCount: headlines.length,
-                descriptionsCount: descriptions.length,
-                finalUrls: row.ad_group_ad?.ad?.final_urls || [],
-                headlines: headlines.map((h: any) => h.text || ""),
-                descriptions: descriptions.map((d: any) => d.text || ""),
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost,
-                conversions,
-                conversionValue,
-                ctr: Number(row.metrics?.ctr) || 0,
-                roas: cost > 0 ? conversionValue / cost : null,
+            const AD_STRENGTH_MAP: Record<string, string> = {
+                '4': 'POOR',
+                '5': 'AVERAGE',
+                '6': 'GOOD',
+                '7': 'EXCELLENT',
+                'POOR': 'POOR',
+                'AVERAGE': 'AVERAGE',
+                'GOOD': 'GOOD',
+                'EXCELLENT': 'EXCELLENT'
             };
-        });
-    } catch (error: unknown) {
-        logApiError("API call", error);
-        throw error;
-    }
+
+            return ads.map((row) => {
+                const rawStrength = String(row.ad_group_ad?.ad_strength);
+                const rsa = row.ad_group_ad?.ad?.responsive_search_ad;
+                const rda = row.ad_group_ad?.ad?.responsive_display_ad;
+                const headlines = rsa?.headlines || rda?.headlines || [];
+                const descriptions = rsa?.descriptions || rda?.descriptions || [];
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+
+                return {
+                    id: row.ad_group_ad?.ad?.id?.toString() || "",
+                    adGroupId: row.ad_group?.id?.toString() || "",
+                    type: String(row.ad_group_ad?.ad?.type) || "",
+                    status: mapStatus(row.ad_group_ad?.status),
+                    adStrength: AD_STRENGTH_MAP[rawStrength] || "UNSPECIFIED",
+                    headlinesCount: headlines.length,
+                    descriptionsCount: descriptions.length,
+                    finalUrls: row.ad_group_ad?.ad?.final_urls || [],
+                    headlines: headlines.map((h: any) => h.text || ""),
+                    descriptions: descriptions.map((d: any) => d.text || ""),
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    conversionValue,
+                    ctr: Number(row.metrics?.ctr) || 0,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                };
+            });
+        } catch (error: unknown) {
+            logApiError("API call", error);
+            throw error;
+        }
     });
 }
 
@@ -848,18 +848,17 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
 
 export async function getAssetGroupAssets(refreshToken: string, assetGroupId: string, customerId?: string): Promise<PMaxAsset[]> {
     return withCache('assets', ['assetGroup', assetGroupId, customerId], async () => {
-    console.log(`[getAssetGroupAssets] Fetching assets for group: ${assetGroupId}, Customer: ${customerId} `);
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        console.log(`[getAssetGroupAssets] Fetching assets for group: ${assetGroupId}, Customer: ${customerId} `);
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
 
-    try {
-        // Query asset_group_asset to get the assets linked to this group
-        // performance_label is available on asset_group_asset
-        const result = await customer.query(`
+        try {
+            // Query asset_group_asset to get the assets linked to this group
+            // performance_label is available on asset_group_asset
+            const result = await customer.query(`
     SELECT
     asset_group_asset.asset_group,
         asset_group_asset.asset,
         asset_group_asset.field_type,
-        asset_group_asset.performance_label,
         asset_group_asset.status,
         asset.id,
         asset.name,
@@ -871,34 +870,34 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
             LIMIT 500
         `);
 
-        return result.map((row) => {
-            const asset = row.asset;
-            const link = row.asset_group_asset;
+            return result.map((row) => {
+                const asset = row.asset;
+                const link = row.asset_group_asset;
 
-            return {
-                id: asset?.id?.toString() || "",
-                assetGroupId: assetGroupId,
-                type: String(asset?.type) || "UNKNOWN",
-                fieldType: String(link?.field_type) || "UNKNOWN",
-                text: asset?.text_asset?.text || asset?.name || "",
-                name: asset?.name || "",
-                status: mapStatus(link?.status),
-                performanceLabel: mapPerformanceLabel((link as any)?.performance_label),
-            };
-        });
-    } catch (error: unknown) {
-        logApiError("getAssetGroupAssets", error);
-        throw error;
-    }
+                return {
+                    id: asset?.id?.toString() || "",
+                    assetGroupId: assetGroupId,
+                    type: String(asset?.type) || "UNKNOWN",
+                    fieldType: String(link?.field_type) || "UNKNOWN",
+                    text: asset?.text_asset?.text || asset?.name || "",
+                    name: asset?.name || "",
+                    status: mapStatus(link?.status),
+                    performanceLabel: "UNKNOWN", // Field not available in this API version
+                };
+            });
+        } catch (error: unknown) {
+            logApiError("getAssetGroupAssets", error);
+            throw error;
+        }
     });
 }
 export async function getCustomerAssets(refreshToken: string, customerId?: string, dateRange?: DateRange): Promise<AccountAsset[]> {
     return withCache('assets', ['customer', customerId, dateRange], async () => {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
 
-    try {
-        const result = await customer.query(`
+        try {
+            const result = await customer.query(`
     SELECT
     customer_asset.asset,
         customer_asset.field_type,
@@ -918,31 +917,31 @@ export async function getCustomerAssets(refreshToken: string, customerId?: strin
             LIMIT 500
         `);
 
-        return result.map((row) => {
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
+            return result.map((row) => {
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
 
-            return {
-                id: row.asset?.id?.toString() || "",
-                name: row.asset?.name || "",
-                type: String(row.asset?.type) || "UNKNOWN",
-                fieldType: String(row.customer_asset?.field_type) || "UNKNOWN",
-                status: mapStatus(row.customer_asset?.status),
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost,
-                conversions,
-                conversionValue,
-                ctr: Number(row.metrics?.ctr) || 0,
-                cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
-                performanceLabel: String((row.customer_asset as any)?.performance_label || ""),
-            };
-        });
-    } catch (error: unknown) {
-        logApiError("getCustomerAssets", error);
-        throw error;
-    }
+                return {
+                    id: row.asset?.id?.toString() || "",
+                    name: row.asset?.name || "",
+                    type: String(row.asset?.type) || "UNKNOWN",
+                    fieldType: String(row.customer_asset?.field_type) || "UNKNOWN",
+                    status: mapStatus(row.customer_asset?.status),
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    conversionValue,
+                    ctr: Number(row.metrics?.ctr) || 0,
+                    cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+                    performanceLabel: String((row.customer_asset as any)?.performance_label || ""),
+                };
+            });
+        } catch (error: unknown) {
+            logApiError("getCustomerAssets", error);
+            throw error;
+        }
     });
 }
 
@@ -2163,19 +2162,19 @@ export async function getSearchTerms(
     dateRange?: DateRange
 ): Promise<any[]> {
     return withCache('search', [customerId, dateRange], async () => {
-    try {
-        console.log(`\n========== 🔍 SEARCH TERMS START ==========`);
-        console.log(`Customer: ${customerId}`);
-        console.log(`Date Range:`, dateRange);
+        try {
+            console.log(`\n========== 🔍 SEARCH TERMS START ==========`);
+            console.log(`Customer: ${customerId}`);
+            console.log(`Date Range:`, dateRange);
 
-        const customer = getGoogleAdsCustomer(refreshToken, customerId);
-        // Fix: getDateFilter returns " AND segments.date...", which is invalid as first WHERE condition
-        // We strip the leading " AND" to make it valid
-        const rawDateFilter = getDateFilter(dateRange);
-        const dateFilter = rawDateFilter.trim().replace(/^AND\s+/, '');
+            const customer = getGoogleAdsCustomer(refreshToken, customerId);
+            // Fix: getDateFilter returns " AND segments.date...", which is invalid as first WHERE condition
+            // We strip the leading " AND" to make it valid
+            const rawDateFilter = getDateFilter(dateRange);
+            const dateFilter = rawDateFilter.trim().replace(/^AND\s+/, '');
 
-        // Use fields known to work from the API route
-        const query = `
+            // Use fields known to work from the API route
+            const query = `
             SELECT 
                 search_term_view.search_term,
                 metrics.impressions,
@@ -2192,32 +2191,32 @@ export async function getSearchTerms(
             LIMIT 10000
         `;
 
-        const rows = await customer.query(query);
-        console.log(`✅ SUCCESS: Got ${rows.length} rows`);
-        console.log(`========== 🔍 SEARCH TERMS END ==========\n`);
+            const rows = await customer.query(query);
+            console.log(`✅ SUCCESS: Got ${rows.length} rows`);
+            console.log(`========== 🔍 SEARCH TERMS END ==========\n`);
 
-        return rows.map((row: any) => {
-            const impressions = Number(row.metrics?.impressions) || 0;
-            const clicks = Number(row.metrics?.clicks) || 0;
-            const cost = Number(row.metrics?.cost_micros) / 1000000 || 0;
+            return rows.map((row: any) => {
+                const impressions = Number(row.metrics?.impressions) || 0;
+                const clicks = Number(row.metrics?.clicks) || 0;
+                const cost = Number(row.metrics?.cost_micros) / 1000000 || 0;
 
-            return {
-                term: row.search_term_view?.search_term,
-                status: 'UNKNOWN', // Removed from query
-                impressions,
-                clicks,
-                cost,
-                conversions: Number(row.metrics?.conversions) || 0,
-                conversionValue: Number(row.metrics?.conversions_value) || 0,
-                ctr: impressions > 0 ? clicks / impressions : 0,
-                averageCpc: clicks > 0 ? cost / clicks : 0
-            };
-        });
-    } catch (error) {
-        console.error(`\n❌ SEARCH TERMS FAILED:`, error);
-        console.log(`========== 🔍 SEARCH TERMS END ==========\n`);
-        logApiError("getSearchTerms", error);
-        return [];
-    }
+                return {
+                    term: row.search_term_view?.search_term,
+                    status: 'UNKNOWN', // Removed from query
+                    impressions,
+                    clicks,
+                    cost,
+                    conversions: Number(row.metrics?.conversions) || 0,
+                    conversionValue: Number(row.metrics?.conversions_value) || 0,
+                    ctr: impressions > 0 ? clicks / impressions : 0,
+                    averageCpc: clicks > 0 ? cost / clicks : 0
+                };
+            });
+        } catch (error) {
+            console.error(`\n❌ SEARCH TERMS FAILED:`, error);
+            console.log(`========== 🔍 SEARCH TERMS END ==========\n`);
+            logApiError("getSearchTerms", error);
+            return [];
+        }
     });
 }

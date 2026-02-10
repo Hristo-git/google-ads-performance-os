@@ -425,7 +425,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 window.history.replaceState(null, '', `/?customerId=${newId}`);
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status, selectedAccountId]);
 
     const displayAccountName = useMemo(() => {
@@ -531,6 +531,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     };
 
     const fetchAdGroupData = async () => {
+        if (campaigns.length === 0) return; // Wait for campaigns to load context
+
         setLoading(true); // Show loading for ad groups
         try {
             setLoadingMessage("Fetching details...");
@@ -544,8 +546,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             if (agData.adGroups) setAdGroups(agData.adGroups);
 
             // Fetch PMax assets if applicable
-            if (navigation.level === 'campaign' && navigation.campaignId) {
-                const campaign = campaigns.find(c => c.id === navigation.campaignId);
+            if (navigation.campaignId) {
+                const campaign = campaigns.find(c => String(c.id) === String(navigation.campaignId));
                 const isPMax = campaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
                     campaign?.name?.toLowerCase().includes('pmax');
 
@@ -575,14 +577,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         if (session && (navigation.level === 'campaign' || navigation.level === 'adgroup') && navigation.campaignId) {
             fetchAdGroupData();
         }
-    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
+    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
 
 
     useEffect(() => {
         if (session && navigation.level === 'adgroup' && navigation.adGroupId) {
             fetchAdGroupDetails(navigation.adGroupId);
         }
-    }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
+    }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
 
     const fetchAssetGroups = async (campaignId: string) => {
         try {
@@ -604,6 +606,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     };
 
     const fetchAdGroupDetails = async (adGroupId: string) => {
+        if (campaigns.length === 0) return; // Wait for campaigns to load context
+
         try {
             // Check if this is a PMax campaign (using asset groups)
             const currentCampaign = campaigns.find(c => String(c.id) === String(navigation.campaignId));
@@ -1755,9 +1759,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <td className="px-4 py-3 text-center">
                                                                         {(asset.performanceLabel === 'LOW' || asset.performanceLabel === 'PENDING' || asset.performanceLabel === 'LEARNING') ? (
                                                                             <Tooltip text={getPMaxPerfTip(asset.performanceLabel)}>
-                                                                                <span className={`px-2 py-1 rounded text-xs font-bold border-b border-dashed ${
-                                                                                    asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400 border-red-400/40' : 'bg-slate-600/50 text-slate-400 border-slate-400/40'
-                                                                                }`}>
+                                                                                <span className={`px-2 py-1 rounded text-xs font-bold border-b border-dashed ${asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400 border-red-400/40' : 'bg-slate-600/50 text-slate-400 border-slate-400/40'
+                                                                                    }`}>
                                                                                     {PERFORMANCE_LABEL_LABELS[asset.performanceLabel] || asset.performanceLabel}
                                                                                 </span>
                                                                             </Tooltip>
