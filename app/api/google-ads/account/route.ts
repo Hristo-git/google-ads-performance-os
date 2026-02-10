@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { getAccountInfo } from "@/lib/google-ads";
+import { getAccountInfo, extractApiErrorInfo } from "@/lib/google-ads";
 
 // Mock account data for demonstration
 const mockAccount = {
@@ -56,10 +56,13 @@ export async function GET(request: Request) {
             return NextResponse.json({ account });
         } catch (apiError: any) {
             console.error("Google Ads API error fetching account:", apiError);
+            const errorInfo = extractApiErrorInfo(apiError);
             return NextResponse.json({
-                error: "Failed to fetch account from Google Ads",
-                details: apiError?.message || String(apiError)
-            }, { status: 500 });
+                error: errorInfo.isQuotaError ? "QUOTA_EXCEEDED" : "Failed to fetch account from Google Ads",
+                details: errorInfo.message,
+                isQuotaError: errorInfo.isQuotaError,
+                retryAfterSeconds: errorInfo.retryAfterSeconds,
+            }, { status: errorInfo.isQuotaError ? 429 : 500 });
         }
     } catch (error) {
         console.error("Error fetching account info:", error);

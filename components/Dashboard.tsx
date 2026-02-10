@@ -230,20 +230,34 @@ const ASSET_FIELD_TYPE_LABELS: Record<string, string> = {
     'SQUARE_MARKETING_IMAGE': 'Square Image',
     'PORTRAIT_MARKETING_IMAGE': 'Portrait Image',
     'LANDSCAPE_LOGO': 'Landscape Logo',
-    // numeric fallbacks just in case
+    // numeric fallbacks (AssetFieldType enum values)
     '2': 'Headline',
     '3': 'Description',
+    '4': 'Mandatory Ad Text',
     '5': 'Marketing Image',
+    '6': 'Media Bundle',
+    '7': 'Video',
+    '8': 'Book on Google',
+    '9': 'Lead Form',
+    '10': 'Promotion',
+    '11': 'Callout',
     '12': 'Structured Snippet',
     '13': 'Sitelink',
+    '14': 'Mobile App',
+    '15': 'Hotel Callout',
+    '16': 'Call',
+    '17': 'Price',
+    '18': 'Long Headline',
     '19': 'Business Name',
     '20': 'Square Image',
     '21': 'Portrait Image',
     '22': 'Logo',
     '23': 'Landscape Logo',
     '24': 'Video',
-    '25': 'Long Headline',
-    '26': 'Call to Action'
+    '25': 'Call to Action',
+    '26': 'Ad Image',
+    '27': 'Business Logo',
+    '28': 'Hotel Property'
 };
 
 const PERFORMANCE_LABEL_LABELS: Record<string, string> = {
@@ -252,8 +266,15 @@ const PERFORMANCE_LABEL_LABELS: Record<string, string> = {
     'LOW': 'Low',
     'GOOD': 'Good',
     'BEST': 'Best',
+    'UNSPECIFIED': 'Pending',
     'UNKNOWN': 'Unknown',
-    'undefined': 'Pending'
+    'undefined': 'Pending',
+    // numeric fallbacks (AssetPerformanceLabel enum values)
+    '2': 'Pending',
+    '3': 'Learning',
+    '4': 'Low',
+    '5': 'Good',
+    '6': 'Best',
 };
 
 // Helper to calculate strategic breakdown
@@ -453,8 +474,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             const accData = await accRes.json();
             const camData = await camRes.json();
 
-            if (accData.error) throw new Error(`Account Error: ${accData.error}`);
-            if (camData.error) throw new Error(`Campaigns Error: ${camData.error}`);
+            // Check for quota errors first
+            const quotaResponse = [accData, camData].find(d => d.isQuotaError);
+            if (quotaResponse) {
+                const retrySeconds = quotaResponse.retryAfterSeconds;
+                const hours = retrySeconds ? Math.ceil(retrySeconds / 3600) : null;
+                throw new Error(`QUOTA_EXCEEDED:${hours || ''}`);
+            }
+            if (accData.error) throw new Error(`Account Error: ${accData.error}${accData.details ? ' — ' + accData.details : ''}`);
+            if (camData.error) throw new Error(`Campaigns Error: ${camData.error}${camData.details ? ' — ' + camData.details : ''}`);
 
             if (accData.account) setAccount(accData.account);
             if (camData.campaigns) {
@@ -542,17 +570,17 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     }, [session, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
 
     useEffect(() => {
-        if (session) {
+        if (session && (navigation.level === 'campaign' || navigation.level === 'adgroup') && navigation.campaignId) {
             fetchAdGroupData();
         }
-    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns]);
+    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
 
 
     useEffect(() => {
         if (session && navigation.level === 'adgroup' && navigation.adGroupId) {
             fetchAdGroupDetails(navigation.adGroupId);
         }
-    }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns]);
+    }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
 
     const fetchAssetGroups = async (campaignId: string) => {
         try {
@@ -1186,7 +1214,31 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 />
 
                 {/* Error Alert */}
-                {error && (
+                {error && error.startsWith('QUOTA_EXCEEDED:') && (
+                    <div className="mx-6 mt-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between group animate-in slide-in-from-top-2 duration-300">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-amber-400">API Rate Limit Exceeded</p>
+                                <p className="text-xs text-amber-400/70 mt-0.5">
+                                    Google Ads API daily quota exhausted (Explorer Access).
+                                    {error.split(':')[1] ? ` Retry in ~${error.split(':')[1]}h.` : ''}
+                                    {' '}Consider applying for Standard Access.
+                                </p>
+                            </div>
+                        </div>
+                        <button onClick={() => setError(null)} className="p-2 hover:bg-amber-500/20 rounded-lg transition-colors">
+                            <svg className="w-4 h-4 text-amber-400/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                )}
+                {error && !error.startsWith('QUOTA_EXCEEDED:') && (
                     <div className="mx-6 mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between group animate-in slide-in-from-top-2 duration-300">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
@@ -1203,10 +1255,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 </p>
                             </div>
                         </div>
-                        <button
-                            onClick={() => setError(null)}
-                            className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-                        >
+                        <button onClick={() => setError(null)} className="p-2 hover:bg-red-500/20 rounded-lg transition-colors">
                             <svg className="w-4 h-4 text-red-400/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>

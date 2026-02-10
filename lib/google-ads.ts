@@ -3,6 +3,43 @@ import { PMaxAsset, AccountAsset } from "@/types/google-ads";
 
 let client: GoogleAdsApi | null = null;
 
+// ── In-memory API cache ──────────────────────────────────────────────
+interface CacheEntry { data: unknown; expiresAt: number; }
+const apiCache = new Map<string, CacheEntry>();
+
+const CACHE_TTL = {
+    account:  30 * 60 * 1000,  // 30 min - account info rarely changes
+    campaigns: 5 * 60 * 1000,  // 5 min
+    adGroups:  5 * 60 * 1000,
+    assets:    5 * 60 * 1000,
+    keywords:  5 * 60 * 1000,
+    ads:       5 * 60 * 1000,
+    device:    5 * 60 * 1000,
+    search:    5 * 60 * 1000,
+    default:   5 * 60 * 1000,
+};
+
+async function withCache<T>(category: keyof typeof CACHE_TTL, keyParts: unknown[], fn: () => Promise<T>): Promise<T> {
+    const key = `${category}:${JSON.stringify(keyParts)}`;
+    const cached = apiCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+        console.log(`[Cache HIT] ${category} (${Math.round((cached.expiresAt - Date.now()) / 1000)}s left)`);
+        return cached.data as T;
+    }
+    const result = await fn();
+    apiCache.set(key, { data: result, expiresAt: Date.now() + (CACHE_TTL[category] || CACHE_TTL.default) });
+    console.log(`[Cache SET] ${category}`);
+    // Cleanup expired entries periodically
+    if (apiCache.size > 100) {
+        const now = Date.now();
+        for (const [k, v] of apiCache) {
+            if (v.expiresAt < now) apiCache.delete(k);
+        }
+    }
+    return result;
+}
+// ─────────────────────────────────────────────────────────────────────
+
 function getClient() {
     if (!client) {
         console.log("Initializing Google Ads client with:", {
@@ -170,12 +207,36 @@ export interface AssetGroupPerformance {
     cpa: number | null;
 }
 
+export function extractApiErrorInfo(error: unknown): { message: string; isQuotaError: boolean; retryAfterSeconds?: number } {
+    const anyError = error as any;
+    const errors = anyError?.errors;
+    if (Array.isArray(errors)) {
+        for (const e of errors) {
+            if (e?.error_code?.quota_error) {
+                const retryMatch = e.message?.match(/Retry in (\d+) seconds/);
+                const retrySeconds = retryMatch ? parseInt(retryMatch[1]) : undefined;
+                return {
+                    message: e.message || 'Quota exceeded',
+                    isQuotaError: true,
+                    retryAfterSeconds: retrySeconds,
+                };
+            }
+            if (e?.message) {
+                return { message: e.message, isQuotaError: false };
+            }
+        }
+    }
+    if (error instanceof Error && error.message) {
+        return { message: error.message, isQuotaError: false };
+    }
+    return { message: String(error), isQuotaError: false };
+}
+
 function logApiError(context: string, error: unknown) {
     console.error(`\n=== Google Ads API Error (${context}) ===`);
     if (error instanceof Error) {
         console.error("Message:", error.message);
         console.error("Stack:", error.stack);
-        // Check for Google Ads specific error properties
         const anyError = error as any;
         if (anyError.errors) {
             console.error("API Errors:", JSON.stringify(anyError.errors, null, 2));
@@ -192,6 +253,27 @@ function logApiError(context: string, error: unknown) {
     console.error("=== End Error ===\n");
 }
 
+const PERFORMANCE_LABEL_MAP: Record<number, string> = {
+    0: 'UNSPECIFIED',
+    1: 'UNKNOWN',
+    2: 'PENDING',
+    3: 'LEARNING',
+    4: 'LOW',
+    5: 'GOOD',
+    6: 'BEST',
+};
+
+function mapPerformanceLabel(label: any): string {
+    if (typeof label === 'string') {
+        // Already a string enum name like "BEST", "GOOD", etc.
+        return label === 'UNSPECIFIED' ? 'PENDING' : label;
+    }
+    if (typeof label === 'number') {
+        return PERFORMANCE_LABEL_MAP[label] || 'UNKNOWN';
+    }
+    return 'UNKNOWN';
+}
+
 function mapStatus(status: any): string {
     if (status === 2 || status === '2' || status === 'ENABLED') return 'ENABLED';
     if (status === 3 || status === '3' || status === 'PAUSED') return 'PAUSED';
@@ -200,48 +282,36 @@ function mapStatus(status: any): string {
 }
 
 export async function getCampaigns(refreshToken: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false): Promise<CampaignPerformance[]> {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
+    return withCache('campaigns', [customerId, dateRange, onlyEnabled], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
 
-    // Status filter
-    const statusFilter = onlyEnabled
-        ? `AND campaign.status = 'ENABLED'`
-        : `AND campaign.status != 'REMOVED'`;
+        const statusFilter = onlyEnabled
+            ? `AND campaign.status = 'ENABLED'`
+            : `AND campaign.status != 'REMOVED'`;
 
-    try {
-        const result = await customer.query(`
-            SELECT
-                campaign.id,
-                campaign.name,
-                campaign.status,
-                metrics.impressions,
-                metrics.clicks,
-                metrics.cost_micros,
-                metrics.conversions,
-                metrics.ctr,
-                metrics.average_cpc,
-                metrics.conversions_value,
-                metrics.search_impression_share,
-                metrics.search_top_impression_share,
-                metrics.search_rank_lost_impression_share,
-                metrics.search_budget_lost_impression_share,
-                metrics.search_absolute_top_impression_share,
-                campaign.bidding_strategy_type,
-                campaign.advertising_channel_type,
-                campaign.target_roas.target_roas,
-                campaign.target_cpa.target_cpa_micros,
-                campaign.campaign_budget,
-                campaign_budget.amount_micros,
-                campaign_budget.delivery_method,
-                campaign_budget.status,
-                campaign.optimization_score
-            FROM campaign
-            WHERE campaign.status != 'REMOVED' ${statusFilter} ${dateFilter}
-            ORDER BY metrics.impressions DESC
-            LIMIT 1000
-        `);
+        try {
+            const result = await customer.query(`
+                SELECT
+                    campaign.id, campaign.name, campaign.status,
+                    metrics.impressions, metrics.clicks, metrics.cost_micros,
+                    metrics.conversions, metrics.ctr, metrics.average_cpc,
+                    metrics.conversions_value,
+                    metrics.search_impression_share, metrics.search_top_impression_share,
+                    metrics.search_rank_lost_impression_share, metrics.search_budget_lost_impression_share,
+                    metrics.search_absolute_top_impression_share,
+                    campaign.bidding_strategy_type, campaign.advertising_channel_type,
+                    campaign.target_roas.target_roas, campaign.target_cpa.target_cpa_micros,
+                    campaign.campaign_budget, campaign_budget.amount_micros,
+                    campaign_budget.delivery_method, campaign_budget.status,
+                    campaign.optimization_score
+                FROM campaign
+                WHERE campaign.status != 'REMOVED' ${statusFilter} ${dateFilter}
+                ORDER BY metrics.impressions DESC
+                LIMIT 1000
+            `);
 
-        return result.map((row) => {
+            return result.map((row) => {
             const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
             const conversions = Number(row.metrics?.conversions) || 0;
             const conversionValue = Number(row.metrics?.conversions_value) || 0;
@@ -277,10 +347,11 @@ export async function getCampaigns(refreshToken: string, customerId?: string, da
                 searchAbsTopIS: row.metrics?.search_absolute_top_impression_share ?? null,
             };
         });
-    } catch (error: unknown) {
-        logApiError("getCampaigns", error);
-        throw error;
-    }
+        } catch (error: unknown) {
+            logApiError("getCampaigns", error);
+            throw error;
+        }
+    });
 }
 
 // List all accessible customer accounts under the MCC
@@ -311,36 +382,31 @@ export async function getAccessibleCustomers(refreshToken: string): Promise<{ id
 }
 
 export async function getAccountInfo(refreshToken: string, customerId?: string) {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-
-    try {
-        const result = await customer.query(`
-    SELECT
-    customer.id,
-        customer.descriptive_name,
-        customer.currency_code,
-        customer.time_zone
-            FROM customer
-            LIMIT 1
-        `);
-
-        if (result.length > 0) {
-            return {
-                id: result[0].customer?.id?.toString(),
-                name: result[0].customer?.descriptive_name,
-                currency: result[0].customer?.currency_code,
-                timezone: result[0].customer?.time_zone,
-            };
+    return withCache('account', [customerId], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        try {
+            const result = await customer.query(`
+                SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.time_zone
+                FROM customer LIMIT 1
+            `);
+            if (result.length > 0) {
+                return {
+                    id: result[0].customer?.id?.toString(),
+                    name: result[0].customer?.descriptive_name,
+                    currency: result[0].customer?.currency_code,
+                    timezone: result[0].customer?.time_zone,
+                };
+            }
+            return null;
+        } catch (error: unknown) {
+            logApiError("getAccountInfo", error);
+            throw error;
         }
-
-        return null;
-    } catch (error: unknown) {
-        logApiError("getAccountInfo", error);
-        throw error;
-    }
+    });
 }
 
 export async function getAdGroups(refreshToken: string, campaignId?: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false): Promise<AdGroupPerformance[]> {
+    return withCache('adGroups', [campaignId, customerId, dateRange, onlyEnabled], async () => {
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
     const dateFilter = getDateFilter(dateRange);
 
@@ -477,6 +543,7 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
         logApiError("API call", error);
         throw error;
     }
+    });
 }
 
 export async function getNegativeKeywords(refreshToken: string, adGroupId?: string, customerId?: string): Promise<NegativeKeyword[]> {
@@ -532,6 +599,7 @@ export async function getKeywordsWithQS(
     maxQualityScore?: number,
     onlyEnabled: boolean = false
 ): Promise<KeywordWithQS[]> {
+    return withCache('keywords', [adGroupId, customerId, dateRange, adGroupIds, onlyEnabled], async () => {
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
     const dateFilter = getDateFilter(dateRange);
 
@@ -603,6 +671,7 @@ export async function getKeywordsWithQS(
         logApiError("API call", error);
         throw error;
     }
+    });
 }
 
 export async function getAdsWithStrength(
@@ -614,6 +683,7 @@ export async function getAdsWithStrength(
     dateRange?: DateRange,
     onlyEnabled: boolean = false
 ): Promise<AdWithStrength[]> {
+    return withCache('ads', [adGroupId, customerId, adGroupIds, dateRange, onlyEnabled], async () => {
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
     const dateFilter = getDateFilter(dateRange);
 
@@ -698,6 +768,7 @@ export async function getAdsWithStrength(
         logApiError("API call", error);
         throw error;
     }
+    });
 }
 
 export async function getAssetGroups(refreshToken: string, campaignId?: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false): Promise<any[]> {
@@ -776,6 +847,7 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
 }
 
 export async function getAssetGroupAssets(refreshToken: string, assetGroupId: string, customerId?: string): Promise<PMaxAsset[]> {
+    return withCache('assets', ['assetGroup', assetGroupId, customerId], async () => {
     console.log(`[getAssetGroupAssets] Fetching assets for group: ${assetGroupId}, Customer: ${customerId} `);
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
 
@@ -787,6 +859,7 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
     asset_group_asset.asset_group,
         asset_group_asset.asset,
         asset_group_asset.field_type,
+        asset_group_asset.performance_label,
         asset_group_asset.status,
         asset.id,
         asset.name,
@@ -810,15 +883,17 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
                 text: asset?.text_asset?.text || asset?.name || "",
                 name: asset?.name || "",
                 status: mapStatus(link?.status),
-                performanceLabel: "UNKNOWN", // Field not available in this API version
+                performanceLabel: mapPerformanceLabel((link as any)?.performance_label),
             };
         });
     } catch (error: unknown) {
         logApiError("getAssetGroupAssets", error);
         throw error;
     }
+    });
 }
 export async function getCustomerAssets(refreshToken: string, customerId?: string, dateRange?: DateRange): Promise<AccountAsset[]> {
+    return withCache('assets', ['customer', customerId, dateRange], async () => {
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
     const dateFilter = getDateFilter(dateRange);
 
@@ -868,6 +943,7 @@ export async function getCustomerAssets(refreshToken: string, customerId?: strin
         logApiError("getCustomerAssets", error);
         throw error;
     }
+    });
 }
 
 export interface DailyMetric {
@@ -2086,6 +2162,7 @@ export async function getSearchTerms(
     customerId?: string,
     dateRange?: DateRange
 ): Promise<any[]> {
+    return withCache('search', [customerId, dateRange], async () => {
     try {
         console.log(`\n========== 🔍 SEARCH TERMS START ==========`);
         console.log(`Customer: ${customerId}`);
@@ -2142,4 +2219,5 @@ export async function getSearchTerms(
         logApiError("getSearchTerms", error);
         return [];
     }
+    });
 }

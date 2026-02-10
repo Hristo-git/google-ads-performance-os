@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { getCampaigns, getCampaignTrends } from "@/lib/google-ads";
+import { getCampaigns, getCampaignTrends, extractApiErrorInfo } from "@/lib/google-ads";
 
 
 // Mock data for demonstration when API is not available
@@ -194,10 +194,13 @@ export async function GET(request: Request) {
 
         } catch (apiError: any) {
             console.error("Google Ads API error fetching campaigns:", apiError);
+            const errorInfo = extractApiErrorInfo(apiError);
             return NextResponse.json({
-                error: "Failed to fetch campaigns from Google Ads",
-                details: apiError?.message || String(apiError)
-            }, { status: 500 });
+                error: errorInfo.isQuotaError ? "QUOTA_EXCEEDED" : "Failed to fetch campaigns from Google Ads",
+                details: errorInfo.message,
+                isQuotaError: errorInfo.isQuotaError,
+                retryAfterSeconds: errorInfo.retryAfterSeconds,
+            }, { status: errorInfo.isQuotaError ? 429 : 500 });
         }
     } catch (error) {
         console.error("Error fetching campaigns:", error);
