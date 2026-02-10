@@ -421,10 +421,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 console.warn(`[Dashboard] Selected account ${selectedAccountId} is not allowed. Switching to ${filteredAccounts[0].id}`);
                 const newId = filteredAccounts[0].id;
                 setSelectedAccountId(newId);
-                router.replace(`/?customerId=${newId}`);
+                // Update URL without causing a full page re-render
+                window.history.replaceState(null, '', `/?customerId=${newId}`);
             }
         }
-    }, [session, status, filteredAccounts, selectedAccountId, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status, selectedAccountId]);
 
     const displayAccountName = useMemo(() => {
         const mappedAccount = ACCOUNTS.find(acc => acc.id === selectedAccountId);
