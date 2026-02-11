@@ -1447,7 +1447,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     )}
                                                                 </button>
                                                             </th>
-                                                            <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
+                                                            <th className="px-4 py-3 text-right font-medium">
+                                                                <button onClick={() => handleSort('searchLostISRank')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                    Lost (Rank)
+                                                                    {sortBy === 'searchLostISRank' && (
+                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                    )}
+                                                                </button>
+                                                            </th>
                                                             <th className="px-4 py-3 text-center font-medium">Type</th>
                                                             <th className="px-4 py-3 text-center font-medium">Bidding</th>
                                                         </>
@@ -1749,11 +1756,29 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             {ASSET_FIELD_TYPE_LABELS[asset.fieldType] || asset.fieldType}
                                                                         </span>
                                                                     </td>
-                                                                    <td className="px-4 py-3 text-white max-w-md truncate" title={asset.text}>
-                                                                        {asset.type === 'IMAGE' || asset.type === 'MARKETING_IMAGE' || asset.fieldType === 'MARKETING_IMAGE' || asset.fieldType === '5' ? (
-                                                                            <span className="text-blue-400">Marketing Image</span>
+                                                                    <td className="px-4 py-3 text-white max-w-md">
+                                                                        {asset.imageUrl ? (
+                                                                            <div className="flex items-center gap-3">
+                                                                                <img
+                                                                                    src={asset.imageUrl}
+                                                                                    alt={asset.name || 'Asset preview'}
+                                                                                    className="w-12 h-12 object-cover rounded border border-slate-600 flex-shrink-0"
+                                                                                    loading="lazy"
+                                                                                />
+                                                                                <span className="text-slate-300 text-xs truncate">{asset.name || ASSET_FIELD_TYPE_LABELS[asset.fieldType] || 'Image'}</span>
+                                                                            </div>
+                                                                        ) : asset.youtubeVideoId ? (
+                                                                            <div className="flex items-center gap-3">
+                                                                                <img
+                                                                                    src={`https://img.youtube.com/vi/${asset.youtubeVideoId}/default.jpg`}
+                                                                                    alt={asset.name || 'Video preview'}
+                                                                                    className="w-16 h-12 object-cover rounded border border-slate-600 flex-shrink-0"
+                                                                                    loading="lazy"
+                                                                                />
+                                                                                <span className="text-slate-300 text-xs truncate">{asset.name || asset.youtubeVideoId}</span>
+                                                                            </div>
                                                                         ) : (
-                                                                            asset.text || asset.name || "—"
+                                                                            <span className="truncate block" title={asset.text}>{asset.text || asset.name || "—"}</span>
                                                                         )}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-center">

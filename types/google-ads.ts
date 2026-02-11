@@ -162,6 +162,8 @@ export interface PMaxAsset {
     name?: string;
     status: string;
     performanceLabel?: string; // PENDING, LEARNING, LOW, GOOD, BEST
+    imageUrl?: string;
+    youtubeVideoId?: string;
 }
 
 export interface SearchTerm {

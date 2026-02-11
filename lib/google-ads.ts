@@ -864,7 +864,8 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
         asset.name,
         asset.type,
         asset.text_asset.text,
-        asset.image_asset.full_size.url
+        asset.image_asset.full_size.url,
+        asset.youtube_video_asset.youtube_video_id
             FROM asset_group_asset
             WHERE asset_group.id = ${assetGroupId} AND asset_group_asset.status != 'REMOVED'
             LIMIT 500
@@ -883,6 +884,8 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
                     name: asset?.name || "",
                     status: mapStatus(link?.status),
                     performanceLabel: "UNKNOWN", // Field not available in this API version
+                    imageUrl: asset?.image_asset?.full_size?.url || undefined,
+                    youtubeVideoId: asset?.youtube_video_asset?.youtube_video_id || undefined,
                 };
             });
         } catch (error: unknown) {
