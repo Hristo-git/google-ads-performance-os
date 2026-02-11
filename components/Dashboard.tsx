@@ -579,6 +579,23 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         }
     }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
 
+    // Fetch ALL ad groups when entering Strategic Insights (for Quality Audit)
+    useEffect(() => {
+        if (session && navigation.view === 'insights' && campaigns.length > 0) {
+            const fetchAllAdGroupsForAudit = async () => {
+                try {
+                    const statusParam = hideStopped ? '&status=ENABLED' : '';
+                    const params = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
+                    const res = await fetch(`/api/google-ads/ad-groups?${params}`);
+                    const data = await res.json();
+                    if (data.adGroups) setAdGroups(data.adGroups);
+                } catch (err) {
+                    console.error("Failed to fetch ad groups for audit:", err);
+                }
+            };
+            fetchAllAdGroupsForAudit();
+        }
+    }, [session, navigation.view, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
 
     useEffect(() => {
         if (session && navigation.level === 'adgroup' && navigation.adGroupId) {
