@@ -3,8 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
 import { ANALYSIS_SYSTEM_PROMPT, getAdGroupAnalysisPrompt, REPORT_TEMPLATES } from "@/lib/prompts";
-import { upsertReport } from "@/lib/pinecone";
+import { upsertReport, querySimilarReports } from "@/lib/pinecone";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
+import { logActivity } from "@/lib/activity-logger";
 
 // ============================================
 // HELPER: Human-readable bidding strategy labels
@@ -402,9 +403,39 @@ export async function POST(request: Request) {
             );
         }
 
-        const prompt = buildPrompt(data);
+        const promptBuilder = buildPrompt(data);
         const { language = 'bg' } = data;
         const isEn = language === 'en';
+
+        // --- RAG: Retrieve past reports for context ---
+        let historyContext = "";
+        const currentCustomerId = data.customerId || undefined;
+        try {
+            // Construct a search query based on available data
+            let searchQuery = `${data.level} analysis`;
+            if (data.analysisType === 'category' && data.category) {
+                searchQuery += ` ${data.category}`;
+            } else if (data.level === 'campaign' && data.campaign?.name) {
+                searchQuery += ` ${data.campaign.name}`;
+            }
+
+            const matches = await querySimilarReports(searchQuery, currentCustomerId, 2);
+
+            if (matches && matches.length > 0) {
+                const pastAnalyses = (matches as any[]).map((m: any, i: number) =>
+                    `### PAST ANALYSIS ${i + 1} (${m.metadata?.timestamp || 'unknown date'})\n${m.metadata?.analysis_content || m.analysis_content || ''}`
+                ).join('\n\n');
+
+                historyContext = isEn
+                    ? `\n\n=== SEMANTIC MEMORY: PREVIOUS ANALYSES ===\nBelow are relevant findings from previous reports. Use them to track progress, note if recommendations were followed, and ensure continuity.\n\n${pastAnalyses}`
+                    : `\n\n=== СЕМАНТИЧНА ПАМЕТ: ПРЕДИШНИ АНАЛИЗИ ===\nПо-долу са подходящи констатации от предишни отчети. Използвайте ги, за да проследите прогреса, да отбележите дали препоръките са били спазени и да осигурите приемственост.\n\n${pastAnalyses}`;
+            }
+        } catch (ragError) {
+            console.warn("RAG retrieval failed, proceeding without history:", ragError);
+        }
+
+        // Add history to prompt if available
+        const finalPrompt = historyContext ? `${promptBuilder}\n${historyContext}` : promptBuilder;
 
         // For adgroup level, the system prompt is already embedded in getAdGroupAnalysisPrompt
         // For other levels, we need to add it as the system message
@@ -417,7 +448,7 @@ ${isEn
                 : "Целият ти отговор ТРЯБВА да бъде на български език."
             }`;
 
-        console.log(`[AI Analysis] Level: ${data.level}, Prompt: ${prompt.length} chars, Language: ${language}`);
+        console.log(`[AI Analysis] Level: ${data.level}, Prompt: ${finalPrompt.length} chars, Language: ${language}`);
 
         const response = await anthropic.messages.create({
             model: "claude-opus-4-6",
@@ -426,57 +457,128 @@ ${isEn
             messages: [
                 {
                     role: "user",
-                    content: prompt
+                    content: finalPrompt
                 }
             ],
         });
 
-        const analysis = response.content[0].type === 'text' ? response.content[0].text : 'No text output';
+        let analysis = response.content[0].type === 'text' ? response.content[0].text : 'No text output';
 
-        // Store in Pinecone with descriptive title
+        // --- EXPERT MODE (2-Pass Refinement) ---
+        // We default to Expert Mode for Strategic Insights as requested ("more advanced").
+        const useExpertMode = data.expertMode !== false; // Default to true unless explicitly disabled
+
+        if (useExpertMode) {
+            console.log('[AI Analysis] Expert Mode enabled: Running second pass for refinement');
+
+            const expertPrompt = isEn
+                ? `You are a senior performance marketing expert reviewing the following AI-generated analysis.
+
+${isEn ? "IMPORTANT: Your entire response MUST be in English." : "IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език."}
+
+=== ORIGINAL ANALYSIS ===
+${analysis}
+
+=== YOUR TASK ===
+1. **Evaluate** the quality of this analysis:
+   - Are recommendations specific enough?
+   - Are there any missing insights?
+   - Is the prioritization logical?
+
+2. **Enhance** the analysis:
+   - Add depth where it's surface-level
+   - Provide more specific numbers/examples
+   - Sharpen recommendations
+
+3. **Rewrite** the final output as an improved version.
+
+Output the enhanced analysis in the same structure and format, but with deeper insights and more actionable recommendations.`
+                : `Ти си senior performance marketing експерт, преглеждащ следния AI-генериран анализ.
+
+${isEn ? "IMPORTANT: Your entire response MUST be in English." : "IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език."}
+
+=== ОРИГИНАЛЕН АНАЛИЗ ===
+${analysis}
+
+=== ТВОЯТА ЗАДАЧА ===
+1. **Оцени** качеството на този анализ:
+   - Достатъчно ли специфични са препоръките?
+   - Липсват ли важни прозрения?
+   - Логична ли е приоритизацията?
+
+2. **Подобри** анализа:
+   - Добави дълбочина там, където е повърхностен
+   - Предостави по-конкретни числа/примери
+   - Изостри препоръките
+
+3. **Препиши** финалния output като подобрена версия.
+
+Изведи подобрения анализ в същата структура и формат, но с по-дълбоки прозрения и по-action-able препоръки.`;
+
+            const secondPassResponse = await anthropic.messages.create({
+                model: "claude-opus-4-6",
+                max_tokens: 8192,
+                ...(systemPrompt ? { system: systemPrompt } : {}),
+                messages: [
+                    {
+                        role: "user",
+                        content: expertPrompt
+                    }
+                ],
+            });
+
+            analysis = secondPassResponse.content[0].type === 'text' ? secondPassResponse.content[0].text : analysis;
+        }
+
+        // Store in Pinecone and log activity
         try {
             // Build descriptive title
             let contextLabel = 'Акаунт';
             if (data.level === 'adgroup' && data.adGroup?.name) {
-                contextLabel = `Ad Group: ${data.adGroup.name}`;
-            } else if (data.level === 'campaign' && data.campaignName) {
-                contextLabel = `Кампания: ${data.campaignName}`;
-            } else if (data.analysisType === 'category' && data.category) {
-                const categoryLabels: Record<string, string> = {
-                    pmax_aon: 'PMax AON',
-                    pmax_sale: 'PMax Sale',
-                    search_nonbrand: 'Search Non-Brand',
-                    brand: 'Brand',
-                    search_dsa: 'DSA',
-                    shopping: 'Shopping',
-                    upper_funnel: 'Video/Display'
-                };
-                contextLabel = `Категория: ${categoryLabels[data.category] || data.category}`;
+                contextLabel = `AG: ${data.adGroup.name}`;
+            } else if (data.level === 'campaign' && data.campaign?.name) {
+                contextLabel = `Camp: ${data.campaign.name}`;
+            } else if (data.analysisType === 'category') {
+                contextLabel = `Cat: ${data.category || data.categoryKey}`;
             }
 
             // Format date range
             let periodLabel = '';
             if (data.dateRange) {
-                const startDate = data.dateRange.startDate || data.dateRange.from;
-                const endDate = data.dateRange.endDate || data.dateRange.to;
-                if (startDate && endDate) {
-                    periodLabel = ` (${startDate} — ${endDate})`;
+                const start = data.dateRange.startDate || data.dateRange.from;
+                const end = data.dateRange.endDate || data.dateRange.to;
+                if (start && end) {
+                    periodLabel = ` (${start} — ${end})`;
                 }
             }
 
-            const reportTitle = `${contextLabel}${periodLabel}`;
-            const reportId = `insight_${data.level}_${data.analysisType || 'gen'}_${Date.now()}`;
+            const reportTitle = `${contextLabel} Analysis${periodLabel} - ${new Date().toLocaleDateString('bg-BG')}`;
 
+            // Log activity
+            if (session?.user?.id) {
+                await logActivity(session.user.id, 'AI_ANALYSIS', {
+                    level: data.level,
+                    analysisType: data.analysisType,
+                    context: contextLabel,
+                    promptLength: promptBuilder?.length || 0,
+                    responseLength: analysis?.length || 0,
+                    expertMode: useExpertMode
+                });
+            }
+
+            // Upsert report
+            const reportId = `insight_${data.level}_${data.analysisType || 'gen'}_${Date.now()}`;
             await upsertReport(reportId, analysis, {
-                templateId: 'dashboard_insight',
-                level: data.level,
-                analysisType: data.analysisType,
-                category: data.category,
                 customerId: data.customerId || 'unknown',
-                reportTitle,
+                campaignId: data.campaignId || 'unknown',
+                timestamp: new Date().toISOString(),
+                type: 'ai_analysis',
+                title: reportTitle,
+                analysis_content: analysis
             });
+
         } catch (storeError) {
-            console.error("Failed to store insight in Pinecone:", storeError);
+            console.error("Failed to store/log insight:", storeError);
         }
 
         return NextResponse.json({ analysis });

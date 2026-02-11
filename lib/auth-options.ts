@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { getUserByUsername, verifyPassword, getUserAllowedAccounts } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity-logger";
 
 // Check essential environment variables
 if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
@@ -108,6 +109,14 @@ export const authOptions: NextAuthOptions = {
                 session.accessToken = token.accessToken;
             }
             return session;
+        },
+    },
+    events: {
+        async signIn({ user }) {
+            console.log('[Auth] User signed in:', user.name);
+            if (user.id) {
+                await logActivity(user.id, 'LOGIN', { email: user.email, name: user.name });
+            }
         },
     },
 };
