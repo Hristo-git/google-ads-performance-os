@@ -732,10 +732,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         let dataToAnalyze: any = getAnalysisContext();
         if (!dataToAnalyze) return;
 
-        // Add language, analysis type, and customerId to analysis data
+        // Add language, analysis type, customerId, and dateRange to analysis data
         dataToAnalyze.language = language;
         dataToAnalyze.customerId = selectedAccountId;
         dataToAnalyze.analysisType = analysisType || (navigation.level === 'account' ? 'account-overview' : navigation.level);
+        dataToAnalyze.dateRange = dateRange;
 
         // If category-specific analysis, filter campaigns by category
         if (analysisType === 'category' && category) {
@@ -776,7 +777,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             }
             // ------------------------------------------------------------
 
-            const res = await fetch("/api/analyze", {
+            setLoadingMessage("Streaming AI analysis...");
+            const res = await fetch("/api/analyze/stream", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(dataToAnalyze)
@@ -794,11 +796,20 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 setAnalysis(`Error: ${errorMsg}`);
                 return;
             }
-            const data = await res.json();
-            if (data.error) {
-                setAnalysis(`Error: ${data.error}${data.details ? ` (${data.details})` : ''}`);
-            } else {
-                setAnalysis(data.analysis);
+
+            // Read stream incrementally and render as chunks arrive
+            const reader = res.body?.getReader();
+            if (!reader) {
+                setAnalysis("Error: No response stream available");
+                return;
+            }
+            const decoder = new TextDecoder();
+            let accumulated = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                accumulated += decoder.decode(value, { stream: true });
+                setAnalysis(accumulated);
             }
         } catch (error: any) {
             console.error("Analysis failed:", error);
