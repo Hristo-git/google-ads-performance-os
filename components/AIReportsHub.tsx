@@ -115,36 +115,51 @@ export default function AIReportsHub({
                 dataPayload.campaigns = campaigns.slice(0, settings.rowLimit);
                 dataPayload.strategicBreakdown = strategicBreakdown;
             }
+
+            // On-demand fetch for ad groups when empty (account-level reports view)
             if (selectedTemplate.requiredData.includes('adGroups')) {
-                dataPayload.adGroups = adGroups.slice(0, settings.rowLimit);
+                if (adGroups.length === 0 && customerId) {
+                    try {
+                        console.log("[AIReports] Fetching ad groups on demand...");
+                        const dateParams = dateRange ? `&startDate=${dateRange.start}&endDate=${dateRange.end}` : '';
+                        const res = await fetch(`/api/google-ads/ad-groups?customerId=${customerId}&status=ENABLED${dateParams}`);
+                        const agData = await res.json();
+                        if (agData.adGroups?.length > 0) {
+                            console.log(`[AIReports] Fetched ${agData.adGroups.length} ad groups on demand`);
+                            dataPayload.adGroups = agData.adGroups.slice(0, settings.rowLimit);
+                        } else {
+                            dataPayload.adGroups = [];
+                        }
+                    } catch (e) {
+                        console.warn("[AIReports] Failed to fetch ad groups on demand", e);
+                        dataPayload.adGroups = [];
+                    }
+                } else {
+                    dataPayload.adGroups = adGroups.slice(0, settings.rowLimit);
+                }
             }
+
             if (selectedTemplate.requiredData.includes('searchTerms')) {
                 dataPayload.searchTerms = searchTerms.slice(0, settings.rowLimit);
                 dataPayload.nGramAnalysis = nGramAnalysis;
             }
 
-            // Special handling for keywords:
-            // If we are at Account Level (keywords is empty) AND the template needs keywords (e.g. Quality Score Diagnostics),
-            // we must fetch Low QS keywords on demand to avoid "Structurally Empty Data" error.
+            // On-demand fetch for keywords when empty (account-level reports view)
             if (selectedTemplate.requiredData.includes('keywords')) {
-                if (keywords.length === 0 && selectedTemplate.id === 'quality_score_diagnostics') {
-                    // Fetch specific low quality keywords
+                if (keywords.length === 0 && customerId) {
                     try {
-                        const loadingMsg = language === 'en' ? 'Fetching granular keyword data...' : 'Извличане на детайлни данни за ключови думи...';
-                        // We can't easily change the button text here without state, but the UI shows a spinner
-                        console.log("Fetching Low QS Keywords on demand...");
-
-                        const res = await fetch(`/api/google-ads/keywords?customerId=${customerId}&maxQualityScore=5`);
-                        const qsData = await res.json();
-
-                        if (qsData.keywords && qsData.keywords.length > 0) {
-                            console.log(`Fetched ${qsData.keywords.length} low QS keywords for analysis`);
-                            dataPayload.keywords = qsData.keywords;
+                        console.log("[AIReports] Fetching keywords on demand...");
+                        const qsFilter = selectedTemplate.id === 'quality_score_diagnostics' ? '&maxQualityScore=5' : '';
+                        const res = await fetch(`/api/google-ads/keywords?customerId=${customerId}${qsFilter}`);
+                        const kwData = await res.json();
+                        if (kwData.keywords?.length > 0) {
+                            console.log(`[AIReports] Fetched ${kwData.keywords.length} keywords on demand`);
+                            dataPayload.keywords = kwData.keywords.slice(0, settings.rowLimit);
                         } else {
                             dataPayload.keywords = [];
                         }
                     } catch (e) {
-                        console.warn("Failed to fetch on-demand keywords", e);
+                        console.warn("[AIReports] Failed to fetch keywords on demand", e);
                         dataPayload.keywords = [];
                     }
                 } else {
@@ -152,8 +167,27 @@ export default function AIReportsHub({
                 }
             }
 
+            // On-demand fetch for ads when empty (account-level reports view)
             if (selectedTemplate.requiredData.includes('ads')) {
-                dataPayload.ads = ads.slice(0, settings.rowLimit);
+                if (ads.length === 0 && customerId) {
+                    try {
+                        console.log("[AIReports] Fetching ads on demand...");
+                        const dateParams = dateRange ? `&startDate=${dateRange.start}&endDate=${dateRange.end}` : '';
+                        const res = await fetch(`/api/google-ads/ads?customerId=${customerId}${dateParams}`);
+                        const adsData = await res.json();
+                        if (adsData.ads?.length > 0) {
+                            console.log(`[AIReports] Fetched ${adsData.ads.length} ads on demand`);
+                            dataPayload.ads = adsData.ads.slice(0, settings.rowLimit);
+                        } else {
+                            dataPayload.ads = [];
+                        }
+                    } catch (e) {
+                        console.warn("[AIReports] Failed to fetch ads on demand", e);
+                        dataPayload.ads = [];
+                    }
+                } else {
+                    dataPayload.ads = ads.slice(0, settings.rowLimit);
+                }
             }
 
             const response = await fetch('/api/reports/generate', {
