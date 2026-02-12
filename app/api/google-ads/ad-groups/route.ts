@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getAdGroups } from "@/lib/google-ads";
+import { getQSSnapshotsForDate, getAdStrengthSnapshotsForDate } from "@/lib/supabase";
 
 // Mock data for demonstration
 const mockAdGroups = [
@@ -253,9 +254,74 @@ export async function GET(request: Request) {
                     { status: 500 }
                 );
             }
-            const adGroups = await getAdGroups(refreshToken, campaignId || undefined, customerId, dateRange, onlyEnabled);
+            const adGroups = await getAdGroups(refreshToken, campaignId || undefined, customerId, dateRange, onlyEnabled, session.user.id);
             console.log(`Fetched ${adGroups.length} ad groups`);
-            return NextResponse.json({ adGroups });
+
+            // Enrich with snapshot data for historical periods (end date > 7 days ago)
+            let snapshotDate: string | null = null;
+            if (endDate && customerId) {
+                const endDateObj = new Date(endDate);
+                const today = new Date(); today.setHours(0, 0, 0, 0);
+                const diffDays = Math.floor((today.getTime() - endDateObj.getTime()) / (1000 * 60 * 60 * 24));
+
+                if (diffDays > 7) {
+                    try {
+                        const [qsSnapshots, adSnapshots] = await Promise.all([
+                            getQSSnapshotsForDate(customerId, endDate),
+                            getAdStrengthSnapshotsForDate(customerId, endDate)
+                        ]);
+
+                        if (qsSnapshots.length > 0 || adSnapshots.length > 0) {
+                            snapshotDate = qsSnapshots[0]?.snapshot_date || adSnapshots[0]?.snapshot_date || null;
+
+                            // Build lookup maps: ad_group_id → aggregated QS / ad strength
+                            const qsByAdGroup = new Map<string, { totalWeightedQS: number; totalCount: number; lowCount: number }>();
+                            for (const snap of qsSnapshots) {
+                                const existing = qsByAdGroup.get(snap.ad_group_id) || { totalWeightedQS: 0, totalCount: 0, lowCount: 0 };
+                                if (snap.quality_score !== null) {
+                                    existing.totalWeightedQS += snap.quality_score;
+                                    existing.totalCount += 1;
+                                    if (snap.quality_score < 5) existing.lowCount += 1;
+                                }
+                                qsByAdGroup.set(snap.ad_group_id, existing);
+                            }
+
+                            const adsByAdGroup = new Map<string, { total: number; poor: number; bestStrength: string }>();
+                            const STRENGTH_ORDER: Record<string, number> = { EXCELLENT: 4, GOOD: 3, AVERAGE: 2, POOR: 1 };
+                            for (const snap of adSnapshots) {
+                                const existing = adsByAdGroup.get(snap.ad_group_id) || { total: 0, poor: 0, bestStrength: 'POOR' };
+                                existing.total += 1;
+                                if (snap.ad_strength === 'POOR') existing.poor += 1;
+                                if ((STRENGTH_ORDER[snap.ad_strength] || 0) > (STRENGTH_ORDER[existing.bestStrength] || 0)) {
+                                    existing.bestStrength = snap.ad_strength;
+                                }
+                                adsByAdGroup.set(snap.ad_group_id, existing);
+                            }
+
+                            // Override QS and Ad Strength values with snapshot data
+                            for (const ag of adGroups) {
+                                const qsData = qsByAdGroup.get(ag.id);
+                                if (qsData && qsData.totalCount > 0) {
+                                    (ag as any).avgQualityScore = Number((qsData.totalWeightedQS / qsData.totalCount).toFixed(1));
+                                    (ag as any).keywordsWithLowQS = qsData.lowCount;
+                                }
+                                const adsData = adsByAdGroup.get(ag.id);
+                                if (adsData) {
+                                    (ag as any).poorAdsCount = adsData.poor;
+                                    (ag as any).adStrength = adsData.bestStrength;
+                                    (ag as any).adsCount = adsData.total;
+                                }
+                            }
+
+                            console.log(`[AdGroups] Enriched with snapshots from ${snapshotDate}: ${qsSnapshots.length} QS, ${adSnapshots.length} ads`);
+                        }
+                    } catch (snapErr) {
+                        console.warn('[AdGroups] Snapshot enrichment failed (using current data):', snapErr);
+                    }
+                }
+            }
+
+            return NextResponse.json({ adGroups, snapshotDate });
         } catch (apiError: any) {
             console.error("Google Ads API error fetching ad groups:", apiError);
             return NextResponse.json({

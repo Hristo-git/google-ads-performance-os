@@ -407,6 +407,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [hideStopped, setHideStopped] = useState(false); // Filter for Enabled only items
     const [healthData, setHealthData] = useState<any>(null);
     const [loadingHealth, setLoadingHealth] = useState(false);
+    const [auditSnapshotDate, setAuditSnapshotDate] = useState<string | null>(null);
 
     // Sync state with URL parameter (from props) and trigger data refresh
     useEffect(() => {
@@ -619,6 +620,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                     const res = await fetch(`/api/google-ads/ad-groups?${params}`);
                     const data = await res.json();
                     if (data.adGroups) setAdGroups(data.adGroups);
+                    setAuditSnapshotDate(data.snapshotDate || null);
                 } catch (err) {
                     console.error("Failed to fetch ad groups for audit:", err);
                 }
@@ -1358,6 +1360,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         customerId={selectedAccountId}
                         filteredCampaignIds={filteredCampaignIds}
                         onNavigate={setNavigation}
+                        auditSnapshotDate={auditSnapshotDate}
                     />
                 ) : navigation.view === 'reports' ? (
                     <main className="flex-1 overflow-auto p-6">

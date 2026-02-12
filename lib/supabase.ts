@@ -228,3 +228,131 @@ export async function deleteUser(userId: string): Promise<boolean> {
 
   return !error;
 }
+
+// ============================================
+// QS & Ad Strength Snapshots
+// ============================================
+
+export interface QSSnapshot {
+  customer_id: string;
+  keyword_id: string;
+  ad_group_id: string;
+  quality_score: number | null;
+  expected_ctr: string;
+  landing_page_experience: string;
+  ad_relevance: string;
+  snapshot_date: string;
+}
+
+export interface AdStrengthSnapshot {
+  customer_id: string;
+  ad_id: string;
+  ad_group_id: string;
+  ad_strength: string;
+  snapshot_date: string;
+}
+
+/** Upsert keyword QS snapshots for a given customer + date */
+export async function saveQSSnapshots(snapshots: QSSnapshot[]): Promise<number> {
+  if (snapshots.length === 0) return 0;
+
+  const { error, count } = await supabaseAdmin
+    .from('gads_qs_snapshots')
+    .upsert(snapshots, { onConflict: 'customer_id,keyword_id,snapshot_date' })
+    .select('id');
+
+  if (error) {
+    console.error('[Snapshots] QS upsert error:', error.message);
+    return 0;
+  }
+  return count || snapshots.length;
+}
+
+/** Upsert ad strength snapshots for a given customer + date */
+export async function saveAdStrengthSnapshots(snapshots: AdStrengthSnapshot[]): Promise<number> {
+  if (snapshots.length === 0) return 0;
+
+  const { error, count } = await supabaseAdmin
+    .from('gads_ad_strength_snapshots')
+    .upsert(snapshots, { onConflict: 'customer_id,ad_id,snapshot_date' })
+    .select('id');
+
+  if (error) {
+    console.error('[Snapshots] Ad Strength upsert error:', error.message);
+    return 0;
+  }
+  return count || snapshots.length;
+}
+
+/**
+ * Get QS snapshots closest to a target date (within ±7 days).
+ * Returns the snapshot_date that is nearest to targetDate.
+ */
+export async function getQSSnapshotsForDate(
+  customerId: string,
+  targetDate: string
+): Promise<QSSnapshot[]> {
+  // Find the closest snapshot date within ±7 days
+  const target = new Date(targetDate);
+  const from = new Date(target); from.setDate(from.getDate() - 7);
+  const to = new Date(target); to.setDate(to.getDate() + 7);
+
+  const { data, error } = await supabaseAdmin
+    .from('gads_qs_snapshots')
+    .select('*')
+    .eq('customer_id', customerId)
+    .gte('snapshot_date', from.toISOString().split('T')[0])
+    .lte('snapshot_date', to.toISOString().split('T')[0])
+    .order('snapshot_date', { ascending: false });
+
+  if (error || !data || data.length === 0) return [];
+
+  // Group by snapshot_date, pick the one closest to targetDate
+  const targetTime = target.getTime();
+  let bestDate = data[0].snapshot_date;
+  let bestDiff = Math.abs(new Date(bestDate).getTime() - targetTime);
+
+  for (const row of data) {
+    const diff = Math.abs(new Date(row.snapshot_date).getTime() - targetTime);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestDate = row.snapshot_date;
+    }
+  }
+
+  return data.filter(r => r.snapshot_date === bestDate) as QSSnapshot[];
+}
+
+/** Get Ad Strength snapshots closest to a target date (within ±7 days). */
+export async function getAdStrengthSnapshotsForDate(
+  customerId: string,
+  targetDate: string
+): Promise<AdStrengthSnapshot[]> {
+  const target = new Date(targetDate);
+  const from = new Date(target); from.setDate(from.getDate() - 7);
+  const to = new Date(target); to.setDate(to.getDate() + 7);
+
+  const { data, error } = await supabaseAdmin
+    .from('gads_ad_strength_snapshots')
+    .select('*')
+    .eq('customer_id', customerId)
+    .gte('snapshot_date', from.toISOString().split('T')[0])
+    .lte('snapshot_date', to.toISOString().split('T')[0])
+    .order('snapshot_date', { ascending: false });
+
+  if (error || !data || data.length === 0) return [];
+
+  const targetTime = target.getTime();
+  let bestDate = data[0].snapshot_date;
+  let bestDiff = Math.abs(new Date(bestDate).getTime() - targetTime);
+
+  for (const row of data) {
+    const diff = Math.abs(new Date(row.snapshot_date).getTime() - targetTime);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestDate = row.snapshot_date;
+    }
+  }
+
+  return data.filter(r => r.snapshot_date === bestDate) as AdStrengthSnapshot[];
+}

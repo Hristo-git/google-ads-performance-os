@@ -29,6 +29,7 @@ interface StrategicInsightsProps {
     customerId: string;
     filteredCampaignIds?: string[];
     onNavigate?: (nav: NavigationState) => void;
+    auditSnapshotDate?: string | null;
 }
 
 export default function StrategicInsights({
@@ -47,7 +48,8 @@ export default function StrategicInsights({
     searchTerms,
     customerId,
     filteredCampaignIds,
-    onNavigate
+    onNavigate,
+    auditSnapshotDate
 }: StrategicInsightsProps) {
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
@@ -290,6 +292,33 @@ export default function StrategicInsights({
                 {activeTab === 'audit' && (
                     <div className="space-y-4">
                         <h2 className="text-xl font-bold text-white">Quality & Performance Audit</h2>
+
+                        {/* Warning for historical periods — QS & Ad Strength context */}
+                        {(() => {
+                            const endDate = new Date(dateRange.end);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const diffDays = Math.floor((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24));
+                            if (diffDays <= 7) return null;
+
+                            if (auditSnapshotDate) return (
+                                <div className="rounded-lg bg-emerald-900/30 border border-emerald-700/50 p-4 flex gap-3 items-start">
+                                    <span className="text-emerald-400 text-lg mt-0.5">&#10003;</span>
+                                    <div className="text-sm text-emerald-200/90">
+                                        <strong className="text-emerald-300">Исторически данни:</strong> Quality Score и Ad Strength стойностите са от <strong>snapshot {auditSnapshotDate}</strong>, най-близък до края на избрания период ({dateRange.end}). Секцията &quot;Impression Share Loss&quot; е директно от Google Ads за периода.
+                                    </div>
+                                </div>
+                            );
+
+                            return (
+                                <div className="rounded-lg bg-amber-900/30 border border-amber-700/50 p-4 flex gap-3 items-start">
+                                    <span className="text-amber-400 text-lg mt-0.5">&#9888;</span>
+                                    <div className="text-sm text-amber-200/90">
+                                        <strong className="text-amber-300">Внимание:</strong> Quality Score и Ad Strength са <strong>текущи стойности</strong> от Google Ads, не исторически за избрания период ({dateRange.start} — {dateRange.end}). Няма запазен snapshot за този период. Секцията &quot;Impression Share Loss&quot; е коректна за периода.
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* High Lost IS Rank */}
                         <div className="rounded-xl bg-slate-800 border border-slate-700 p-6">
