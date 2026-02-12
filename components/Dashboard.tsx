@@ -730,7 +730,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     }, [navigation.view, selectedAccountId, dateRange]);
 
 
-    const runAnalysis = async (analysisType?: 'account-overview' | 'category' | 'campaign' | 'adgroup', category?: string) => {
+    const runAnalysis = async (analysisType?: 'account-overview' | 'category' | 'campaign' | 'adgroup', category?: string, model?: string) => {
         let dataToAnalyze: any = getAnalysisContext();
         if (!dataToAnalyze) return;
 
@@ -739,6 +739,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         dataToAnalyze.customerId = selectedAccountId;
         dataToAnalyze.analysisType = analysisType || (navigation.level === 'account' ? 'account-overview' : navigation.level);
         dataToAnalyze.dateRange = dateRange;
+        if (model) dataToAnalyze.model = model;
 
         // If category-specific analysis, filter campaigns by category
         if (analysisType === 'category' && category) {

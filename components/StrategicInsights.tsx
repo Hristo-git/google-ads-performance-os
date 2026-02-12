@@ -53,6 +53,7 @@ export default function StrategicInsights({
 }: StrategicInsightsProps) {
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
+    const [selectedModel, setSelectedModel] = useState<string>('opus-4.6');
     const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives'>('breakdown');
 
     const runAnalysis = async () => {
@@ -62,7 +63,8 @@ export default function StrategicInsights({
                 campaigns: enrichWithSmartBidding(campaigns),
                 strategicBreakdown,
                 level: 'account',
-                language
+                language,
+                model: selectedModel
             };
 
             const res = await fetch("/api/analyze/stream", {
@@ -110,7 +112,8 @@ export default function StrategicInsights({
                 strategicBreakdown,
                 level: 'account',
                 context: `Filtered by category: ${category}`,
-                language
+                language,
+                model: selectedModel
             };
 
             const res = await fetch("/api/analyze/stream", {
@@ -432,6 +435,16 @@ export default function StrategicInsights({
                                 <h2 className="text-xl font-bold text-white">AI-Powered Strategic Analysis</h2>
                                 <p className="text-xs text-slate-500 mt-0.5">Advanced AI-powered performance auditing</p>
                             </div>
+                            <div className="flex items-center gap-2">
+                                <select
+                                    value={selectedModel}
+                                    onChange={(e) => setSelectedModel(e.target.value)}
+                                    className="bg-slate-800 border border-slate-600 text-slate-300 text-xs rounded-lg px-2 py-2.5 focus:ring-violet-500 focus:border-violet-500"
+                                >
+                                    <option value="opus-4.6">Opus 4.6</option>
+                                    <option value="sonnet-4.5">Sonnet 4.5</option>
+                                    <option value="haiku-4.5">Haiku 4.5</option>
+                                </select>
                             <button
                                 onClick={runAnalysis}
                                 disabled={analyzing}
@@ -454,6 +467,7 @@ export default function StrategicInsights({
                                     </>
                                 )}
                             </button>
+                            </div>
                         </div>
 
                         {analyzing ? (

@@ -182,9 +182,19 @@ export async function POST(request: Request) {
                 : "Целият ти отговор ТРЯБВА да бъде на български език."
             }`;
 
+        // Model selection (allow override for A/B testing)
+        const ALLOWED_MODELS: Record<string, string> = {
+            'opus-4.6': 'claude-opus-4-6',
+            'sonnet-4.5': 'claude-sonnet-4-5-20250929',
+            'haiku-4.5': 'claude-haiku-4-5-20251001',
+        };
+        const requestedModel = data.model ? ALLOWED_MODELS[data.model] : undefined;
+        const modelId = requestedModel || 'claude-opus-4-6';
+        const modelLabel = Object.entries(ALLOWED_MODELS).find(([, v]) => v === modelId)?.[0] || 'opus-4.6';
+
         // Stream from Anthropic
         const stream = anthropic.messages.stream({
-            model: "claude-opus-4-6",
+            model: modelId,
             max_tokens: 8192,
             ...(systemPrompt ? { system: systemPrompt } : {}),
             messages: [{ role: "user", content: finalPrompt }],
@@ -218,7 +228,7 @@ export async function POST(request: Request) {
                             if (s && e) periodLabel = ` (${s} — ${e})`;
                         }
 
-                        const reportTitle = `${contextLabel} Analysis${periodLabel} - ${new Date().toLocaleDateString('bg-BG')}`;
+                        const reportTitle = `[${modelLabel}] ${contextLabel} Analysis${periodLabel} - ${new Date().toLocaleDateString('bg-BG')}`;
                         const reportId = `insight_${data.level}_${data.analysisType || 'gen'}_${Date.now()}`;
 
                         await upsertReport(reportId, fullText, {
@@ -227,6 +237,7 @@ export async function POST(request: Request) {
                             timestamp: new Date().toISOString(),
                             type: 'ai_analysis',
                             title: reportTitle,
+                            model: modelId,
                             analysis_content: fullText,
                         });
 
