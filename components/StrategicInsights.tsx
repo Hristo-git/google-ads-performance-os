@@ -63,16 +63,32 @@ export default function StrategicInsights({
                 language
             };
 
-            const res = await fetch("/api/analyze", {
+            const res = await fetch("/api/analyze/stream", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(dataToAnalyze)
             });
-            const data = await res.json();
-            if (data.error) {
-                setAnalysis(`Error: ${data.error}${data.details ? ` (${data.details})` : ''}`);
-            } else {
-                setAnalysis(data.analysis);
+            if (!res.ok) {
+                const text = await res.text();
+                let errorMsg: string;
+                try {
+                    const errData = JSON.parse(text);
+                    errorMsg = errData.error || `HTTP ${res.status}`;
+                } catch {
+                    errorMsg = `HTTP ${res.status}: ${text.slice(0, 200)}`;
+                }
+                setAnalysis(`Error: ${errorMsg}`);
+                return;
+            }
+            const reader = res.body?.getReader();
+            if (!reader) { setAnalysis("Error: No response stream"); return; }
+            const decoder = new TextDecoder();
+            let accumulated = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                accumulated += decoder.decode(value, { stream: true });
+                setAnalysis(accumulated);
             }
         } catch (error: any) {
             console.error("Analysis failed:", error);
@@ -95,16 +111,32 @@ export default function StrategicInsights({
                 language
             };
 
-            const res = await fetch("/api/analyze", {
+            const res = await fetch("/api/analyze/stream", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(dataToAnalyze)
             });
-            const data = await res.json();
-            if (data.error) {
-                setAnalysis(`Error: ${data.error}${data.details ? ` (${data.details})` : ''}`);
-            } else {
-                setAnalysis(data.analysis);
+            if (!res.ok) {
+                const text = await res.text();
+                let errorMsg: string;
+                try {
+                    const errData = JSON.parse(text);
+                    errorMsg = errData.error || `HTTP ${res.status}`;
+                } catch {
+                    errorMsg = `HTTP ${res.status}: ${text.slice(0, 200)}`;
+                }
+                setAnalysis(`Error: ${errorMsg}`);
+                return;
+            }
+            const reader = res.body?.getReader();
+            if (!reader) { setAnalysis("Error: No response stream"); return; }
+            const decoder = new TextDecoder();
+            let accumulated = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                accumulated += decoder.decode(value, { stream: true });
+                setAnalysis(accumulated);
             }
         } catch (error: any) {
             console.error("Analysis failed:", error);

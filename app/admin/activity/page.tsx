@@ -12,7 +12,7 @@ export default function ActivityDashboard() {
         logins24h: 0,
         aiCalls24h: 0,
         activeUsers24h: 0,
-        sessionMinutes: {} as Record<string, number>
+        userSummary: {} as Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number }>
     });
 
     useEffect(() => {
@@ -35,20 +35,13 @@ export default function ActivityDashboard() {
         }
     };
 
-    // Calculate per-user stats from logs (last 100)
-    const userStats = Array.from(new Set(logs.map(l => l.user_id))).map(uid => {
-        const userLogs = logs.filter(l => l.user_id === uid);
-        const user = userLogs[0]?.gads_users;
-        return {
-            id: uid,
-            name: user?.name || 'Unknown',
-            username: user?.username || 'Unknown',
-            aiCalls: userLogs.filter(l => l.event_type === 'AI_ANALYSIS').length,
-            sessionMinutes: stats.sessionMinutes[uid] || 0
-        };
-    }).sort((a, b) => b.sessionMinutes - a.sessionMinutes);
+    // Use per-user summary from backend (covers 24h accurately)
+    const userStats = Object.entries(stats.userSummary).map(([uid, u]) => ({
+        id: uid,
+        ...u
+    })).sort((a, b) => b.sessionMinutes - a.sessionMinutes);
 
-    const totalSessionMinutes = Object.values(stats.sessionMinutes).reduce((a, b) => a + b, 0);
+    const totalSessionMinutes = Object.values(stats.userSummary).reduce((a, b) => a + b.sessionMinutes, 0);
 
     if (!session || session.user.role !== 'admin') {
         return <div className="p-8 text-center text-slate-400">Unauthorized Access</div>;

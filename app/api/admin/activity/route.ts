@@ -39,38 +39,39 @@ export async function GET(request: Request) {
             .eq('event_type', 'AI_ANALYSIS')
             .gte('created_at', yesterday.toISOString());
 
-        // Count unique active users (last 24h)
-        // Note: Supabase JS doesn't do distinct count easily without RPC or raw query, 
-        // so we'll approximate active users from recent heartbeats/logins if needed, 
-        // or just fetch distinct user_ids.
-        // Simplified approach: just count unique users from a recent window query
-        const { data: activeUsersData } = await supabaseAdmin
+        // Calculate session time and other stats per user (last 24h)
+        const { data: userData24h } = await supabaseAdmin
             .from('user_activity_logs')
-            .select('user_id')
+            .select('user_id, event_type, gads_users(name, username)')
             .gte('created_at', yesterday.toISOString());
 
-        const activeUsers24h = new Set(activeUsersData?.map(d => d.user_id)).size;
+        const userSummary: Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number }> = {};
 
-        // Calculate session time per user (simplified: count heartbeats in last 24h)
-        const { data: heartbeatCounts } = await supabaseAdmin
-            .from('user_activity_logs')
-            .select('user_id')
-            .eq('event_type', 'HEARTBEAT')
-            .gte('created_at', yesterday.toISOString());
+        userData24h?.forEach(row => {
+            const uid = row.user_id;
+            const gUser = Array.isArray(row.gads_users) ? row.gads_users[0] : row.gads_users;
 
-        const sessionMinutes: Record<string, number> = {};
-        heartbeatCounts?.forEach(h => {
-            sessionMinutes[h.user_id] = (sessionMinutes[h.user_id] || 0) + 1;
+            if (!userSummary[uid]) {
+                userSummary[uid] = {
+                    name: gUser?.name || 'Unknown',
+                    username: gUser?.username || 'Unknown',
+                    sessionMinutes: 0,
+                    aiCalls: 0
+                };
+            }
+            if (row.event_type === 'HEARTBEAT') userSummary[uid].sessionMinutes++;
+            if (row.event_type === 'AI_ANALYSIS') userSummary[uid].aiCalls++;
         });
 
+        const activeUsers24h = Object.keys(userSummary).length;
 
         return NextResponse.json({
             logs,
             stats: {
                 logins24h: logins24h || 0,
                 aiCalls24h: aiCalls24h || 0,
-                activeUsers24h: activeUsers24h || 0,
-                sessionMinutes
+                activeUsers24h,
+                userSummary
             }
         });
 
