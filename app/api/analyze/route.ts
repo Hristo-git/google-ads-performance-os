@@ -7,6 +7,9 @@ import { upsertReport, querySimilarReports } from "@/lib/pinecone";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
 import { logActivity } from "@/lib/activity-logger";
 
+// Allow up to 300s for 2-pass Claude Opus analysis (requires Vercel Pro)
+export const maxDuration = 300;
+
 // ============================================
 // HELPER: Human-readable bidding strategy labels
 // ============================================

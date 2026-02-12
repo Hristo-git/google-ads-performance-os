@@ -37,12 +37,23 @@ export default async function AdminPage() {
                         </h1>
                         <p className="text-gray-400 mt-1">Manage users and account access</p>
                     </div>
-                    <a
-                        href="/"
-                        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                    >
-                        ← Back to Dashboard
-                    </a>
+                    <div className="flex gap-4">
+                        <a
+                            href="/admin/activity"
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors shadow-lg shadow-indigo-500/20"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Activity Monitor
+                        </a>
+                        <a
+                            href="/"
+                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                        >
+                            ← Back to Dashboard
+                        </a>
+                    </div>
                 </div>
 
                 <UserManagementPanel />

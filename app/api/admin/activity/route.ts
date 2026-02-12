@@ -51,13 +51,26 @@ export async function GET(request: Request) {
 
         const activeUsers24h = new Set(activeUsersData?.map(d => d.user_id)).size;
 
+        // Calculate session time per user (simplified: count heartbeats in last 24h)
+        const { data: heartbeatCounts } = await supabaseAdmin
+            .from('user_activity_logs')
+            .select('user_id')
+            .eq('event_type', 'HEARTBEAT')
+            .gte('created_at', yesterday.toISOString());
+
+        const sessionMinutes: Record<string, number> = {};
+        heartbeatCounts?.forEach(h => {
+            sessionMinutes[h.user_id] = (sessionMinutes[h.user_id] || 0) + 1;
+        });
+
 
         return NextResponse.json({
             logs,
             stats: {
                 logins24h: logins24h || 0,
                 aiCalls24h: aiCalls24h || 0,
-                activeUsers24h: activeUsers24h || 0
+                activeUsers24h: activeUsers24h || 0,
+                sessionMinutes
             }
         });
 

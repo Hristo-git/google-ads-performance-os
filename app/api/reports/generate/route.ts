@@ -6,6 +6,9 @@ import { REPORT_TEMPLATES } from "@/lib/prompts";
 import { querySimilarReports, upsertReport } from "@/lib/pinecone";
 import type { ReportTemplateId, ReportSettings } from "@/types/google-ads";
 
+// Allow up to 300s for 2-pass Claude analysis (requires Vercel Pro)
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
     try {
         const session = await getServerSession(authOptions);
