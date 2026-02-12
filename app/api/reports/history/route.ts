@@ -25,6 +25,7 @@ export async function GET(request: Request) {
             timestamp: m.metadata?.timestamp,
             templateId: m.metadata?.templateId,
             audience: m.metadata?.audience,
+            reportTitle: m.metadata?.reportTitle,
             analysis: m.metadata?.analysis_content || m.analysis_content,
         }));
 

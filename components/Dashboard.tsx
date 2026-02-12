@@ -1347,6 +1347,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             language={language}
                             setLanguage={setLanguage}
                             customerId={selectedAccountId}
+                            dateRange={dateRange}
                         />
                     </main>
                 ) : navigation.view === 'diagnostics' ? (

@@ -41,6 +41,7 @@ interface AIReportsHubProps {
     language: 'bg' | 'en';
     setLanguage: (lang: 'bg' | 'en') => void;
     customerId?: string;
+    dateRange?: { start: string; end: string };
 }
 
 export default function AIReportsHub({
@@ -54,6 +55,7 @@ export default function AIReportsHub({
     language,
     setLanguage,
     customerId,
+    dateRange,
 }: AIReportsHubProps) {
     const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
     const [generating, setGenerating] = useState(false);
@@ -105,7 +107,8 @@ export default function AIReportsHub({
         try {
             // Prepare data based on template requirements
             let dataPayload: any = {
-                customerId: customerId
+                customerId: customerId,
+                dateRange: dateRange,
             };
 
             if (selectedTemplate.requiredData.includes('campaigns')) {
@@ -172,10 +175,11 @@ export default function AIReportsHub({
 
             const result = await response.json();
 
+            const periodSuffix = dateRange ? ` (${dateRange.start} — ${dateRange.end})` : '';
             const generatedReport: GeneratedReport = {
                 id: `${selectedTemplate.id}_${Date.now()}`,
                 templateId: selectedTemplate.id,
-                templateName: settings.language === 'en' ? selectedTemplate.nameEN : selectedTemplate.nameBG,
+                templateName: (settings.language === 'en' ? selectedTemplate.nameEN : selectedTemplate.nameBG) + periodSuffix,
                 timestamp: new Date().toISOString(),
                 analysis: result.analysis,
                 settings,

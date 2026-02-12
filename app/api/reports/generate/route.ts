@@ -178,8 +178,8 @@ ${analysis}
             // Format date range
             let periodLabel = '';
             if (data.dateRange) {
-                const startDate = data.dateRange.startDate || data.dateRange.from;
-                const endDate = data.dateRange.endDate || data.dateRange.to;
+                const startDate = data.dateRange.start || data.dateRange.startDate || data.dateRange.from;
+                const endDate = data.dateRange.end || data.dateRange.endDate || data.dateRange.to;
                 if (startDate && endDate) {
                     periodLabel = ` (${startDate} — ${endDate})`;
                 }
