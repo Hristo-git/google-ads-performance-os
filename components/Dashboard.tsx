@@ -781,6 +781,19 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(dataToAnalyze)
             });
+            if (!res.ok) {
+                const text = await res.text();
+                let errorMsg: string;
+                try {
+                    const errData = JSON.parse(text);
+                    errorMsg = errData.error || `HTTP ${res.status}`;
+                    if (errData.details) errorMsg += ` (${errData.details})`;
+                } catch {
+                    errorMsg = `HTTP ${res.status}: ${text.slice(0, 200)}`;
+                }
+                setAnalysis(`Error: ${errorMsg}`);
+                return;
+            }
             const data = await res.json();
             if (data.error) {
                 setAnalysis(`Error: ${data.error}${data.details ? ` (${data.details})` : ''}`);
