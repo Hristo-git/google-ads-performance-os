@@ -78,6 +78,18 @@ export async function upsertReport(reportId: string, content: string, metadata: 
     }
 }
 
+export async function deleteReport(reportId: string): Promise<boolean> {
+    try {
+        console.log('[Pinecone] Deleting report:', reportId);
+        await index.namespace('reports').deleteOne(reportId);
+        console.log('[Pinecone] Deleted report:', reportId);
+        return true;
+    } catch (error) {
+        console.error('[Pinecone] Error deleting report:', error);
+        return false;
+    }
+}
+
 export async function querySimilarReports(query: string, customerId?: string, limit: number = 20) {
     try {
         console.log('[Pinecone] Generating embedding for query:', query);

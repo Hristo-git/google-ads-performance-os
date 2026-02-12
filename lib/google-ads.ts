@@ -2284,3 +2284,107 @@ export async function getSearchTerms(
         }
     });
 }
+
+// ============================================
+// PRIORITY 4: Audience Performance
+// ============================================
+
+export interface AudiencePerformance {
+    campaignId: string;
+    campaignName: string;
+    adGroupId: string;
+    adGroupName: string;
+    criterionId: string;
+    audienceName: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    cpc: number;
+    ctr: number;
+    roas: number | null;
+    cpa: number | null;
+}
+
+export async function getAudiencePerformance(
+    refreshToken: string,
+    customerId?: string,
+    dateRange?: DateRange,
+    campaignIds?: string[],
+    userId?: string
+): Promise<AudiencePerformance[]> {
+    if (userId) logActivity(userId, 'API_CALL', { category: 'audiences', customerId });
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+    const campaignFilter = campaignIds?.length
+        ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
+
+    try {
+        const result = await customer.query(`
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                ad_group_criterion.criterion_id,
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.user_list.user_list,
+                ad_group_criterion.custom_affinity.custom_affinity,
+                ad_group_criterion.custom_intent.custom_intent,
+                ad_group_criterion.type,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value,
+                metrics.average_cpc,
+                metrics.ctr
+            FROM ad_group_audience_view
+            WHERE campaign.status != 'REMOVED' 
+            AND ad_group.status != 'REMOVED'
+            ${dateFilter} ${campaignFilter}
+            ORDER BY metrics.cost_micros DESC
+            LIMIT 1000
+        `);
+
+        return result.map((row) => {
+            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+            const conversions = Number(row.metrics?.conversions) || 0;
+            const conversionValue = Number(row.metrics?.conversions_value) || 0;
+            const clicks = Number(row.metrics?.clicks) || 0;
+            const impressions = Number(row.metrics?.impressions) || 0;
+
+            // Determine audience name based on type
+            let name = 'Unknown Audience';
+            if (row.ad_group_criterion?.keyword?.text) {
+                name = row.ad_group_criterion.keyword.text;
+            } else if (row.ad_group_criterion?.user_list?.user_list) {
+                name = `User List (${row.ad_group_criterion.criterion_id})`;
+            }
+
+            return {
+                campaignId: row.campaign?.id?.toString() || "",
+                campaignName: row.campaign?.name || "",
+                adGroupId: row.ad_group?.id?.toString() || "",
+                adGroupName: row.ad_group?.name || "",
+                criterionId: row.ad_group_criterion?.criterion_id?.toString() || "",
+                audienceName: name,
+                impressions,
+                clicks,
+                cost,
+                conversions,
+                conversionValue,
+                ctr: Number(row.metrics?.ctr) || 0,
+                cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+                roas: cost > 0 ? conversionValue / cost : null,
+                cpa: conversions > 0 ? cost / conversions : null
+            };
+        });
+
+    } catch (error: unknown) {
+        logApiError("getAudiencePerformance", error);
+        return [];
+    }
+}
+

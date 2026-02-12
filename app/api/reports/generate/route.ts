@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
 import { REPORT_TEMPLATES } from "@/lib/prompts";
-import { querySimilarReports, upsertReport } from "@/lib/pinecone";
+import { upsertReport } from "@/lib/pinecone";
 import type { ReportTemplateId, ReportSettings } from "@/types/google-ads";
 
 // Allow up to 300s for 2-pass Claude analysis (requires Vercel Pro)
@@ -67,34 +67,9 @@ export async function POST(request: Request) {
 
         console.log(`Generating report: ${templateId}, Model: ${modelLabel}, Language: ${language}, Expert Mode: ${settings.expertMode}`);
 
-        // --- RAG: Retrieve past reports for context ---
-        let historyContext = "";
-        const currentCustomerId = data.customerId || undefined;
-        try {
-            const searchQuery = `${templateId} ${settings.audience} analysis`;
-            const matches = await querySimilarReports(searchQuery, currentCustomerId, 2);
-
-            if (matches && matches.length > 0) {
-                const pastAnalyses = (matches as any[]).map((m: any, i: number) =>
-                    `### PAST ANALYSIS ${i + 1} (${m.metadata?.timestamp || 'unknown date'})\n${m.metadata?.analysis_content || m.analysis_content || ''}`
-                ).join('\n\n');
-
-                historyContext = isEn
-                    ? `\n\n=== SEMANTIC MEMORY: PREVIOUS ANALYSES ===\nBelow are relevant findings from previous reports. Use them to track progress, note if recommendations were followed, and ensure continuity.\n\n${pastAnalyses}`
-                    : `\n\n=== СЕМАНТИЧНА ПАМЕТ: ПРЕДИШНИ АНАЛИЗИ ===\nПо-долу са подходящи констатации от предишни отчети. Използвайте ги, за да проследите прогреса, да отбележите дали препоръките са били спазени и да осигурите приемственост.\n\n${pastAnalyses}`;
-            }
-        } catch (ragError) {
-            console.warn("RAG retrieval failed, proceeding without history:", ragError);
-        }
-
-        // Build prompt using template
+        // Build prompt using template (no RAG — each report is a clean snapshot of the period)
         const promptBuilder = REPORT_TEMPLATES[templateId];
-        let prompt = customPrompt || promptBuilder(data, settings.language);
-
-        // Inject history if available
-        if (historyContext) {
-            prompt += historyContext;
-        }
+        const prompt = customPrompt || promptBuilder(data, settings.language);
 
         // First pass: Generate initial analysis
         const firstPassResponse = await anthropic.messages.create({

@@ -9,6 +9,7 @@ import LandingPagesTab from "./LandingPagesTab";
 import ConversionBreakdown from "./ConversionBreakdown";
 import GeographicPerformance from "./GeographicPerformance";
 import NegativeKeywordMiner from "./NegativeKeywordMiner";
+import AudiencesTab from "./AudiencesTab";
 import ReactMarkdown from 'react-markdown';
 import { Campaign, AdGroup, NavigationState, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
 
@@ -54,7 +55,7 @@ export default function StrategicInsights({
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
     const [selectedModel, setSelectedModel] = useState<string>('opus-4.6');
-    const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives'>('breakdown');
+    const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives' | 'audiences'>('breakdown');
 
     const runAnalysis = async () => {
         setAnalyzing(true);
@@ -276,6 +277,9 @@ export default function StrategicInsights({
                 <button onClick={() => setActiveTab('negatives')} className={tabClass('negatives')}>
                     Neg. Keywords
                 </button>
+                <button onClick={() => setActiveTab('audiences')} className={tabClass('audiences')}>
+                    Audiences
+                </button>
             </div>
 
             {/* Content Area */}
@@ -445,28 +449,28 @@ export default function StrategicInsights({
                                     <option value="sonnet-4.5">Sonnet 4.5</option>
                                     <option value="haiku-4.5">Haiku 4.5</option>
                                 </select>
-                            <button
-                                onClick={runAnalysis}
-                                disabled={analyzing}
-                                className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-6 py-2.5 rounded-lg transition-all shadow-lg hover:shadow-violet-500/25 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {analyzing ? (
-                                    <>
-                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                        </svg>
-                                        Analyzing...
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                        </svg>
-                                        Run Analysis
-                                    </>
-                                )}
-                            </button>
+                                <button
+                                    onClick={runAnalysis}
+                                    disabled={analyzing}
+                                    className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-6 py-2.5 rounded-lg transition-all shadow-lg hover:shadow-violet-500/25 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {analyzing ? (
+                                        <>
+                                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                            Analyzing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                            </svg>
+                                            Run Analysis
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </div>
 
@@ -545,6 +549,15 @@ export default function StrategicInsights({
                     <NegativeKeywordMiner
                         customerId={customerId}
                         dateRange={dateRange}
+                    />
+                )}
+
+                {activeTab === 'audiences' && (
+                    <AudiencesTab
+                        customerId={customerId}
+                        dateRange={dateRange}
+                        language={language}
+                        campaignIds={filteredCampaignIds}
                     />
                 )}
             </div>

@@ -42,6 +42,7 @@ interface AIReportsHubProps {
     setLanguage: (lang: 'bg' | 'en') => void;
     customerId?: string;
     dateRange?: { start: string; end: string };
+    userRole?: 'admin' | 'viewer';
 }
 
 export default function AIReportsHub({
@@ -56,6 +57,7 @@ export default function AIReportsHub({
     setLanguage,
     customerId,
     dateRange,
+    userRole,
 }: AIReportsHubProps) {
     const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
     const [generating, setGenerating] = useState(false);
@@ -225,6 +227,23 @@ export default function AIReportsHub({
             setError(err.message || 'Failed to generate report');
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const handleDeleteReport = async (reportId: string, e: React.MouseEvent) => {
+        e.stopPropagation(); // Don't open the report
+        if (!confirm(language === 'en' ? 'Delete this report?' : 'Изтриване на този анализ?')) return;
+
+        try {
+            const res = await fetch(`/api/reports/${encodeURIComponent(reportId)}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Delete failed');
+            }
+            setHistoryResults(prev => prev.filter(r => r.id !== reportId));
+        } catch (err: any) {
+            console.error('Delete report error:', err);
+            setError(err.message || 'Failed to delete report');
         }
     };
 
@@ -677,23 +696,36 @@ export default function AIReportsHub({
                     {historyResults.length > 0 ? (
                         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                             {historyResults.map((report) => (
-                                <button
+                                <div
                                     key={report.id}
+                                    className="relative text-left p-3.5 rounded-lg bg-slate-900/50 border border-slate-700 hover:border-violet-500/50 hover:bg-slate-700/50 transition-all group cursor-pointer"
                                     onClick={() => handleViewHistoryReport(report)}
-                                    className="text-left p-3.5 rounded-lg bg-slate-900/50 border border-slate-700 hover:border-violet-500/50 hover:bg-slate-700/50 transition-all group"
                                 >
                                     <div className="flex justify-between items-start mb-1.5">
                                         <span className="text-[10px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider truncate max-w-[250px]">
                                             {report.reportTitle || report.templateId?.replace(/_/g, ' ')}
                                         </span>
-                                        <span className="text-[9px] text-slate-500 ml-2 whitespace-nowrap">
-                                            {new Date(report.timestamp).toLocaleDateString(language === 'en' ? 'en-US' : 'bg-BG')}
-                                        </span>
+                                        <div className="flex items-center gap-1.5 ml-2">
+                                            <span className="text-[9px] text-slate-500 whitespace-nowrap">
+                                                {new Date(report.timestamp).toLocaleDateString(language === 'en' ? 'en-US' : 'bg-BG')}
+                                            </span>
+                                            {userRole === 'admin' && (
+                                                <button
+                                                    onClick={(e) => handleDeleteReport(report.id, e)}
+                                                    className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all p-0.5 rounded hover:bg-red-500/10"
+                                                    title={language === 'en' ? 'Delete report' : 'Изтрий анализа'}
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed group-hover:text-white transition-colors">
                                         {report.analysis?.slice(0, 120).replace(/[#*`]/g, '')}...
                                     </p>
-                                </button>
+                                </div>
                             ))}
                         </div>
                     ) : (
