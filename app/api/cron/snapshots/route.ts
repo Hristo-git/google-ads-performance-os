@@ -64,8 +64,17 @@ export async function GET(request: Request) {
 
                 // Fetch keywords with QS (all, not only enabled — paused may be re-enabled)
                 const keywords = await getKeywordsWithQS(refreshToken, undefined, customerId, dateRange);
-                const qsSnapshots: QSSnapshot[] = keywords
-                    .filter(k => k.qualityScore !== null)
+                const withQS = keywords.filter(k => k.qualityScore !== null);
+                console.log(`[Cron/Snapshots] ${customerId}: ${keywords.length} total keywords, ${withQS.length} with QS`);
+                if (keywords.length > 0 && withQS.length === 0) {
+                    // Debug: show first 3 keywords to inspect qualityScore values
+                    const sample = keywords.slice(0, 3).map(k => ({
+                        id: k.id, text: k.text, qs: k.qualityScore,
+                        expectedCtr: k.expectedCtr, impressions: k.impressions
+                    }));
+                    console.log(`[Cron/Snapshots] ${customerId} sample keywords:`, JSON.stringify(sample));
+                }
+                const qsSnapshots: QSSnapshot[] = withQS
                     .map(k => ({
                         customer_id: customerId,
                         keyword_id: k.id,
@@ -93,7 +102,12 @@ export async function GET(request: Request) {
 
                 const adsSaved = await saveAdStrengthSnapshots(adSnapshots);
 
-                results.push({ customerId, keywords: qsSaved, ads: adsSaved });
+                results.push({
+                    customerId,
+                    keywords: qsSaved,
+                    ads: adsSaved,
+                    debug: { totalKeywords: keywords.length, withQS: withQS.length }
+                });
                 console.log(`[Cron/Snapshots] ${customerId}: ${qsSaved} QS + ${adsSaved} ads saved`);
             } catch (err: any) {
                 console.error(`[Cron/Snapshots] Error for ${customerId}:`, err.message);
