@@ -216,7 +216,7 @@ export interface ReportTemplate {
 }
 
 export interface ReportSettings {
-    model: 'claude-sonnet-4.5';
+    model: 'opus-4.6' | 'sonnet-4.5' | 'haiku-4.5';
     language: 'bg' | 'en';
     audience: 'internal' | 'client';
     expertMode: boolean;
