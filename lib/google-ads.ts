@@ -471,8 +471,18 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
                 const conversions = Number(row.metrics?.conversions) || 0;
                 const conversionValue = Number(row.metrics?.conversions_value) || 0;
 
-                const groupKeywords = keywords.filter(k => k.adGroupId === id);
-                const groupAds = ads.filter(a => a.adGroupId === id);
+                // Deduplicate by ID: keyword_view/ad_group_ad return 1 row per day with date ranges
+                const seenKeywords = new Map<string, KeywordWithQS>();
+                for (const k of keywords) {
+                    if (k.adGroupId === id && !seenKeywords.has(k.id)) seenKeywords.set(k.id, k);
+                }
+                const groupKeywords = Array.from(seenKeywords.values());
+
+                const seenAds = new Map<string, AdWithStrength>();
+                for (const a of ads) {
+                    if (a.adGroupId === id && !seenAds.has(a.id)) seenAds.set(a.id, a);
+                }
+                const groupAds = Array.from(seenAds.values());
 
                 let totalWeightedQS = 0;
                 let totalImpressionsForQS = 0;
