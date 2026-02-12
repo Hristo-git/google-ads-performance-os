@@ -39,13 +39,19 @@ export async function GET(request: Request) {
             .eq('event_type', 'AI_ANALYSIS')
             .gte('created_at', yesterday.toISOString());
 
+        const { count: apiCalls24h } = await supabaseAdmin
+            .from('user_activity_logs')
+            .select('*', { count: 'exact', head: true })
+            .eq('event_type', 'API_CALL')
+            .gte('created_at', yesterday.toISOString());
+
         // Calculate session time and other stats per user (last 24h)
         const { data: userData24h } = await supabaseAdmin
             .from('user_activity_logs')
             .select('user_id, event_type, gads_users(name, username)')
             .gte('created_at', yesterday.toISOString());
 
-        const userSummary: Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number }> = {};
+        const userSummary: Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number, apiCalls: number }> = {};
 
         userData24h?.forEach(row => {
             const uid = row.user_id;
@@ -56,11 +62,13 @@ export async function GET(request: Request) {
                     name: gUser?.name || 'Unknown',
                     username: gUser?.username || 'Unknown',
                     sessionMinutes: 0,
-                    aiCalls: 0
+                    aiCalls: 0,
+                    apiCalls: 0
                 };
             }
             if (row.event_type === 'HEARTBEAT') userSummary[uid].sessionMinutes++;
             if (row.event_type === 'AI_ANALYSIS') userSummary[uid].aiCalls++;
+            if (row.event_type === 'API_CALL') userSummary[uid].apiCalls++;
         });
 
         const activeUsers24h = Object.keys(userSummary).length;
@@ -70,6 +78,7 @@ export async function GET(request: Request) {
             stats: {
                 logins24h: logins24h || 0,
                 aiCalls24h: aiCalls24h || 0,
+                apiCalls24h: apiCalls24h || 0,
                 activeUsers24h,
                 userSummary
             }

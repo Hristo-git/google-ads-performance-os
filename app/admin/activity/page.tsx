@@ -12,7 +12,8 @@ export default function ActivityDashboard() {
         logins24h: 0,
         aiCalls24h: 0,
         activeUsers24h: 0,
-        userSummary: {} as Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number }>
+        apiCalls24h: 0,
+        userSummary: {} as Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number, apiCalls: number }>
     });
 
     useEffect(() => {
@@ -114,11 +115,11 @@ export default function ActivityDashboard() {
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                     <div className="flex flex-row items-center justify-between pb-2">
-                        <div className="text-sm font-medium text-slate-400">AI Analyses (24h)</div>
-                        <BrainCircuit className="h-4 w-4 text-purple-500" />
+                        <div className="text-sm font-medium text-slate-400">Google Ads API (24h)</div>
+                        <Activity className="h-4 w-4 text-blue-400" />
                     </div>
-                    <div className="text-2xl font-bold text-white">{stats.aiCalls24h}</div>
-                    <p className="text-sm text-slate-500">Generated insights</p>
+                    <div className="text-2xl font-bold text-white">{stats.apiCalls24h}</div>
+                    <p className="text-sm text-slate-500">API Requests logged</p>
                 </div>
             </div>
 
@@ -135,6 +136,7 @@ export default function ActivityDashboard() {
                                     <th className="px-4 py-2 font-medium">User</th>
                                     <th className="px-4 py-2 font-medium text-right">Time</th>
                                     <th className="px-4 py-2 font-medium text-right">AI</th>
+                                    <th className="px-4 py-2 font-medium text-right">API</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">
@@ -149,6 +151,9 @@ export default function ActivityDashboard() {
                                         </td>
                                         <td className="px-4 py-3 text-right text-purple-400 font-medium">
                                             {u.aiCalls}
+                                        </td>
+                                        <td className="px-4 py-3 text-right text-blue-400 font-medium">
+                                            {u.apiCalls}
                                         </td>
                                     </tr>
                                 ))}

@@ -146,7 +146,7 @@ export async function GET(request: Request) {
 
             // Fetch data in parallel
             const promises: Promise<any>[] = [
-                getCampaigns(refreshToken, customerId, dateRange)
+                getCampaigns(refreshToken, customerId, dateRange, false, session.user.id)
             ];
 
             if (compareDateRange) {

@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         if (!refreshToken) {
             return NextResponse.json({ error: "Missing Refresh Token" }, { status: 500 });
         }
-        const data = await getLandingPagePerformance(refreshToken, customerId, dateRange, campaignIds);
+        const data = await getLandingPagePerformance(refreshToken, customerId, dateRange, campaignIds, session.user.id);
         return NextResponse.json({ landingPages: data });
     } catch (error) {
         console.error("Error fetching landing page performance:", error);
