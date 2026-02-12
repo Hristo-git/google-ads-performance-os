@@ -98,7 +98,7 @@ export default function ActivityDashboard() {
                     <div className="text-2xl font-bold text-white">
                         {Math.floor(totalSessionMinutes / 60)}h {totalSessionMinutes % 60}m
                     </div>
-                    <p className="text-xs text-slate-500">Aggregated session duration</p>
+                    <p className="text-sm text-slate-500">Aggregated session duration</p>
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -107,7 +107,7 @@ export default function ActivityDashboard() {
                         <Users className="h-4 w-4 text-emerald-500" />
                     </div>
                     <div className="text-2xl font-bold text-white">{stats.activeUsers24h}</div>
-                    <p className="text-xs text-slate-500">Unique active sessions</p>
+                    <p className="text-sm text-slate-500">Unique active sessions</p>
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -116,7 +116,7 @@ export default function ActivityDashboard() {
                         <LogIn className="h-4 w-4 text-blue-500" />
                     </div>
                     <div className="text-2xl font-bold text-white">{stats.logins24h}</div>
-                    <p className="text-xs text-slate-500">Successful sign-ins</p>
+                    <p className="text-sm text-slate-500">Successful sign-ins</p>
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -125,7 +125,7 @@ export default function ActivityDashboard() {
                         <BrainCircuit className="h-4 w-4 text-purple-500" />
                     </div>
                     <div className="text-2xl font-bold text-white">{stats.aiCalls24h}</div>
-                    <p className="text-xs text-slate-500">Generated insights</p>
+                    <p className="text-sm text-slate-500">Generated insights</p>
                 </div>
             </div>
 
@@ -136,8 +136,8 @@ export default function ActivityDashboard() {
                         <h3 className="font-semibold text-white">Top Active Users</h3>
                     </div>
                     <div className="p-0">
-                        <table className="w-full text-xs text-left">
-                            <thead className="bg-slate-950/20 text-slate-500">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-950/20 text-slate-400 text-sm">
                                 <tr>
                                     <th className="px-4 py-2 font-medium">User</th>
                                     <th className="px-4 py-2 font-medium text-right">Time</th>
@@ -149,7 +149,7 @@ export default function ActivityDashboard() {
                                     <tr key={u.id} className="hover:bg-slate-800/30">
                                         <td className="px-4 py-3">
                                             <div className="font-medium text-slate-200">{u.name}</div>
-                                            <div className="text-[10px] text-slate-500">{u.username}</div>
+                                            <div className="text-sm text-slate-500">{u.username}</div>
                                         </td>
                                         <td className="px-4 py-3 text-right text-indigo-400 font-medium">
                                             {u.sessionMinutes}m
@@ -172,7 +172,7 @@ export default function ActivityDashboard() {
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-slate-400 uppercase bg-slate-950/50 border-b border-slate-800">
+                            <thead className="text-sm text-slate-400 uppercase bg-slate-950/50 border-b border-slate-800">
                                 <tr>
                                     <th className="px-6 py-3">Timestamp</th>
                                     <th className="px-6 py-3">User</th>
@@ -183,15 +183,15 @@ export default function ActivityDashboard() {
                             <tbody className="divide-y divide-slate-800">
                                 {logs.map((log) => (
                                     <tr key={log.id} className="hover:bg-slate-800/50 transition-colors">
-                                        <td className="px-6 py-4 font-mono text-[10px] text-slate-500 whitespace-nowrap">
+                                        <td className="px-6 py-4 font-mono text-sm text-slate-500 whitespace-nowrap">
                                             {new Date(log.created_at).toLocaleString('bg-BG')}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-white">{log.gads_users?.name || 'Unknown'}</div>
-                                            <div className="text-[10px] text-slate-500">{log.gads_users?.username}</div>
+                                            <div className="text-sm text-slate-500">{log.gads_users?.username}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-sm font-bold uppercase
                                                 ${log.event_type === 'LOGIN' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
                                                     log.event_type === 'AI_ANALYSIS' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
                                                         log.event_type === 'HEARTBEAT' ? 'bg-slate-800 text-slate-500 opacity-60' :
@@ -200,7 +200,7 @@ export default function ActivityDashboard() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
-                                            <pre className="font-mono text-[9px] truncate">
+                                            <pre className="font-mono text-sm truncate">
                                                 {JSON.stringify(log.metadata)}
                                             </pre>
                                         </td>
