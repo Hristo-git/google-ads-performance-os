@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const results: { customerId: string; keywords: number; ads: number; error?: string; debug?: { totalKeywords: number; withQS: number } }[] = [];
+    const results: { customerId: string; keywords: number; ads: number; error?: string; qsError?: string; adsError?: string; debug?: { totalKeywords: number; withQS: number } }[] = [];
 
     try {
         // Discover all customer accounts from user_accounts table
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
                         snapshot_date: today,
                     }));
 
-                const qsSaved = await saveQSSnapshots(qsSnapshots);
+                const qsResult = await saveQSSnapshots(qsSnapshots);
 
                 // Fetch ads with strength
                 const ads = await getAdsWithStrength(refreshToken, undefined, customerId, undefined, dateRange);
@@ -100,15 +100,17 @@ export async function GET(request: Request) {
                         snapshot_date: today,
                     }));
 
-                const adsSaved = await saveAdStrengthSnapshots(adSnapshots);
+                const adsResult = await saveAdStrengthSnapshots(adSnapshots);
 
                 results.push({
                     customerId,
-                    keywords: qsSaved,
-                    ads: adsSaved,
+                    keywords: qsResult.saved,
+                    ads: adsResult.saved,
+                    ...(qsResult.error && { qsError: qsResult.error }),
+                    ...(adsResult.error && { adsError: adsResult.error }),
                     debug: { totalKeywords: keywords.length, withQS: withQS.length }
                 });
-                console.log(`[Cron/Snapshots] ${customerId}: ${qsSaved} QS + ${adsSaved} ads saved`);
+                console.log(`[Cron/Snapshots] ${customerId}: ${qsResult.saved} QS + ${adsResult.saved} ads saved`);
             } catch (err: any) {
                 console.error(`[Cron/Snapshots] Error for ${customerId}:`, err.message);
                 results.push({ customerId, keywords: 0, ads: 0, error: err.message });

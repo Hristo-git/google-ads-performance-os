@@ -252,36 +252,50 @@ export interface AdStrengthSnapshot {
   snapshot_date: string;
 }
 
-/** Upsert keyword QS snapshots for a given customer + date */
-export async function saveQSSnapshots(snapshots: QSSnapshot[]): Promise<number> {
-  if (snapshots.length === 0) return 0;
+/** Upsert keyword QS snapshots for a given customer + date (batched) */
+export async function saveQSSnapshots(snapshots: QSSnapshot[]): Promise<{ saved: number; error?: string }> {
+  if (snapshots.length === 0) return { saved: 0 };
 
-  const { error, count } = await supabaseAdmin
-    .from('gads_qs_snapshots')
-    .upsert(snapshots, { onConflict: 'customer_id,keyword_id,snapshot_date' })
-    .select('id');
+  const BATCH_SIZE = 500;
+  let totalSaved = 0;
 
-  if (error) {
-    console.error('[Snapshots] QS upsert error:', error.message);
-    return 0;
+  for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
+    const batch = snapshots.slice(i, i + BATCH_SIZE);
+    const { error } = await supabaseAdmin
+      .from('gads_qs_snapshots')
+      .upsert(batch, { onConflict: 'customer_id,keyword_id,snapshot_date' });
+
+    if (error) {
+      console.error(`[Snapshots] QS upsert error (batch ${i / BATCH_SIZE}):`, error.message, error.details, error.code);
+      return { saved: totalSaved, error: `${error.message} (code: ${error.code})` };
+    }
+    totalSaved += batch.length;
   }
-  return count || snapshots.length;
+
+  return { saved: totalSaved };
 }
 
-/** Upsert ad strength snapshots for a given customer + date */
-export async function saveAdStrengthSnapshots(snapshots: AdStrengthSnapshot[]): Promise<number> {
-  if (snapshots.length === 0) return 0;
+/** Upsert ad strength snapshots for a given customer + date (batched) */
+export async function saveAdStrengthSnapshots(snapshots: AdStrengthSnapshot[]): Promise<{ saved: number; error?: string }> {
+  if (snapshots.length === 0) return { saved: 0 };
 
-  const { error, count } = await supabaseAdmin
-    .from('gads_ad_strength_snapshots')
-    .upsert(snapshots, { onConflict: 'customer_id,ad_id,snapshot_date' })
-    .select('id');
+  const BATCH_SIZE = 500;
+  let totalSaved = 0;
 
-  if (error) {
-    console.error('[Snapshots] Ad Strength upsert error:', error.message);
-    return 0;
+  for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
+    const batch = snapshots.slice(i, i + BATCH_SIZE);
+    const { error } = await supabaseAdmin
+      .from('gads_ad_strength_snapshots')
+      .upsert(batch, { onConflict: 'customer_id,ad_id,snapshot_date' });
+
+    if (error) {
+      console.error(`[Snapshots] Ad Strength upsert error (batch ${i / BATCH_SIZE}):`, error.message, error.details, error.code);
+      return { saved: totalSaved, error: `${error.message} (code: ${error.code})` };
+    }
+    totalSaved += batch.length;
   }
-  return count || snapshots.length;
+
+  return { saved: totalSaved };
 }
 
 /**
