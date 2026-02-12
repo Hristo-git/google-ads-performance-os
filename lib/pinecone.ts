@@ -81,7 +81,7 @@ export async function upsertReport(reportId: string, content: string, metadata: 
 export async function deleteReport(reportId: string): Promise<boolean> {
     try {
         console.log('[Pinecone] Deleting report:', reportId);
-        await index.namespace('reports').deleteOne(reportId);
+        await index.namespace('reports').deleteOne({ id: reportId });
         console.log('[Pinecone] Deleted report:', reportId);
         return true;
     } catch (error) {

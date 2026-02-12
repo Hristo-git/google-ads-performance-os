@@ -112,7 +112,7 @@ const loadDateRange = (): { start: string; end: string } => {
             const parsed = JSON.parse(saved);
             if (parsed.start && parsed.end) return parsed;
         }
-    } catch {}
+    } catch { }
     return getLast7DaysRange();
 };
 
@@ -395,11 +395,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     // Persist date range to localStorage
     const setDateRange = (range: { start: string; end: string }) => {
         setDateRangeRaw(range);
-        try { localStorage.setItem(STORAGE_KEY_DATE_RANGE, JSON.stringify(range)); } catch {}
+        try { localStorage.setItem(STORAGE_KEY_DATE_RANGE, JSON.stringify(range)); } catch { }
     };
     const setDateRangeSelection = (val: string) => {
         setDateRangeSelectionRaw(val);
-        try { localStorage.setItem(STORAGE_KEY_DATE_SELECTION, val); } catch {}
+        try { localStorage.setItem(STORAGE_KEY_DATE_SELECTION, val); } catch { }
     };
     const [language, setLanguage] = useState<'bg' | 'en'>('bg');
     const [deviceBreakdown, setDeviceBreakdown] = useState<DeviceBreakdownType[]>([]);
@@ -1376,7 +1376,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             setLanguage={setLanguage}
                             customerId={selectedAccountId}
                             dateRange={dateRange}
-                            userRole={role as 'admin' | 'viewer'}
+                            userRole={((session?.user as any)?.role === 'admin') ? 'admin' : 'viewer'}
                         />
                     </main>
                 ) : navigation.view === 'diagnostics' ? (
