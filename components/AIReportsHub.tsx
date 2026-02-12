@@ -212,10 +212,14 @@ export default function AIReportsHub({
     const handleViewHistoryReport = (report: any) => {
         const template = REPORT_TEMPLATE_DEFINITIONS.find(t => t.id === report.templateId);
 
+        // Use reportTitle from Pinecone (includes model + period) with fallback to template name
+        const fallbackName = settings.language === 'en' ? (template?.nameEN || 'Report') : (template?.nameBG || 'Анализ');
+        const displayTitle = report.reportTitle || fallbackName;
+
         setCurrentReport({
             id: report.id,
             templateId: report.templateId as ReportTemplateId,
-            templateName: settings.language === 'en' ? (template?.nameEN || 'Report') : (template?.nameBG || 'Анализ'),
+            templateName: displayTitle,
             timestamp: report.timestamp,
             analysis: report.analysis,
             settings: {
