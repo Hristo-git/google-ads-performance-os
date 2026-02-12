@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const results: { customerId: string; keywords: number; ads: number; error?: string; qsError?: string; adsError?: string; debug?: { totalKeywords: number; withQS: number } }[] = [];
+    const results: { customerId: string; keywords: number; ads: number; error?: string; qsError?: string; adsError?: string; debug?: { totalKeywords: number; withQS: number; uniqueQS: number; uniqueAds: number } }[] = [];
 
     try {
         // Discover all customer accounts from user_accounts table
@@ -65,16 +65,16 @@ export async function GET(request: Request) {
                 // Fetch keywords with QS (all, not only enabled — paused may be re-enabled)
                 const keywords = await getKeywordsWithQS(refreshToken, undefined, customerId, dateRange);
                 const withQS = keywords.filter(k => k.qualityScore !== null);
-                console.log(`[Cron/Snapshots] ${customerId}: ${keywords.length} total keywords, ${withQS.length} with QS`);
-                if (keywords.length > 0 && withQS.length === 0) {
-                    // Debug: show first 3 keywords to inspect qualityScore values
-                    const sample = keywords.slice(0, 3).map(k => ({
-                        id: k.id, text: k.text, qs: k.qualityScore,
-                        expectedCtr: k.expectedCtr, impressions: k.impressions
-                    }));
-                    console.log(`[Cron/Snapshots] ${customerId} sample keywords:`, JSON.stringify(sample));
+
+                // Deduplicate by keyword_id (keyword_view returns 1 row per day per keyword)
+                const uniqueKeywords = new Map<string, typeof withQS[0]>();
+                for (const k of withQS) {
+                    if (!uniqueKeywords.has(k.id)) uniqueKeywords.set(k.id, k);
                 }
-                const qsSnapshots: QSSnapshot[] = withQS
+                const dedupedQS = Array.from(uniqueKeywords.values());
+                console.log(`[Cron/Snapshots] ${customerId}: ${keywords.length} total, ${withQS.length} with QS, ${dedupedQS.length} unique`);
+
+                const qsSnapshots: QSSnapshot[] = dedupedQS
                     .map(k => ({
                         customer_id: customerId,
                         keyword_id: k.id,
@@ -90,8 +90,15 @@ export async function GET(request: Request) {
 
                 // Fetch ads with strength
                 const ads = await getAdsWithStrength(refreshToken, undefined, customerId, undefined, dateRange);
-                const adSnapshots: AdStrengthSnapshot[] = ads
-                    .filter(a => a.adStrength && a.adStrength !== 'UNSPECIFIED')
+                const adsWithStrength = ads.filter(a => a.adStrength && a.adStrength !== 'UNSPECIFIED');
+
+                // Deduplicate by ad_id (ad view may return 1 row per day)
+                const uniqueAds = new Map<string, typeof adsWithStrength[0]>();
+                for (const a of adsWithStrength) {
+                    if (!uniqueAds.has(a.id)) uniqueAds.set(a.id, a);
+                }
+
+                const adSnapshots: AdStrengthSnapshot[] = Array.from(uniqueAds.values())
                     .map(a => ({
                         customer_id: customerId,
                         ad_id: a.id,
@@ -108,7 +115,7 @@ export async function GET(request: Request) {
                     ads: adsResult.saved,
                     ...(qsResult.error && { qsError: qsResult.error }),
                     ...(adsResult.error && { adsError: adsResult.error }),
-                    debug: { totalKeywords: keywords.length, withQS: withQS.length }
+                    debug: { totalKeywords: keywords.length, withQS: withQS.length, uniqueQS: dedupedQS.length, uniqueAds: uniqueAds.size }
                 });
                 console.log(`[Cron/Snapshots] ${customerId}: ${qsResult.saved} QS + ${adsResult.saved} ads saved`);
             } catch (err: any) {
