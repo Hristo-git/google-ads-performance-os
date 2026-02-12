@@ -758,7 +758,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             if (navigation.level === 'account' || navigation.level === 'campaign') {
                 try {
                     setLoadingMessage("Fetching search terms for N-Gram analysis...");
-                    const queryParams = `?customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}`;
+                    const queryParams = `?customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}&aggregate=true`;
                     const stRes = await fetch(`/api/google-ads/search-terms${queryParams}`);
                     if (stRes.ok) {
                         const stData = await stRes.json();

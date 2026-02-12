@@ -662,7 +662,7 @@ export async function getKeywordsWithQS(
             LIMIT 10000
         `);
 
-            const validKeywords = keywords.map((row) => ({
+            const allKeywords = keywords.map((row) => ({
                 id: row.ad_group_criterion?.criterion_id?.toString() || "",
                 adGroupId: row.ad_group?.id?.toString() || "",
                 text: row.ad_group_criterion?.keyword?.text || "",
@@ -679,6 +679,27 @@ export async function getKeywordsWithQS(
                 conversionValue: Number(row.metrics?.conversions_value) || 0,
                 cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
             }));
+
+            // Deduplicate by criterion_id: keyword_view returns 1 row per day with date ranges.
+            // Aggregate metrics across days for each unique keyword.
+            const keywordMap = new Map<string, KeywordWithQS>();
+            for (const k of allKeywords) {
+                const existing = keywordMap.get(k.id);
+                if (!existing) {
+                    keywordMap.set(k.id, { ...k });
+                } else {
+                    existing.impressions += k.impressions;
+                    existing.clicks += k.clicks;
+                    existing.cost += k.cost;
+                    existing.conversions += k.conversions;
+                    existing.conversionValue += k.conversionValue;
+                }
+            }
+            const validKeywords = Array.from(keywordMap.values());
+            // Recalculate CPC after aggregation
+            for (const k of validKeywords) {
+                k.cpc = k.clicks > 0 ? k.cost / k.clicks : 0;
+            }
 
             return validKeywords;
         } catch (error: unknown) {
@@ -748,7 +769,7 @@ export async function getAdsWithStrength(
                 'EXCELLENT': 'EXCELLENT'
             };
 
-            return ads.map((row) => {
+            const allAds = ads.map((row) => {
                 const rawStrength = String(row.ad_group_ad?.ad_strength);
                 const rsa = row.ad_group_ad?.ad?.responsive_search_ad;
                 const rda = row.ad_group_ad?.ad?.responsive_display_ad;
@@ -778,6 +799,30 @@ export async function getAdsWithStrength(
                     roas: cost > 0 ? conversionValue / cost : null,
                 };
             });
+
+            // Deduplicate by ad ID: ad_group_ad may return 1 row per day with date ranges.
+            // Aggregate metrics across days for each unique ad.
+            const adMap = new Map<string, AdWithStrength>();
+            for (const a of allAds) {
+                const existing = adMap.get(a.id);
+                if (!existing) {
+                    adMap.set(a.id, { ...a });
+                } else {
+                    existing.impressions += a.impressions;
+                    existing.clicks += a.clicks;
+                    existing.cost += a.cost;
+                    existing.conversions += a.conversions;
+                    existing.conversionValue += a.conversionValue;
+                }
+            }
+            const dedupedAds = Array.from(adMap.values());
+            // Recalculate derived metrics after aggregation
+            for (const a of dedupedAds) {
+                a.ctr = a.impressions > 0 ? a.clicks / a.impressions : 0;
+                a.roas = a.cost > 0 ? a.conversionValue / a.cost : null;
+            }
+
+            return dedupedAds;
         } catch (error: unknown) {
             logApiError("API call", error);
             throw error;
