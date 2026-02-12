@@ -281,7 +281,10 @@ function mapStatus(status: any): string {
     return String(status || 'UNKNOWN');
 }
 
-export async function getCampaigns(refreshToken: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false): Promise<CampaignPerformance[]> {
+import { logActivity } from "./activity-logger";
+
+export async function getCampaigns(refreshToken: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false, userId?: string): Promise<CampaignPerformance[]> {
+    if (userId) logActivity(userId, 'API_CALL', { category: 'campaigns', customerId });
     return withCache('campaigns', [customerId, dateRange, onlyEnabled], async () => {
         const customer = getGoogleAdsCustomer(refreshToken, customerId);
         const dateFilter = getDateFilter(dateRange);
@@ -405,7 +408,8 @@ export async function getAccountInfo(refreshToken: string, customerId?: string) 
     });
 }
 
-export async function getAdGroups(refreshToken: string, campaignId?: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false): Promise<AdGroupPerformance[]> {
+export async function getAdGroups(refreshToken: string, campaignId?: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false, userId?: string): Promise<AdGroupPerformance[]> {
+    if (userId) logActivity(userId, 'API_CALL', { category: 'adGroups', customerId, campaignId });
     return withCache('adGroups', [campaignId, customerId, dateRange, onlyEnabled], async () => {
         const customer = getGoogleAdsCustomer(refreshToken, customerId);
         const dateFilter = getDateFilter(dateRange);
@@ -1682,8 +1686,10 @@ export async function getLandingPagePerformance(
     refreshToken: string,
     customerId?: string,
     dateRange?: DateRange,
-    campaignIds?: string[]
+    campaignIds?: string[],
+    userId?: string
 ): Promise<LandingPagePerformance[]> {
+    if (userId) logActivity(userId, 'API_CALL', { category: 'landingPages', customerId });
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
     const dateFilter = getDateFilter(dateRange);
     const campaignFilter = campaignIds?.length
