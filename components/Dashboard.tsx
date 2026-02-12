@@ -101,6 +101,26 @@ const getLast7DaysRange = () => {
     };
 };
 
+const STORAGE_KEY_DATE_RANGE = 'gads_dateRange';
+const STORAGE_KEY_DATE_SELECTION = 'gads_dateRangeSelection';
+
+const loadDateRange = (): { start: string; end: string } => {
+    if (typeof window === 'undefined') return getLast7DaysRange();
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY_DATE_RANGE);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.start && parsed.end) return parsed;
+        }
+    } catch {}
+    return getLast7DaysRange();
+};
+
+const loadDateSelection = (): string => {
+    if (typeof window === 'undefined') return 'last-7';
+    return localStorage.getItem(STORAGE_KEY_DATE_SELECTION) || 'last-7';
+};
+
 // Helper to categorize campaigns
 const getCampaignCategory = (c: any) => {
     const name = (c.name || "").trim().toLowerCase().replace(/\s+/g, ' ');
@@ -365,12 +385,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
     const [strategicBreakdown, setStrategicBreakdown] = useState<any>(null);
     const [selectedAccountId, setSelectedAccountId] = useState<string>(DEFAULT_ACCOUNT_ID);
-    const [dateRange, setDateRange] = useState<{ start: string, end: string }>(getLast7DaysRange());
+    const [dateRange, setDateRangeRaw] = useState<{ start: string, end: string }>(loadDateRange);
     const [sortBy, setSortBy] = useState<string>('cost'); // Default sort by cost
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // Default descending
     const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // Filter by category
     const [showAIModal, setShowAIModal] = useState(false); // AI Insights modal
-    const [dateRangeSelection, setDateRangeSelection] = useState<string>('last-7'); // Track date selection explicitly
+    const [dateRangeSelection, setDateRangeSelectionRaw] = useState<string>(loadDateSelection);
+
+    // Persist date range to localStorage
+    const setDateRange = (range: { start: string; end: string }) => {
+        setDateRangeRaw(range);
+        try { localStorage.setItem(STORAGE_KEY_DATE_RANGE, JSON.stringify(range)); } catch {}
+    };
+    const setDateRangeSelection = (val: string) => {
+        setDateRangeSelectionRaw(val);
+        try { localStorage.setItem(STORAGE_KEY_DATE_SELECTION, val); } catch {}
+    };
     const [language, setLanguage] = useState<'bg' | 'en'>('bg');
     const [deviceBreakdown, setDeviceBreakdown] = useState<DeviceBreakdownType[]>([]);
     const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([]);
