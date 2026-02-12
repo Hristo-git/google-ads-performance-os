@@ -10,7 +10,7 @@ import ConversionBreakdown from "./ConversionBreakdown";
 import GeographicPerformance from "./GeographicPerformance";
 import NegativeKeywordMiner from "./NegativeKeywordMiner";
 import ReactMarkdown from 'react-markdown';
-import { Campaign, AdGroup, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
+import { Campaign, AdGroup, NavigationState, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
 
 interface StrategicInsightsProps {
     campaigns: Campaign[];
@@ -28,6 +28,7 @@ interface StrategicInsightsProps {
     searchTerms: SearchTerm[];
     customerId: string;
     filteredCampaignIds?: string[];
+    onNavigate?: (nav: NavigationState) => void;
 }
 
 export default function StrategicInsights({
@@ -45,7 +46,8 @@ export default function StrategicInsights({
     deviceBreakdown,
     searchTerms,
     customerId,
-    filteredCampaignIds
+    filteredCampaignIds,
+    onNavigate
 }: StrategicInsightsProps) {
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
@@ -266,12 +268,17 @@ export default function StrategicInsights({
                             {highLostISCampaigns.length > 0 ? (
                                 <div className="space-y-2">
                                     {highLostISCampaigns.map(c => (
-                                        <div key={c.id} className="bg-slate-700/30 rounded-lg p-3 border border-slate-700">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-white font-medium">{c.name}</span>
+                                        <div
+                                            key={c.id}
+                                            onClick={() => onNavigate?.({ level: 'campaign', view: 'dashboard', campaignId: c.id, campaignName: c.name })}
+                                            className={`bg-slate-700/30 rounded-lg p-3 border border-slate-700 flex justify-between items-center ${onNavigate ? 'cursor-pointer hover:bg-slate-700/60 hover:border-slate-600 transition-colors group' : ''}`}
+                                        >
+                                            <span className="text-white font-medium">{c.name}</span>
+                                            <div className="flex items-center gap-2">
                                                 <span className="text-red-400 font-bold">
                                                     {(c.searchLostISRank! * 100).toFixed(1)}% Lost IS
                                                 </span>
+                                                {onNavigate && <span className="text-slate-500 group-hover:text-slate-300 transition-colors">&rarr;</span>}
                                             </div>
                                         </div>
                                     ))}
@@ -289,16 +296,29 @@ export default function StrategicInsights({
                             </h3>
                             {lowQSAdGroups.length > 0 ? (
                                 <div className="space-y-2">
-                                    {lowQSAdGroups.map(ag => (
-                                        <div key={ag.id} className="bg-slate-700/30 rounded-lg p-3 border border-slate-700">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-white font-medium">{ag.name}</span>
-                                                <span className="text-amber-400 font-bold">
-                                                    QS: {ag.avgQualityScore?.toFixed(1)}
-                                                </span>
+                                    {lowQSAdGroups.map(ag => {
+                                        const campaign = campaigns.find(c => String(c.id) === String(ag.campaignId));
+                                        return (
+                                            <div
+                                                key={ag.id}
+                                                onClick={() => onNavigate?.({ level: 'adgroup', view: 'dashboard', campaignId: ag.campaignId, campaignName: campaign?.name, adGroupId: ag.id, adGroupName: ag.name })}
+                                                className={`bg-slate-700/30 rounded-lg p-3 border border-slate-700 ${onNavigate ? 'cursor-pointer hover:bg-slate-700/60 hover:border-slate-600 transition-colors group' : ''}`}
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <span className="text-white font-medium">{ag.name}</span>
+                                                        {campaign && <span className="text-slate-500 text-xs ml-2">{campaign.name}</span>}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-amber-400 font-bold">
+                                                            QS: {ag.avgQualityScore?.toFixed(1)}
+                                                        </span>
+                                                        {onNavigate && <span className="text-slate-500 group-hover:text-slate-300 transition-colors">&rarr;</span>}
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             ) : (
                                 <p className="text-slate-400 text-sm">All ad groups have acceptable Quality Scores.</p>
@@ -313,16 +333,29 @@ export default function StrategicInsights({
                             </h3>
                             {poorAdsAdGroups.length > 0 ? (
                                 <div className="space-y-2">
-                                    {poorAdsAdGroups.map(ag => (
-                                        <div key={ag.id} className="bg-slate-700/30 rounded-lg p-3 border border-slate-700">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-white font-medium">{ag.name}</span>
-                                                <span className="text-orange-400 font-bold">
-                                                    {ag.poorAdsCount} poor ad{ag.poorAdsCount > 1 ? 's' : ''}
-                                                </span>
+                                    {poorAdsAdGroups.map(ag => {
+                                        const campaign = campaigns.find(c => String(c.id) === String(ag.campaignId));
+                                        return (
+                                            <div
+                                                key={ag.id}
+                                                onClick={() => onNavigate?.({ level: 'adgroup', view: 'dashboard', campaignId: ag.campaignId, campaignName: campaign?.name, adGroupId: ag.id, adGroupName: ag.name })}
+                                                className={`bg-slate-700/30 rounded-lg p-3 border border-slate-700 ${onNavigate ? 'cursor-pointer hover:bg-slate-700/60 hover:border-slate-600 transition-colors group' : ''}`}
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <span className="text-white font-medium">{ag.name}</span>
+                                                        {campaign && <span className="text-slate-500 text-xs ml-2">{campaign.name}</span>}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-orange-400 font-bold">
+                                                            {ag.poorAdsCount} poor ad{ag.poorAdsCount > 1 ? 's' : ''}
+                                                        </span>
+                                                        {onNavigate && <span className="text-slate-500 group-hover:text-slate-300 transition-colors">&rarr;</span>}
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             ) : (
                                 <p className="text-slate-400 text-sm">No ad groups with poor Ad Strength detected.</p>

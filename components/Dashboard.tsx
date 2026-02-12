@@ -1333,6 +1333,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         searchTerms={searchTerms}
                         customerId={selectedAccountId}
                         filteredCampaignIds={filteredCampaignIds}
+                        onNavigate={setNavigation}
                     />
                 ) : navigation.view === 'reports' ? (
                     <main className="flex-1 overflow-auto p-6">
