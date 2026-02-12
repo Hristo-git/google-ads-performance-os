@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const results: { customerId: string; keywords: number; ads: number; error?: string }[] = [];
+    const results: { customerId: string; keywords: number; ads: number; error?: string; debug?: { totalKeywords: number; withQS: number } }[] = [];
 
     try {
         // Discover all customer accounts from user_accounts table
