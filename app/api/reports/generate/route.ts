@@ -72,15 +72,28 @@ export async function POST(request: Request) {
         const promptBuilder = REPORT_TEMPLATES[templateId];
         let prompt = customPrompt || promptBuilder(data, settings.language);
 
-        // Inject context signals (device/geo/hour/day/auction/LP/conversion actions + PMax)
+        // Build data inventory (tells AI exactly what data is available)
+        const inventoryItems: string[] = [];
+        if (data.campaigns?.length > 0) inventoryItems.push(`Campaigns: ${data.campaigns.length}`);
+        if (data.adGroups?.length > 0) inventoryItems.push(`Ad Groups: ${data.adGroups.length}`);
+        if (data.keywords?.length > 0) inventoryItems.push(`Keywords: ${data.keywords.length}`);
+        if (data.ads?.length > 0) inventoryItems.push(`Ads: ${data.ads.length}`);
+        if (data.searchTerms?.length > 0) inventoryItems.push(`Search Terms: ${data.searchTerms.length}`);
+        if (data.contextBlock) inventoryItems.push('Context Signals (device/geo/hour/day/auction/LP/conversions)');
+        if (data.pmaxBlock) inventoryItems.push('PMax Context (asset groups/inventory/search categories)');
+        const dataInventory = inventoryItems.length > 0
+            ? `=== DATA INVENTORY ===\nAVAILABLE: ${inventoryItems.join(', ')}\nRULE: Do NOT claim any listed data is missing.\n`
+            : '';
+
+        // Inject context signals + data inventory
         const contextBlock = data.contextBlock || '';
         const pmaxBlock = data.pmaxBlock || '';
-        if (contextBlock || pmaxBlock) {
-            const contextInjection = [contextBlock, pmaxBlock].filter(Boolean).join('\n\n');
+        const injections = [dataInventory, contextBlock, pmaxBlock].filter(Boolean).join('\n\n');
+        if (injections) {
             if (prompt.includes('=== ANALYSIS REQUIREMENTS ===')) {
-                prompt = prompt.replace('=== ANALYSIS REQUIREMENTS ===', `${contextInjection}\n\n=== ANALYSIS REQUIREMENTS ===`);
+                prompt = prompt.replace('=== ANALYSIS REQUIREMENTS ===', `${injections}\n\n=== ANALYSIS REQUIREMENTS ===`);
             } else {
-                prompt = `${prompt}\n\n${contextInjection}`;
+                prompt = `${prompt}\n\n${injections}`;
             }
         }
 
@@ -133,19 +146,22 @@ ${languageConstraint}
 ${analysis}
 
 === YOUR TASK ===
-1. **Evaluate** the quality of this analysis:
-   - Are recommendations specific enough?
-   - Are there any missing insights?
-   - Is the prioritization logical?
+1. **Validate** — check for these specific errors:
+   - Any "industry benchmark" or "typical ROAS" cited without a verifiable source? → REMOVE and replace with data verification steps
+   - Any "estimated X conversions/revenue" without an explicit formula? → Either add the formula or remove the claim
+   - Any device bid modifier recommendations for Smart Bidding campaigns (tCPA/tROAS/Maximize)? → Replace with valid alternatives (campaign segmentation, value rules, LP/UX improvements)
+   - Any claim that data is "missing" or "unavailable" when it IS present in the input? → Correct immediately
+   - Any "<X conversions per ad group" threshold applied to Smart Bidding? → Reframe to campaign-level learning
 
 2. **Enhance** the analysis:
    - Add depth where it's surface-level
-   - Provide more specific numbers/examples
-   - Sharpen recommendations
+   - Provide more specific numbers with formulas (show your math)
+   - Sharpen recommendations — each must have: target, specific setting, KPI, guardrail
+   - Ensure every projection is marked as "**Projection (model):** [formula] = [result]"
 
 3. **Rewrite** the final output as an improved version.
 
-Output the enhanced analysis in the same structure and format, but with deeper insights and more actionable recommendations.`
+Output the enhanced analysis directly — no meta-commentary, no "reviewer notes", no preamble about what was changed.`
                             : `Ти си senior performance marketing експерт, преглеждащ следния AI-генериран анализ.
 
 ${languageConstraint}
@@ -154,19 +170,22 @@ ${languageConstraint}
 ${analysis}
 
 === ТВОЯТА ЗАДАЧА ===
-1. **Оцени** качеството на този анализ:
-   - Достатъчно ли специфични са препоръките?
-   - Липсват ли важни прозрения?
-   - Логична ли е приоритизацията?
+1. **Валидирай** — провери за тези конкретни грешки:
+   - Има ли "индустриални бенчмаркове" или "типичен ROAS" без верифицируем източник? → ПРЕМАХНИ и замени с стъпки за верификация на данните
+   - Има ли "очаквани X конверсии/приходи" без формула? → Добави формулата или премахни твърдението
+   - Има ли препоръки за device bid modifiers за Smart Bidding кампании (tCPA/tROAS/Maximize)? → Замени с валидни алтернативи (сегментация по device, value rules, LP/UX подобрения)
+   - Има ли твърдения, че данни "липсват" или "не са налични", когато реално СА в input-а? → Коригирай веднага
+   - Има ли "<X конверсии на ad group" праг, приложен към Smart Bidding? → Рефреймни към campaign-level learning
 
 2. **Подобри** анализа:
    - Добави дълбочина там, където е повърхностен
-   - Предостави по-конкретни числа/примери
-   - Изостри препоръките
+   - Предостави по-конкретни числа с формули (покажи математиката)
+   - Изостри препоръките — всяка трябва да има: target, конкретна настройка, KPI, guardrail
+   - Маркирай всяка прогноза като "**Прогноза (модел):** [формула] = [резултат]"
 
 3. **Препиши** финалния output като подобрена версия.
 
-Изведи подобрения анализ в същата структура и формат, но с по-дълбоки прозрения и по-action-able препоръки.`;
+Изведи подобрения анализ директно — без мета-коментари, без "бележки на рецензент", без предговор.`;
 
                         analysis = ''; // Reset — pass 2 output replaces pass 1
                         const pass2Stream = anthropic.messages.stream({
