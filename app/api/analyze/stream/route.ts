@@ -221,9 +221,8 @@ export async function POST(request: Request) {
                             controller.enqueue(new TextEncoder().encode(chunk));
                         }
                     }
-                    controller.close();
-
-                    // Post-stream: store in Pinecone + log (fire-and-forget)
+                    // Store in Pinecone + log BEFORE closing stream
+                    // (Vercel serverless may kill the function after controller.close())
                     try {
                         let contextLabel = 'Акаунт';
                         if (data.level === 'adgroup' && data.adGroup?.name) contextLabel = `AG: ${data.adGroup.name}`;
@@ -240,27 +239,28 @@ export async function POST(request: Request) {
                         const reportTitle = `[${modelLabel}] ${contextLabel} Analysis${periodLabel} - ${new Date().toLocaleDateString('bg-BG')}`;
                         const reportId = `insight_${data.level}_${data.analysisType || 'gen'}_${Date.now()}`;
 
-                        await upsertReport(reportId, fullText, {
-                            customerId: data.customerId || 'unknown',
-                            campaignId: data.campaignId || 'unknown',
-                            timestamp: new Date().toISOString(),
-                            type: 'ai_analysis',
-                            title: reportTitle,
-                            model: modelId,
-                            analysis_content: fullText,
-                        });
-
-                        if (session?.user?.id) {
-                            await logActivity(session.user.id, 'AI_ANALYSIS', {
+                        await Promise.all([
+                            upsertReport(reportId, fullText, {
+                                customerId: data.customerId || 'unknown',
+                                campaignId: data.campaignId || 'unknown',
+                                timestamp: new Date().toISOString(),
+                                type: 'ai_analysis',
+                                title: reportTitle,
+                                model: modelId,
+                                analysis_content: fullText,
+                            }),
+                            session?.user?.id ? logActivity(session.user.id, 'AI_ANALYSIS', {
                                 level: data.level,
                                 analysisType: data.analysisType,
                                 context: contextLabel,
                                 streaming: true,
-                            });
-                        }
+                            }) : Promise.resolve(),
+                        ]);
                     } catch (storeErr) {
                         console.error("Post-stream storage failed:", storeErr);
                     }
+
+                    controller.close();
                 } catch (err) {
                     const errMsg = err instanceof Error ? err.message : String(err);
                     controller.enqueue(new TextEncoder().encode(`\n\n[ERROR: ${errMsg}]`));

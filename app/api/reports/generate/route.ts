@@ -222,9 +222,8 @@ ${analysis}
                         }
                     }
 
-                    controller.close();
-
-                    // Post-stream: store in Pinecone + log (fire-and-forget)
+                    // Store in Pinecone + log BEFORE closing stream
+                    // (Vercel serverless may kill the function after controller.close())
                     try {
                         const templateNames: Record<string, string> = {
                             quality_score_diagnostics: 'QS Diagnostics',
@@ -249,27 +248,28 @@ ${analysis}
                         const reportTitle = `[${modelLabel}] ${contextLabel}${periodLabel}`;
                         const reportId = `${templateId}_${Date.now()}`;
 
-                        if (session?.user?.id) {
-                            await logActivity(session.user.id, 'AI_ANALYSIS', {
+                        await Promise.all([
+                            session?.user?.id ? logActivity(session.user.id, 'AI_ANALYSIS', {
                                 level: 'report',
                                 templateId,
                                 context: contextLabel,
                                 model: modelLabel,
                                 expertMode: settings.expertMode,
                                 responseLength: analysis?.length || 0
-                            });
-                        }
-
-                        await upsertReport(reportId, analysis, {
-                            templateId,
-                            audience: settings.audience,
-                            language: settings.language,
-                            customerId: data.customerId || 'unknown',
-                            reportTitle,
-                        });
+                            }) : Promise.resolve(),
+                            upsertReport(reportId, analysis, {
+                                templateId,
+                                audience: settings.audience,
+                                language: settings.language,
+                                customerId: data.customerId || 'unknown',
+                                reportTitle,
+                            }),
+                        ]);
                     } catch (storeError) {
                         console.error("Failed to store report in Pinecone:", storeError);
                     }
+
+                    controller.close();
                 } catch (err) {
                     const errMsg = err instanceof Error ? err.message : String(err);
                     controller.enqueue(encoder.encode(`\n\n[ERROR: ${errMsg}]`));
