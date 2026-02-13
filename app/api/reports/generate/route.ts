@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
 import { REPORT_TEMPLATES } from "@/lib/prompts";
 import { upsertReport } from "@/lib/pinecone";
+import { logActivity } from "@/lib/activity-logger";
 import type { ReportTemplateId, ReportSettings } from "@/types/google-ads";
 
 // Allow up to 300s for 2-pass Claude analysis (requires Vercel Pro)
@@ -172,8 +173,21 @@ ${analysis}
                 }
             }
 
-            const reportTitle = `[${modelLabel}] ${templateNames[templateId] || templateId}${periodLabel}`;
+            const contextLabel = templateNames[templateId] || templateId;
+            const reportTitle = `[${modelLabel}] ${contextLabel}${periodLabel}`;
             const reportId = `${templateId}_${Date.now()}`;
+
+            // Log activity
+            if (session?.user?.id) {
+                await logActivity(session.user.id, 'AI_ANALYSIS', {
+                    level: 'report',
+                    templateId,
+                    context: contextLabel,
+                    model: modelLabel,
+                    expertMode: settings.expertMode,
+                    responseLength: analysis?.length || 0
+                });
+            }
 
             await upsertReport(reportId, analysis, {
                 templateId,
