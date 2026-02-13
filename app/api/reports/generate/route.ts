@@ -70,12 +70,25 @@ export async function POST(request: Request) {
 
         // Build prompt using template (no RAG — each report is a clean snapshot of the period)
         const promptBuilder = REPORT_TEMPLATES[templateId];
-        const prompt = customPrompt || promptBuilder(data, settings.language);
+        let prompt = customPrompt || promptBuilder(data, settings.language);
+
+        // Inject context signals (device/geo/hour/day/auction/LP/conversion actions + PMax)
+        const contextBlock = data.contextBlock || '';
+        const pmaxBlock = data.pmaxBlock || '';
+        if (contextBlock || pmaxBlock) {
+            const contextInjection = [contextBlock, pmaxBlock].filter(Boolean).join('\n\n');
+            // Insert before "=== ANALYSIS REQUIREMENTS ===" if present, otherwise append
+            if (prompt.includes('=== ANALYSIS REQUIREMENTS ===')) {
+                prompt = prompt.replace('=== ANALYSIS REQUIREMENTS ===', `${contextInjection}\n\n=== ANALYSIS REQUIREMENTS ===`);
+            } else {
+                prompt = `${prompt}\n\n${contextInjection}`;
+            }
+        }
 
         // First pass: Generate initial analysis
         const firstPassResponse = await anthropic.messages.create({
             model: modelId,
-            max_tokens: 4000,
+            max_tokens: 8192,
             system: languageConstraint,
             messages: [
                 {
@@ -137,7 +150,7 @@ ${analysis}
 
             const secondPassResponse = await anthropic.messages.create({
                 model: modelId,
-                max_tokens: 4000,
+                max_tokens: 8192,
                 system: languageConstraint,
                 messages: [
                     {

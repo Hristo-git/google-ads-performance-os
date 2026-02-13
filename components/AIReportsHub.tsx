@@ -192,6 +192,29 @@ export default function AIReportsHub({
                 }
             }
 
+            // Fetch context signals (device/geo/hour/day/auction/LP/conversions + PMax)
+            if (customerId && dateRange) {
+                try {
+                    console.log("[AIReports] Fetching analysis context signals...");
+                    const pmaxIds = (campaigns || [])
+                        .filter((c: any) => c.advertisingChannelType === 'PERFORMANCE_MAX' || c.advertisingChannelType === 6)
+                        .map((c: any) => c.id)
+                        .filter(Boolean);
+                    const pmaxParam = pmaxIds.length > 0 ? `&pmaxCampaignIds=${pmaxIds.join(',')}` : '';
+                    const ctxRes = await fetch(
+                        `/api/google-ads/analysis-context?customerId=${customerId}&startDate=${dateRange.start}&endDate=${dateRange.end}&language=${settings.language}${pmaxParam}`
+                    );
+                    if (ctxRes.ok) {
+                        const ctxData = await ctxRes.json();
+                        if (ctxData.contextBlock) dataPayload.contextBlock = ctxData.contextBlock;
+                        if (ctxData.pmaxBlock) dataPayload.pmaxBlock = ctxData.pmaxBlock;
+                        console.log(`[AIReports] Context signals loaded (${(ctxData.contextBlock || '').length} chars)`);
+                    }
+                } catch (e) {
+                    console.warn("[AIReports] Failed to fetch context signals (non-blocking)", e);
+                }
+            }
+
             const response = await fetch('/api/reports/generate', {
                 method: 'POST',
                 headers: {

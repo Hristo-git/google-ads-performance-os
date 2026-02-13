@@ -780,6 +780,27 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             }
             // ------------------------------------------------------------
 
+            // --- Fetch Context Signals (device/geo/hour/auction/LP/conversions + PMax) ---
+            try {
+                setLoadingMessage("Fetching context signals...");
+                const pmaxIds = campaigns
+                    .filter(c => c.advertisingChannelType === 'PERFORMANCE_MAX' || (c as any).advertisingChannelType === 6)
+                    .map(c => c.id)
+                    .filter(Boolean);
+                const pmaxParam = pmaxIds.length > 0 ? `&pmaxCampaignIds=${pmaxIds.join(',')}` : '';
+                const ctxRes = await fetch(
+                    `/api/google-ads/analysis-context?customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}&language=${language}${pmaxParam}`
+                );
+                if (ctxRes.ok) {
+                    const ctxData = await ctxRes.json();
+                    if (ctxData.contextBlock) dataToAnalyze.contextBlock = ctxData.contextBlock;
+                    if (ctxData.pmaxBlock) dataToAnalyze.pmaxBlock = ctxData.pmaxBlock;
+                }
+            } catch (err) {
+                console.warn("Failed to fetch context signals (non-blocking)", err);
+            }
+            // ------------------------------------------------------------
+
             setLoadingMessage("Streaming AI analysis...");
             const res = await fetch("/api/analyze/stream", {
                 method: "POST",
