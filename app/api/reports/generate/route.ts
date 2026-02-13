@@ -5,6 +5,7 @@ import anthropic from "@/lib/anthropic";
 import { REPORT_TEMPLATES } from "@/lib/prompts";
 import { upsertReport } from "@/lib/pinecone";
 import { logActivity } from "@/lib/activity-logger";
+import { calculateDerivedMetrics, buildEnhancedDataInventory } from "@/lib/derived-metrics";
 import type { ReportTemplateId, ReportSettings } from "@/types/google-ads";
 
 // Streaming bypasses Vercel's time-to-first-byte timeout
@@ -72,23 +73,14 @@ export async function POST(request: Request) {
         const promptBuilder = REPORT_TEMPLATES[templateId];
         let prompt = customPrompt || promptBuilder(data, settings.language);
 
-        // Build data inventory (tells AI exactly what data is available)
-        const inventoryItems: string[] = [];
-        if (data.campaigns?.length > 0) inventoryItems.push(`Campaigns: ${data.campaigns.length}`);
-        if (data.adGroups?.length > 0) inventoryItems.push(`Ad Groups: ${data.adGroups.length}`);
-        if (data.keywords?.length > 0) inventoryItems.push(`Keywords: ${data.keywords.length}`);
-        if (data.ads?.length > 0) inventoryItems.push(`Ads: ${data.ads.length}`);
-        if (data.searchTerms?.length > 0) inventoryItems.push(`Search Terms: ${data.searchTerms.length}`);
-        if (data.contextBlock) inventoryItems.push('Context Signals (device/geo/hour/day/auction/LP/conversions)');
-        if (data.pmaxBlock) inventoryItems.push('PMax Context (asset groups/inventory/search categories)');
-        const dataInventory = inventoryItems.length > 0
-            ? `=== DATA INVENTORY ===\nAVAILABLE: ${inventoryItems.join(', ')}\nRULE: Do NOT claim any listed data is missing.\n`
-            : '';
+        // Build enhanced data inventory + derived metrics
+        const dataInventory = buildEnhancedDataInventory(data);
+        const derivedMetrics = calculateDerivedMetrics(data.campaigns, data.adGroups, data.deviceData);
 
-        // Inject context signals + data inventory
+        // Inject context signals + data inventory + derived metrics
         const contextBlock = data.contextBlock || '';
         const pmaxBlock = data.pmaxBlock || '';
-        const injections = [dataInventory, contextBlock, pmaxBlock].filter(Boolean).join('\n\n');
+        const injections = [dataInventory, derivedMetrics, contextBlock, pmaxBlock].filter(Boolean).join('\n\n');
         if (injections) {
             if (prompt.includes('=== ANALYSIS REQUIREMENTS ===')) {
                 prompt = prompt.replace('=== ANALYSIS REQUIREMENTS ===', `${injections}\n\n=== ANALYSIS REQUIREMENTS ===`);
@@ -152,12 +144,17 @@ ${analysis}
    - Any device bid modifier recommendations for Smart Bidding campaigns (tCPA/tROAS/Maximize)? → Replace with valid alternatives (campaign segmentation, value rules, LP/UX improvements)
    - Any claim that data is "missing" or "unavailable" when it IS present in the input? → Correct immediately
    - Any "<X conversions per ad group" threshold applied to Smart Bidding? → Reframe to campaign-level learning
+   - Any fabricated CPC/CVR/AOV values ("at €0.50 CPC" or "assuming 3% CVR")? → REMOVE entirely
+   - Any dramatic language ("survival mode", "catastrophic", "alarming")? → Replace with neutral phrasing
+   - Any anomaly (CVR>10%, ROAS>25x, device gap>3x) not flagged? → Add anomaly flag
+   - Are pre-calculated derived metrics used instead of LLM math? → Ensure derived values are cited
 
 2. **Enhance** the analysis:
    - Add depth where it's surface-level
    - Provide more specific numbers with formulas (show your math)
    - Sharpen recommendations — each must have: target, specific setting, KPI, guardrail
    - Ensure every projection is marked as "**Projection (model):** [formula] = [result]"
+   - Add Confidence: HIGH/MEDIUM/LOW to each major recommendation
 
 3. **Rewrite** the final output as an improved version.
 
@@ -176,12 +173,17 @@ ${analysis}
    - Има ли препоръки за device bid modifiers за Smart Bidding кампании (tCPA/tROAS/Maximize)? → Замени с валидни алтернативи (сегментация по device, value rules, LP/UX подобрения)
    - Има ли твърдения, че данни "липсват" или "не са налични", когато реално СА в input-а? → Коригирай веднага
    - Има ли "<X конверсии на ad group" праг, приложен към Smart Bidding? → Рефреймни към campaign-level learning
+   - Има ли фабрикувани CPC/CVR/AOV стойности ("при €0.50 CPC" или "при 3% CVR")? → ПРЕМАХНИ изцяло
+   - Има ли драматичен език ("режим на оцеляване", "катастрофален", "алармиращ")? → Замени с неутрална формулировка
+   - Има ли аномалия (CVR>10%, ROAS>25x, device gap>3x), която не е маркирана? → Добави флаг за аномалия
+   - Използвани ли са pre-calculated derived metrics вместо LLM математика? → Цитирай derived стойностите
 
 2. **Подобри** анализа:
    - Добави дълбочина там, където е повърхностен
    - Предостави по-конкретни числа с формули (покажи математиката)
    - Изостри препоръките — всяка трябва да има: target, конкретна настройка, KPI, guardrail
    - Маркирай всяка прогноза като "**Прогноза (модел):** [формула] = [резултат]"
+   - Добави Confidence: HIGH/MEDIUM/LOW към всяка основна препоръка
 
 3. **Препиши** финалния output като подобрена версия.
 

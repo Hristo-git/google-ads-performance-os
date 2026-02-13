@@ -210,6 +210,7 @@ export default function AIReportsHub({
                         const ctxData = await ctxRes.json();
                         if (ctxData.contextBlock) dataPayload.contextBlock = ctxData.contextBlock;
                         if (ctxData.pmaxBlock) dataPayload.pmaxBlock = ctxData.pmaxBlock;
+                        if (ctxData.context?.device) dataPayload.deviceData = ctxData.context.device;
                         console.log(`[AIReports] Context signals loaded (${(ctxData.contextBlock || '').length} chars)`);
                     }
                 } catch (e) {
