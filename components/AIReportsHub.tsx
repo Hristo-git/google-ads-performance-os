@@ -228,8 +228,16 @@ export default function AIReportsHub({
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to generate report');
+                const text = await response.text();
+                let errorMsg: string;
+                try {
+                    const errorData = JSON.parse(text);
+                    errorMsg = errorData.error || `HTTP ${response.status}`;
+                    if (errorData.details) errorMsg += ` — ${errorData.details}`;
+                } catch {
+                    errorMsg = `HTTP ${response.status}: ${text.slice(0, 200)}`;
+                }
+                throw new Error(errorMsg);
             }
 
             const result = await response.json();
