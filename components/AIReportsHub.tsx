@@ -69,6 +69,8 @@ export default function AIReportsHub({
     const [showHistory, setShowHistory] = useState(false);
     const [activeTab, setActiveTab] = useState<'executive' | 'technical'>('executive');
     const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [lastDataPayload, setLastDataPayload] = useState<any>(null);
+    const [showDataPayload, setShowDataPayload] = useState(false);
 
     // Settings
     const [settings, setSettings] = useState<ReportSettings>({
@@ -214,6 +216,10 @@ export default function AIReportsHub({
                     console.warn("[AIReports] Failed to fetch context signals (non-blocking)", e);
                 }
             }
+
+            // Store payload for debug/export (before sending)
+            setLastDataPayload(dataPayload);
+            setShowDataPayload(false);
 
             const response = await fetch('/api/reports/generate', {
                 method: 'POST',
@@ -430,7 +436,111 @@ export default function AIReportsHub({
                                     </div>
                                 </div>
                             </div>
+                            {/* Data Export Button */}
+                            {lastDataPayload && (
+                                <button
+                                    onClick={() => setShowDataPayload(!showDataPayload)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showDataPayload
+                                        ? 'bg-amber-600 text-white border-amber-500'
+                                        : 'text-slate-400 hover:text-white border-slate-600 hover:border-slate-500'
+                                        }`}
+                                    title={language === 'en' ? 'View data sent to AI' : 'Виж изпратените данни към AI'}
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                    </svg>
+                                    {language === 'en' ? 'Sent Data' : 'Изпратени данни'}
+                                </button>
+                            )}
                         </div>
+
+                        {/* Data Payload Panel */}
+                        {showDataPayload && lastDataPayload && (
+                            <div className="border-b border-slate-700 bg-slate-900/80">
+                                <div className="px-6 py-3 flex items-center justify-between">
+                                    <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                                        </svg>
+                                        {language === 'en' ? 'Data Sent to AI' : 'Данни изпратени към AI'}
+                                        <span className="text-slate-500 font-normal normal-case">
+                                            ({(JSON.stringify(lastDataPayload).length / 1024).toFixed(1)} KB)
+                                        </span>
+                                    </h4>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(JSON.stringify(lastDataPayload, null, 2));
+                                                const btn = document.getElementById('copy-data-btn');
+                                                if (btn) { btn.textContent = language === 'en' ? 'Copied!' : 'Копирано!'; setTimeout(() => { btn.textContent = language === 'en' ? 'Copy JSON' : 'Копирай JSON'; }, 2000); }
+                                            }}
+                                            id="copy-data-btn"
+                                            className="text-[10px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/20 transition-all uppercase tracking-wider"
+                                        >
+                                            {language === 'en' ? 'Copy JSON' : 'Копирай JSON'}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const blob = new Blob([JSON.stringify(lastDataPayload, null, 2)], { type: 'application/json' });
+                                                const url = URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.href = url;
+                                                a.download = `ai-report-data_${new Date().toISOString().slice(0, 10)}.json`;
+                                                a.click();
+                                                URL.revokeObjectURL(url);
+                                            }}
+                                            className="text-[10px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/20 transition-all uppercase tracking-wider"
+                                        >
+                                            {language === 'en' ? 'Download' : 'Свали'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {/* Data Summary */}
+                                <div className="px-6 pb-2 flex flex-wrap gap-2">
+                                    {lastDataPayload.campaigns?.length > 0 && (
+                                        <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20 font-bold">
+                                            Campaigns: {lastDataPayload.campaigns.length}
+                                        </span>
+                                    )}
+                                    {lastDataPayload.adGroups?.length > 0 && (
+                                        <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/20 font-bold">
+                                            Ad Groups: {lastDataPayload.adGroups.length}
+                                        </span>
+                                    )}
+                                    {lastDataPayload.keywords?.length > 0 && (
+                                        <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">
+                                            Keywords: {lastDataPayload.keywords.length}
+                                        </span>
+                                    )}
+                                    {lastDataPayload.ads?.length > 0 && (
+                                        <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/20 font-bold">
+                                            Ads: {lastDataPayload.ads.length}
+                                        </span>
+                                    )}
+                                    {lastDataPayload.searchTerms?.length > 0 && (
+                                        <span className="text-[10px] bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20 font-bold">
+                                            Search Terms: {lastDataPayload.searchTerms.length}
+                                        </span>
+                                    )}
+                                    {lastDataPayload.contextBlock && (
+                                        <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20 font-bold">
+                                            Context Signals
+                                        </span>
+                                    )}
+                                    {lastDataPayload.pmaxBlock && (
+                                        <span className="text-[10px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full border border-rose-500/20 font-bold">
+                                            PMax Context
+                                        </span>
+                                    )}
+                                </div>
+                                {/* JSON Preview */}
+                                <div className="px-6 pb-4">
+                                    <pre className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-[11px] text-slate-300 overflow-auto max-h-[400px] custom-scrollbar font-mono leading-relaxed">
+                                        {JSON.stringify(lastDataPayload, null, 2)}
+                                    </pre>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Report Content */}
                         <div className="flex-1 overflow-y-auto custom-scrollbar bg-[radial-gradient(circle_at_top_right,_rgba(124,58,237,0.03),_transparent)]">
