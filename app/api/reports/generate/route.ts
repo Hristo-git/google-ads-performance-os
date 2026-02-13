@@ -7,7 +7,7 @@ import { upsertReport } from "@/lib/pinecone";
 import { logActivity } from "@/lib/activity-logger";
 import type { ReportTemplateId, ReportSettings } from "@/types/google-ads";
 
-// Allow up to 300s for 2-pass Claude analysis (requires Vercel Pro)
+// Streaming bypasses Vercel's time-to-first-byte timeout
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
@@ -77,7 +77,6 @@ export async function POST(request: Request) {
         const pmaxBlock = data.pmaxBlock || '';
         if (contextBlock || pmaxBlock) {
             const contextInjection = [contextBlock, pmaxBlock].filter(Boolean).join('\n\n');
-            // Insert before "=== ANALYSIS REQUIREMENTS ===" if present, otherwise append
             if (prompt.includes('=== ANALYSIS REQUIREMENTS ===')) {
                 prompt = prompt.replace('=== ANALYSIS REQUIREMENTS ===', `${contextInjection}\n\n=== ANALYSIS REQUIREMENTS ===`);
             } else {
@@ -85,27 +84,48 @@ export async function POST(request: Request) {
             }
         }
 
-        // First pass: Generate initial analysis
-        const firstPassResponse = await anthropic.messages.create({
-            model: modelId,
-            max_tokens: 8192,
-            system: languageConstraint,
-            messages: [
-                {
-                    role: "user",
-                    content: prompt
-                }
-            ],
-        });
+        // ── Streaming response ────────────────────────────────────────────
+        // Streams chunks to the client as they arrive from Claude.
+        // For Expert Mode (2-pass): streams pass 1 silently (accumulates),
+        // then streams pass 2 to the client.
+        // This bypasses Vercel's function timeout (10s free / 60s Pro).
 
-        let analysis = firstPassResponse.content[0].type === 'text' ? firstPassResponse.content[0].text : 'No text output';
+        const encoder = new TextEncoder();
 
-        // Expert Mode: Two-pass analysis
-        if (settings.expertMode) {
-            console.log('Expert Mode enabled: Running second pass for refinement');
+        const readable = new ReadableStream({
+            async start(controller) {
+                try {
+                    let analysis = '';
 
-            const expertPrompt = isEn
-                ? `You are a senior performance marketing expert reviewing the following AI-generated analysis.
+                    if (settings.expertMode) {
+                        // ── Two-pass Expert Mode ──
+                        // Pass 1: accumulate silently, send progress indicator
+                        controller.enqueue(encoder.encode(
+                            isEn ? '> **Pass 1/2**: Generating initial analysis...\n\n'
+                                : '> **Етап 1/2**: Генериране на първоначален анализ...\n\n'
+                        ));
+
+                        const pass1Stream = anthropic.messages.stream({
+                            model: modelId,
+                            max_tokens: 8192,
+                            system: languageConstraint,
+                            messages: [{ role: "user", content: prompt }],
+                        });
+
+                        for await (const event of pass1Stream) {
+                            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                                analysis += event.delta.text;
+                            }
+                        }
+
+                        // Pass 2: stream refinement to client
+                        controller.enqueue(encoder.encode(
+                            isEn ? '> **Pass 2/2**: Expert refinement in progress...\n\n---\n\n'
+                                : '> **Етап 2/2**: Експертна рефинация...\n\n---\n\n'
+                        ));
+
+                        const expertPrompt = isEn
+                            ? `You are a senior performance marketing expert reviewing the following AI-generated analysis.
 
 ${languageConstraint}
 
@@ -126,7 +146,7 @@ ${analysis}
 3. **Rewrite** the final output as an improved version.
 
 Output the enhanced analysis in the same structure and format, but with deeper insights and more actionable recommendations.`
-                : `Ти си senior performance marketing експерт, преглеждащ следния AI-генериран анализ.
+                            : `Ти си senior performance marketing експерт, преглеждащ следния AI-генериран анализ.
 
 ${languageConstraint}
 
@@ -148,72 +168,103 @@ ${analysis}
 
 Изведи подобрения анализ в същата структура и формат, но с по-дълбоки прозрения и по-action-able препоръки.`;
 
-            const secondPassResponse = await anthropic.messages.create({
-                model: modelId,
-                max_tokens: 8192,
-                system: languageConstraint,
-                messages: [
-                    {
-                        role: "user",
-                        content: expertPrompt
+                        analysis = ''; // Reset — pass 2 output replaces pass 1
+                        const pass2Stream = anthropic.messages.stream({
+                            model: modelId,
+                            max_tokens: 8192,
+                            system: languageConstraint,
+                            messages: [{ role: "user", content: expertPrompt }],
+                        });
+
+                        for await (const event of pass2Stream) {
+                            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                                const chunk = event.delta.text;
+                                analysis += chunk;
+                                controller.enqueue(encoder.encode(chunk));
+                            }
+                        }
+                    } else {
+                        // ── Single pass: stream directly ──
+                        const stream = anthropic.messages.stream({
+                            model: modelId,
+                            max_tokens: 8192,
+                            system: languageConstraint,
+                            messages: [{ role: "user", content: prompt }],
+                        });
+
+                        for await (const event of stream) {
+                            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                                const chunk = event.delta.text;
+                                analysis += chunk;
+                                controller.enqueue(encoder.encode(chunk));
+                            }
+                        }
                     }
-                ],
-            });
 
-            analysis = secondPassResponse.content[0].type === 'text' ? secondPassResponse.content[0].text : analysis;
-        }
+                    controller.close();
 
-        // --- Store new analysis in Pinecone ---
-        try {
-            // Build descriptive title from template name and date range
-            const templateNames: Record<string, string> = {
-                quality_score_diagnostics: 'QS Diagnostics',
-                lost_is_analysis: 'Lost IS Analysis',
-                search_terms_intelligence: 'Search Terms',
-                ad_strength_performance: 'Ad Strength',
-                budget_allocation_efficiency: 'Budget Allocation',
-                campaign_structure_health: 'Structure Health',
-                change_impact_analysis: 'Change Impact',
-            };
+                    // Post-stream: store in Pinecone + log (fire-and-forget)
+                    try {
+                        const templateNames: Record<string, string> = {
+                            quality_score_diagnostics: 'QS Diagnostics',
+                            lost_is_analysis: 'Lost IS Analysis',
+                            search_terms_intelligence: 'Search Terms',
+                            ad_strength_performance: 'Ad Strength',
+                            budget_allocation_efficiency: 'Budget Allocation',
+                            campaign_structure_health: 'Structure Health',
+                            change_impact_analysis: 'Change Impact',
+                        };
 
-            // Format date range
-            let periodLabel = '';
-            if (data.dateRange) {
-                const startDate = data.dateRange.start || data.dateRange.startDate || data.dateRange.from;
-                const endDate = data.dateRange.end || data.dateRange.endDate || data.dateRange.to;
-                if (startDate && endDate) {
-                    periodLabel = ` (${startDate} — ${endDate})`;
+                        let periodLabel = '';
+                        if (data.dateRange) {
+                            const startDate = data.dateRange.start || data.dateRange.startDate || data.dateRange.from;
+                            const endDate = data.dateRange.end || data.dateRange.endDate || data.dateRange.to;
+                            if (startDate && endDate) {
+                                periodLabel = ` (${startDate} — ${endDate})`;
+                            }
+                        }
+
+                        const contextLabel = templateNames[templateId] || templateId;
+                        const reportTitle = `[${modelLabel}] ${contextLabel}${periodLabel}`;
+                        const reportId = `${templateId}_${Date.now()}`;
+
+                        if (session?.user?.id) {
+                            await logActivity(session.user.id, 'AI_ANALYSIS', {
+                                level: 'report',
+                                templateId,
+                                context: contextLabel,
+                                model: modelLabel,
+                                expertMode: settings.expertMode,
+                                responseLength: analysis?.length || 0
+                            });
+                        }
+
+                        await upsertReport(reportId, analysis, {
+                            templateId,
+                            audience: settings.audience,
+                            language: settings.language,
+                            customerId: data.customerId || 'unknown',
+                            reportTitle,
+                        });
+                    } catch (storeError) {
+                        console.error("Failed to store report in Pinecone:", storeError);
+                    }
+                } catch (err) {
+                    const errMsg = err instanceof Error ? err.message : String(err);
+                    controller.enqueue(encoder.encode(`\n\n[ERROR: ${errMsg}]`));
+                    controller.close();
                 }
             }
+        });
 
-            const contextLabel = templateNames[templateId] || templateId;
-            const reportTitle = `[${modelLabel}] ${contextLabel}${periodLabel}`;
-            const reportId = `${templateId}_${Date.now()}`;
+        return new Response(readable, {
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Cache-Control': 'no-cache',
+                'Transfer-Encoding': 'chunked',
+            },
+        });
 
-            // Log activity
-            if (session?.user?.id) {
-                await logActivity(session.user.id, 'AI_ANALYSIS', {
-                    level: 'report',
-                    templateId,
-                    context: contextLabel,
-                    model: modelLabel,
-                    expertMode: settings.expertMode,
-                    responseLength: analysis?.length || 0
-                });
-            }
-
-            await upsertReport(reportId, analysis, {
-                templateId,
-                audience: settings.audience,
-                language: settings.language,
-                customerId: data.customerId || 'unknown',
-                reportTitle,
-            });
-        } catch (storeError) {
-            console.error("Failed to store report in Pinecone:", storeError);
-        }
-
-        return NextResponse.json({ analysis });
     } catch (error: any) {
         console.error("Report generation error:", error);
 

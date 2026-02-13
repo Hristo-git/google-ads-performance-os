@@ -240,19 +240,30 @@ export default function AIReportsHub({
                 throw new Error(errorMsg);
             }
 
-            const result = await response.json();
+            // Read streaming response (bypasses Vercel function timeout)
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error('No response stream available');
+
+            const decoder = new TextDecoder();
+            let analysis = '';
 
             const periodSuffix = dateRange ? ` (${dateRange.start} — ${dateRange.end})` : '';
-            const generatedReport: GeneratedReport = {
-                id: `${selectedTemplate.id}_${Date.now()}`,
-                templateId: selectedTemplate.id,
-                templateName: (settings.language === 'en' ? selectedTemplate.nameEN : selectedTemplate.nameBG) + periodSuffix,
-                timestamp: new Date().toISOString(),
-                analysis: result.analysis,
-                settings,
-            };
 
-            setCurrentReport(generatedReport);
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                analysis += decoder.decode(value, { stream: true });
+
+                // Update report in real-time as chunks arrive
+                setCurrentReport({
+                    id: `${selectedTemplate.id}_${Date.now()}`,
+                    templateId: selectedTemplate.id,
+                    templateName: (settings.language === 'en' ? selectedTemplate.nameEN : selectedTemplate.nameBG) + periodSuffix,
+                    timestamp: new Date().toISOString(),
+                    analysis,
+                    settings,
+                });
+            }
         } catch (err: any) {
             console.error('Report generation error:', err);
             setError(err.message || 'Failed to generate report');
