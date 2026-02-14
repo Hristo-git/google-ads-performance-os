@@ -489,11 +489,18 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
             let keywords: KeywordWithQS[] = [];
             let ads: AdWithStrength[] = [];
 
-            if (adGroupIds.length > 0) {
+            // Cap enrichment to top 150 ad groups (by impressions, already sorted).
+            // Large IN() clauses (500+ IDs) cause slow GAQL queries and timeouts.
+            const enrichIds = adGroupIds.slice(0, 150);
+            if (enrichIds.length < adGroupIds.length) {
+                console.log(`[getAdGroups] Enriching top ${enrichIds.length} of ${adGroupIds.length} ad groups`);
+            }
+
+            if (enrichIds.length > 0) {
                 try {
                     [keywords, ads] = await Promise.all([
-                        getKeywordsWithQS(refreshToken, undefined, customerId, dateRange, adGroupIds, undefined, undefined, onlyEnabled),
-                        getAdsWithStrength(refreshToken, undefined, customerId, adGroupIds, dateRange, onlyEnabled)
+                        getKeywordsWithQS(refreshToken, undefined, customerId, dateRange, enrichIds, undefined, undefined, onlyEnabled),
+                        getAdsWithStrength(refreshToken, undefined, customerId, enrichIds, dateRange, onlyEnabled)
                     ]);
                 } catch (enrichErr: unknown) {
                     console.error("[getAdGroups] Keywords/Ads enrichment failed (returning basic metrics):", enrichErr);
@@ -2461,6 +2468,104 @@ export async function runAdsRawQuery(refreshToken: string, customerId: string, q
         return await customer.query(query);
     } catch (error) {
         logApiError("Raw API query", error);
+        throw error;
+    }
+}
+
+export async function getAccountAuctionInsights(
+    refreshToken: string,
+    customerId: string,
+    dateRange: { start: string; end: string },
+    campaignIds?: string[]
+) {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+
+    // Cache key
+    const cacheKey = `account_auction_insights:${customerId}:${dateRange.start}:${dateRange.end}:${campaignIds ? campaignIds.join(',') : 'all'}`;
+    const cached = apiCache.get(cacheKey);
+    // @ts-ignore
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+    try {
+        // Construct query
+        let query = `
+      SELECT 
+        segments.auction_insight_domain,
+        metrics.auction_insight_search_impression_share,
+        metrics.auction_insight_search_overlap_rate,
+        metrics.auction_insight_search_outranking_share,
+        metrics.auction_insight_search_position_above_rate,
+        metrics.auction_insight_search_absolute_top_impression_percentage,
+        metrics.auction_insight_search_top_impression_percentage
+      FROM auction_insight_domain_view
+      WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+    `;
+
+        if (campaignIds && campaignIds.length > 0) {
+            query += ` AND campaign.id IN (${campaignIds.join(',')})`;
+        }
+
+        // Execute query
+        const result = await customer.query(query);
+
+        // Aggregate data by domain
+        const domainStats = new Map<string, {
+            domain: string;
+            impressionShare: number;
+            overlapRate: number;
+            outrankingShare: number;
+            positionAboveRate: number;
+            absTopRate: number;
+            topRate: number;
+            count: number;
+        }>();
+
+        for (const row of result) {
+            const domain = row.segments?.auction_insight_domain || 'Unknown';
+
+            const stats = domainStats.get(domain) || {
+                domain,
+                impressionShare: 0,
+                overlapRate: 0,
+                outrankingShare: 0,
+                positionAboveRate: 0,
+                absTopRate: 0,
+                topRate: 0,
+                count: 0
+            };
+
+            // Helper to safely parse metrics
+            const parseMetric = (val: any) => typeof val === 'number' ? val : 0;
+
+            stats.impressionShare += parseMetric(row.metrics?.auction_insight_search_impression_share);
+            stats.overlapRate += parseMetric(row.metrics?.auction_insight_search_overlap_rate);
+            stats.outrankingShare += parseMetric(row.metrics?.auction_insight_search_outranking_share);
+            stats.positionAboveRate += parseMetric(row.metrics?.auction_insight_search_position_above_rate);
+            stats.absTopRate += parseMetric(row.metrics?.auction_insight_search_absolute_top_impression_percentage);
+            stats.topRate += parseMetric(row.metrics?.auction_insight_search_top_impression_percentage);
+            stats.count++;
+
+            domainStats.set(domain, stats);
+        }
+
+        // Average out the stats
+        const processedData = Array.from(domainStats.values()).map(stat => ({
+            domain: stat.domain,
+            impressionShare: stat.count > 0 ? stat.impressionShare / stat.count : 0,
+            overlapRate: stat.count > 0 ? stat.overlapRate / stat.count : 0,
+            outrankingShare: stat.count > 0 ? stat.outrankingShare / stat.count : 0,
+            positionAboveRate: stat.count > 0 ? stat.positionAboveRate / stat.count : 0,
+            absTopRate: stat.count > 0 ? stat.absTopRate / stat.count : 0,
+            topRate: stat.count > 0 ? stat.topRate / stat.count : 0
+        })).sort((a, b) => b.impressionShare - a.impressionShare);
+
+        // Update cache
+        apiCache.set(cacheKey, { data: processedData, expiresAt: Date.now() + CACHE_TTL.default });
+
+        return processedData;
+
+    } catch (error) {
+        console.error("Error fetching Auction Insights:", error);
         throw error;
     }
 }

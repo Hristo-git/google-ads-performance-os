@@ -61,6 +61,7 @@ export default function AIReportsHub({
 }: AIReportsHubProps) {
     const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
     const [generating, setGenerating] = useState(false);
+    const [generatingPhase, setGeneratingPhase] = useState<'data' | 'ai' | null>(null);
     const [currentReport, setCurrentReport] = useState<GeneratedReport | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [historySearchQuery, setHistorySearchQuery] = useState('');
@@ -106,6 +107,7 @@ export default function AIReportsHub({
         if (!selectedTemplate) return;
 
         setGenerating(true);
+        setGeneratingPhase('data');
         setError(null);
 
         try {
@@ -251,6 +253,7 @@ export default function AIReportsHub({
             // Store payload for debug/export (before sending)
             setLastDataPayload(dataPayload);
             setShowDataPayload(false);
+            setGeneratingPhase('ai');
 
             const response = await fetch('/api/reports/generate', {
                 method: 'POST',
@@ -306,6 +309,7 @@ export default function AIReportsHub({
             setError(err.message || 'Failed to generate report');
         } finally {
             setGenerating(false);
+            setGeneratingPhase(null);
         }
     };
 
@@ -825,7 +829,9 @@ export default function AIReportsHub({
                         {generating ? (
                             <>
                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                {language === 'en' ? 'Generating Analysis...' : 'Генериране на анализ...'}
+                                {generatingPhase === 'data'
+                                    ? (language === 'en' ? 'Loading data...' : 'Зареждане на данни...')
+                                    : (language === 'en' ? 'AI is analyzing...' : 'AI анализира...')}
                             </>
                         ) : (
                             <>
