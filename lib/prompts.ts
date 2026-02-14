@@ -3,18 +3,18 @@
 // ============================================
 
 const BIDDING_LABELS: Record<number | string, string> = {
-    0: 'Unspecified', 1: 'Unknown', 2: 'Manual CPC', 3: 'Manual CPM',
-    4: 'Manual CPV', 5: 'Maximize Conversions', 6: 'Maximize Conversion Value',
-    7: 'Target CPA', 8: 'Target ROAS', 9: 'Target Impression Share',
-    10: 'Manual CPC (Enhanced)', 11: 'Maximize Conversions',
-    12: 'Maximize Conversion Value', 13: 'Target Spend',
+  0: 'Unspecified', 1: 'Unknown', 2: 'Manual CPC', 3: 'Manual CPM',
+  4: 'Manual CPV', 5: 'Maximize Conversions', 6: 'Maximize Conversion Value',
+  7: 'Target CPA', 8: 'Target ROAS', 9: 'Target Impression Share',
+  10: 'Manual CPC (Enhanced)', 11: 'Maximize Conversions',
+  12: 'Maximize Conversion Value', 13: 'Target Spend',
 };
 
 function getBiddingLabel(code: number | string | undefined): string {
-    if (code === undefined || code === null) return 'N/A';
-    // If already a readable string (not a pure number), return as-is
-    if (typeof code === 'string' && isNaN(Number(code))) return code;
-    return BIDDING_LABELS[code] || BIDDING_LABELS[Number(code)] || 'Unknown Bidding Strategy';
+  if (code === undefined || code === null) return 'N/A';
+  // If already a readable string (not a pure number), return as-is
+  if (typeof code === 'string' && isNaN(Number(code))) return code;
+  return BIDDING_LABELS[code] || BIDDING_LABELS[Number(code)] || 'Unknown Bidding Strategy';
 }
 
 // ============================================
@@ -458,23 +458,23 @@ All language must be metric-backed and professional. State the number, the magni
 // ============================================
 
 export const getAdGroupAnalysisPrompt = (data: any, language: 'bg' | 'en') => {
-    const isEn = language === 'en';
-    const adGroup = data.adGroup || {};
-    const keywords = data.keywords || [];
-    const ads = data.ads || [];
-    const negativeKeywords = data.negativeKeywords || [];
-    const searchTerms = data.searchTerms || [];
+  const isEn = language === 'en';
+  const adGroup = data.adGroup || {};
+  const keywords = data.keywords || [];
+  const ads = data.ads || [];
+  const negativeKeywords = data.negativeKeywords || [];
+  const searchTerms = data.searchTerms || [];
 
-    const totalConversions = keywords.reduce((sum: number, k: any) => sum + (k.conversions || 0), 0);
-    const totalCost = keywords.reduce((sum: number, k: any) => sum + (k.cost || 0), 0);
-    const totalClicks = keywords.reduce((sum: number, k: any) => sum + (k.clicks || 0), 0);
-    const totalImpressions = keywords.reduce((sum: number, k: any) => sum + (k.impressions || 0), 0);
+  const totalConversions = keywords.reduce((sum: number, k: any) => sum + (k.conversions || 0), 0);
+  const totalCost = keywords.reduce((sum: number, k: any) => sum + (k.cost || 0), 0);
+  const totalClicks = keywords.reduce((sum: number, k: any) => sum + (k.clicks || 0), 0);
+  const totalImpressions = keywords.reduce((sum: number, k: any) => sum + (k.impressions || 0), 0);
 
-    const languageInstruction = isEn
-        ? 'IMPORTANT: Your entire response MUST be in English.'
-        : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+  const languageInstruction = isEn
+    ? 'IMPORTANT: Your entire response MUST be in English.'
+    : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
 
-    return `${ANALYSIS_SYSTEM_PROMPT}
+  return `${ANALYSIS_SYSTEM_PROMPT}
 
 ${languageInstruction}
 
@@ -522,15 +522,15 @@ Ad ID: ${ad.id}
 
 === NEGATIVE KEYWORDS (${negativeKeywords.length} total) ===
 ${negativeKeywords.length > 0
-            ? negativeKeywords.map((nk: any) => `[${nk.matchType || 'BROAD'}] ${nk.text}`).join(', ')
-            : 'No negative keywords found.'
-        }
+      ? negativeKeywords.map((nk: any) => `[${nk.matchType || 'BROAD'}] ${nk.text}`).join(', ')
+      : 'No negative keywords found.'
+    }
 
 === SEARCH TERMS SAMPLE (${searchTerms.length} available) ===
 ${searchTerms.length > 0
-            ? searchTerms.slice(0, 30).map((st: any) => `"${st.searchTerm}" | Cost: €${(st.cost || 0).toFixed(2)} | Conv: ${st.conversions || 0} | ROAS: ${st.cost > 0 ? (st.conversionValue / st.cost).toFixed(2) : 0}x`).join('\n')
-            : 'Search terms data not available. Note: Without search term data, broad match waste cannot be assessed. Recommend pulling Search Terms Report manually.'
-        }
+      ? searchTerms.slice(0, 30).map((st: any) => `"${st.searchTerm}" | Cost: €${(st.cost || 0).toFixed(2)} | Conv: ${st.conversions || 0} | ROAS: ${st.cost > 0 ? (st.conversionValue / st.cost).toFixed(2) : 0}x`).join('\n')
+      : 'Search terms data not available. Note: Without search term data, broad match waste cannot be assessed. Recommend pulling Search Terms Report manually.'
+    }
 
 === SPECIFIC ANALYSIS REQUIREMENTS ===
 
@@ -591,89 +591,180 @@ At the very end of your response, provide a JSON block wrapped in \`\`\`json tag
 
 export const REPORT_TEMPLATES = {
 
-    quality_score_diagnostics: (data: any, language: 'bg' | 'en') => {
-        const isEn = language === 'en';
-        const keywords = data.keywords || [];
-        const adGroups = data.adGroups || [];
-        const lowQSKeywords = keywords.filter((k: any) => k.qualityScore && k.qualityScore < 5);
-        const avgQS = keywords.length > 0
-            ? (keywords.reduce((sum: number, k: any) => sum + (k.qualityScore || 0), 0) / keywords.length).toFixed(2)
-            : 0;
+  quality_score_diagnostics: (data: any, language: 'bg' | 'en') => {
+    const isEn = language === 'en';
+    // Data comes pre-processed from buildQualityScoreRequest (lib/quality-score.ts)
+    const { summary, keywords, adGroups, dateRange } = data;
 
-        const languageInstruction = isEn
-            ? 'IMPORTANT: Your entire response MUST be in English.'
-            : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+    const languageInstruction = isEn
+      ? 'IMPORTANT: Your entire response MUST be in English. Use original English terms for Google Ads metrics.'
+      : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език. Използвай оригиналните английски термини за метриките (Quality Score, Expected CTR, etc.).';
 
-        return `${ANALYSIS_SYSTEM_PROMPT}
+    // Helper for consistent formatting
+    const fmt = (n: number | undefined, decimals = 2) => n != null ? n.toFixed(decimals) : 'N/A';
 
+    // Safe access to summary properties with defaults
+    const totalKeywords = summary?.totalKeywordsAnalyzed || 0;
+    const lowQsKeywordsCount = summary?.keywordsWithQsBelowThreshold || 0;
+    const avgQS = summary?.averageQualityScore || 0;
+    const weightedAvgQS = summary?.weightedAvgQualityScore || 0;
+    const adGroupsCount = summary?.adGroupsAnalyzed || 0;
+    const periodStart = dateRange?.start || 'N/A';
+    const periodEnd = dateRange?.end || 'N/A';
+
+    return `${ANALYSIS_SYSTEM_PROMPT}
+
+=== ROLE ===
+You are a Senior Performance Marketing Analyst specializing in Google Ads Quality Score optimization.
+You combine statistical rigor with practical, implementable recommendations.
+You never guess — you work only with the data provided.
+
+=== MISSION ===
+Analyze Quality Score patterns across keywords and ad groups.
+Identify root causes of low QS and provide a prioritized fix plan to improve Ad Rank and recover Lost Impression Share (Rank).
+Produce BOTH an Executive Summary and a Technical Analysis.
+
+=== LANGUAGE ===
 ${languageInstruction}
 
-=== QUALITY SCORE DIAGNOSTIC MISSION ===
-Analyze Quality Score patterns and provide actionable fixes to improve Ad Rank and reduce Lost IS(Rank).
-Produce BOTH an Executive Summary and a Technical Analysis as specified in the output format.
+=== SCOPE GUARDRAILS ===
+- Work ONLY with the data provided. Do not assume Search Terms, Auction Insights, landing page speed, or any data not present in the input.
+- If additional data would significantly improve the analysis, list it under "Next Data Needed" at the end — never fabricate it.
+- Do not recommend budget or bidding changes unless the mechanism is strictly: QS → Ad Rank → IS(Rank).
+- If qualityScoreHistory is missing for a keyword, analyze based on the current snapshot only. Do not infer or guess trends.
+- Brand keywords (matching brandTokens) should be evaluated separately — low QS on brand terms has different root causes than generic terms.
 
 === STATISTICAL CONTEXT ===
-Total Keywords Analyzed: ${keywords.length}
-Keywords with QS < 5: ${lowQSKeywords.length}
+Total Keywords Analyzed: ${totalKeywords}
+Keywords with QS <= Threshold: ${lowQsKeywordsCount}
 Average Quality Score: ${avgQS}
-Ad Groups Analyzed: ${adGroups.length}
+Weighted Avg QS (by Impr): ${weightedAvgQS}
+Ad Groups Analyzed: ${adGroupsCount}
+Analysis Period: ${periodStart} to ${periodEnd}
 
-=== LOW QS KEYWORDS (Top 20 by spend) ===
-${lowQSKeywords.slice(0, 20).map((k: any) => `
-Keyword: "${k.text}" (${k.matchType})
-- Quality Score: ${k.qualityScore || 'N/A'}
-- Expected CTR: ${k.expectedCtr || 'N/A'} | Ad Relevance: ${k.adRelevance || 'N/A'} | LP Experience: ${k.landingPageExperience || 'N/A'}
-- Impressions: ${k.impressions} | Clicks: ${k.clicks} | Cost: €${(k.cost || 0).toFixed(2)}
-- Conversions: ${k.conversions || 0} | Conv. Value: €${(k.conversionValue || 0).toFixed(2)}
-`).join('\n')}
+=== IMPACT MODEL (IS Recovery Estimation) ===
+Use these conservative ranges when estimating Impression Share (Rank) recovery:
 
-=== AD GROUPS WITH LOW AVG QS ===
-${adGroups.filter((ag: any) => ag.avgQualityScore && ag.avgQualityScore < 6).map((ag: any) => `
-Ad Group: ${ag.name}
-- Avg QS: ${ag.avgQualityScore} | Keywords with Low QS: ${ag.keywordsWithLowQS || 0}
-- Spend: €${(ag.cost || 0).toFixed(2)} | Conversions: ${ag.conversions || 0}
-`).join('\n')}
+| Component Fix                        | Estimated IS(Rank) Recovery |
+|---------------------------------------|-----------------------------|
+| Expected CTR: BELOW_AVERAGE → AVERAGE | +3 to +8 pp                 |
+| Ad Relevance: BELOW_AVERAGE → AVERAGE | +2 to +5 pp                 |
+| LP Experience: BELOW_AVERAGE → AVERAGE| +2 to +6 pp                 |
+
+Rules:
+- When multiple components are improved, do NOT sum linearly.
+- Cap total estimated recovery at +10–15 pp per ad group within 30 days.
+- Always present estimates as ranges, never single numbers.
+- Label all estimates as "conservative estimates based on typical patterns".
+
+=== PRIORITIZATION FORMULA ===
+Rank fixes by impact score:
+  impact_score = cost × (7 - qualityScore) × searchLostIsRank_pct
 
 === ANALYSIS REQUIREMENTS ===
-In the Technical Analysis, address:
 
 1. QS COMPONENT DIAGNOSIS (ranked by impact)
-For each low-QS keyword, identify the PRIMARY bottleneck:
-- Expected CTR issue → likely ad copy/position problem
-- Ad Relevance issue → keyword-ad mismatch, needs restructuring
-- Landing Page issue → page quality/speed/relevance problem
-Group keywords by their primary bottleneck to enable batch fixes.
+   - Which component (Expected CTR / Ad Relevance / LP Experience) is dragging QS down the most?
+   - Quantify: how many keywords have each component as BELOW_AVERAGE?
 
-2. ROOT CAUSE PATTERNS
-Identify systematic issues (e.g., "all keywords in ad group X have low Ad Relevance" = structural mismatch, not a keyword-level fix).
+2. ROOT CAUSE PATTERNS (clustered)
+   - Group keywords by shared problems (e.g., "all keywords pointing to /products/garderobi have LP Experience = BELOW_AVERAGE")
+   - Identify structural issues: too many keywords per ad group, match type misalignment
+   - If qualityScoreHistory is available, flag keywords with declining QS as urgent
 
-3. SPECIFIC FIXES (with estimated IS recovery)
-- Ad copy improvements: exact headlines/descriptions to add or modify
-- Keyword restructuring: which keywords to move to which ad groups
-- Landing page recommendations (if LP Experience is the bottleneck)
-- For each fix, estimate potential QS improvement and resulting IS(Rank) recovery
+3. FIX PLAN — Three levels, always specific:
+   a) Keyword-level fixes (match types, splitting, negatives)
+   b) Ad-level fixes (RSA alignment, pinning, USP)
+   c) Landing page fixes (content relevance, fold alignment)
 
-4. NEGATIVE KEYWORD GAPS
-Based on the ad group themes, suggest negative keywords that would improve CTR (and thus QS).
+4. MONITORING PLAN
+   - Weekly QS check for fixed keywords (target: +1 QS within 14 days)
+   - IS(Rank) trend for affected ad groups
 
-5. PRIORITY ACTIONS
-Top 3 actions ordered by: (potential IS recovery) x (ease of implementation)
+5. NEXT DATA NEEDED (if any)
+   - List specific data that would improve future analysis
 
-At the end, provide a JSON block for "Actionable To-Do List" wrapped in \`\`\`json tags:
-{ "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Quality Score|Ad Copy|Structure|Landing Page|Negatives", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
-    },
+=== OUTPUT FORMAT ===
 
-    lost_is_analysis: (data: any, language: 'bg' | 'en') => {
-        const isEn = language === 'en';
-        const campaigns = data.campaigns || [];
-        const rankLostCampaigns = campaigns.filter((c: any) => c.searchLostISRank && c.searchLostISRank > 0.1);
-        const budgetLostCampaigns = campaigns.filter((c: any) => c.searchLostISBudget && c.searchLostISBudget > 0.1);
+## Executive Summary
+- Maximum 8–10 bullets
+- Lead with the single biggest QS problem and its estimated cost impact
+- Include total estimated IS(Rank) recovery if all fixes are implemented (as a range)
+- Actionable: each bullet should imply or state a clear action
 
-        const languageInstruction = isEn
-            ? 'IMPORTANT: Your entire response MUST be in English.'
-            : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+## Technical Analysis
 
-        return `${ANALYSIS_SYSTEM_PROMPT}
+### 1. QS Component Diagnosis
+Ranked table: Component | Keywords Affected | % of Total | Avg Spend per Keyword
+
+### 2. Root Cause Patterns
+Clustered by pattern type. Include affected keywords count and combined spend.
+
+### 3. Fix Plan
+Table format:
+| Priority | Issue | Affected Keywords | Action | Level (KW/Ad/LP) | Est. IS Recovery | Implementation Time |
+|----------|-------|-------------------|--------|-------------------|------------------|---------------------|
+- Sort by impact_score descending
+- Maximum 15 rows
+
+### 4. QS Trend Alerts
+Only if qualityScoreHistory data is present. Table:
+| Keyword | Previous QS | Current QS | Change | Days Between | Risk Level |
+|---------|-------------|------------|--------|--------------|------------|
+
+### 5. Monitoring Plan
+3–5 specific metrics to track weekly, with target values.
+
+### 6. Next Data Needed
+Bulleted list of specific data requests.
+
+=== DATA INPUT ===
+
+--- LOW QS KEYWORDS (Top by spend) ---
+${(keywords || []).map((k: any) => `
+Keyword: "${k.text}" (${k.matchType})
+- QS: ${k.qualityScore} | Exp.CTR: ${k.expectedCtr} | Ad Rel: ${k.adRelevance} | LP Exp: ${k.landingPageExperience}
+- Impr: ${k.impressions} | Clicks: ${k.clicks} | Cost: ${fmt(k.cost)} | Conv: ${k.conversions}
+- CPC: ${fmt(k.avgCpc, 3)} | Lost IS (Rank): ${fmt(k.searchLostIsRank)}%
+- Final URL: ${k.finalUrl}
+${k.qualityScoreHistory ? `- HISTORY: Prev QS ${k.qualityScoreHistory.previous} (${k.qualityScoreHistory.periodDaysAgo} days ago)` : ''}
+`).join('\n')}
+
+--- AFFECTED AD GROUPS ---
+${(adGroups || []).map((ag: any) => `
+Ad Group: "${ag.name}" (Camp: "${ag.campaignName}")
+- Avg QS: ${ag.avgQualityScore} | Low QS Keywords: ${ag.keywordsWithLowQS}/${ag.keywordCount}
+- Cost: ${fmt(ag.cost)} | Conv: ${ag.conversions} | Lost IS (Rank): ${fmt(ag.searchLostIsRank)}%
+`).join('\n')}
+
+=== JSON OUTPUT (MANDATORY — AFTER BOTH DOCUMENTS) ===
+At the very end of your response, provide a JSON block wrapped in \`\`\`json tags:
+{
+    "todos": [
+        {
+            "task": "Specific action description",
+            "impact": "High|Medium|Low",
+            "timeframe": "Immediate|Short-term|Medium-term",
+            "category": "QS Component|Structure|Ad Copy|Landing Page",
+            "estimated_lift": "Brief estimate, e.g. '+3-5% IS'",
+            "effort": "Low|Medium|High"
+        }
+    ]
+}
+`;
+  },
+
+  lost_is_analysis: (data: any, language: 'bg' | 'en') => {
+    const isEn = language === 'en';
+    const campaigns = data.campaigns || [];
+    const rankLostCampaigns = campaigns.filter((c: any) => c.searchLostISRank && c.searchLostISRank > 0.1);
+    const budgetLostCampaigns = campaigns.filter((c: any) => c.searchLostISBudget && c.searchLostISBudget > 0.1);
+
+    const languageInstruction = isEn
+      ? 'IMPORTANT: Your entire response MUST be in English.'
+      : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+
+    return `${ANALYSIS_SYSTEM_PROMPT}
 
 ${languageInstruction}
 
@@ -727,22 +818,22 @@ Combine all recommendations into the standard Action Plan table format, ordered 
 
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Quality Fix|Budget Increase|Bid Adjustment|Structure", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
-    },
+  },
 
-    search_terms_intelligence: (data: any, language: 'bg' | 'en') => {
-        const isEn = language === 'en';
-        const searchTerms = data.searchTerms || [];
-        const nGramAnalysis = data.nGramAnalysis || null;
-        const brandedKeywords = data.brandedKeywords || ['videnov', 'мебели виденов', 'виденов мебели'];
+  search_terms_intelligence: (data: any, language: 'bg' | 'en') => {
+    const isEn = language === 'en';
+    const searchTerms = data.searchTerms || [];
+    const nGramAnalysis = data.nGramAnalysis || null;
+    const brandedKeywords = data.brandedKeywords || ['videnov', 'мебели виденов', 'виденов мебели'];
 
-        const totalSearchTermCost = searchTerms.reduce((sum: number, st: any) => sum + (st.cost || 0), 0);
-        const totalSearchTermConversions = searchTerms.reduce((sum: number, st: any) => sum + (st.conversions || 0), 0);
+    const totalSearchTermCost = searchTerms.reduce((sum: number, st: any) => sum + (st.cost || 0), 0);
+    const totalSearchTermConversions = searchTerms.reduce((sum: number, st: any) => sum + (st.conversions || 0), 0);
 
-        const languageInstruction = isEn
-            ? 'IMPORTANT: Your entire response MUST be in English.'
-            : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+    const languageInstruction = isEn
+      ? 'IMPORTANT: Your entire response MUST be in English.'
+      : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
 
-        return `${ANALYSIS_SYSTEM_PROMPT}
+    return `${ANALYSIS_SYSTEM_PROMPT}
 
 ${languageInstruction}
 
@@ -802,21 +893,21 @@ Estimate spend allocation across intent tiers.
 
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Negative Keywords|Winning Terms|Bid Adjustments|Match Type|Structure", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
-    },
+  },
 
-    ad_strength_performance: (data: any, language: 'bg' | 'en') => {
-        const isEn = language === 'en';
-        const adGroups = data.adGroups || [];
-        const ads = data.ads || [];
-        const poorStrengthAdGroups = adGroups.filter((ag: any) =>
-            ag.adStrength && (ag.adStrength === 'POOR' || ag.adStrength === 'AVERAGE')
-        );
+  ad_strength_performance: (data: any, language: 'bg' | 'en') => {
+    const isEn = language === 'en';
+    const adGroups = data.adGroups || [];
+    const ads = data.ads || [];
+    const poorStrengthAdGroups = adGroups.filter((ag: any) =>
+      ag.adStrength && (ag.adStrength === 'POOR' || ag.adStrength === 'AVERAGE')
+    );
 
-        const languageInstruction = isEn
-            ? 'IMPORTANT: Your entire response MUST be in English.'
-            : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+    const languageInstruction = isEn
+      ? 'IMPORTANT: Your entire response MUST be in English.'
+      : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
 
-        return `${ANALYSIS_SYSTEM_PROMPT}
+    return `${ANALYSIS_SYSTEM_PROMPT}
 
 ${languageInstruction}
 
@@ -883,19 +974,19 @@ For the top 5 ad groups by spend, provide:
 
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Ad Copy|Headlines|Descriptions|Message Match|Structure", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
-    },
+  },
 
-    budget_allocation_efficiency: (data: any, language: 'bg' | 'en') => {
-        const isEn = language === 'en';
-        const campaigns = data.campaigns || [];
-        const strategicBreakdown = data.strategicBreakdown || {};
-        const totalSpend = campaigns.reduce((sum: number, c: any) => sum + (c.cost || 0), 0);
+  budget_allocation_efficiency: (data: any, language: 'bg' | 'en') => {
+    const isEn = language === 'en';
+    const campaigns = data.campaigns || [];
+    const strategicBreakdown = data.strategicBreakdown || {};
+    const totalSpend = campaigns.reduce((sum: number, c: any) => sum + (c.cost || 0), 0);
 
-        const languageInstruction = isEn
-            ? 'IMPORTANT: Your entire response MUST be in English.'
-            : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+    const languageInstruction = isEn
+      ? 'IMPORTANT: Your entire response MUST be in English.'
+      : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
 
-        return `${ANALYSIS_SYSTEM_PROMPT}
+    return `${ANALYSIS_SYSTEM_PROMPT}
 
 ${languageInstruction}
 
@@ -905,18 +996,18 @@ Produce BOTH an Executive Summary and a Technical Analysis as specified in the o
 
 === STRATEGIC BREAKDOWN ===
 ${Object.entries(strategicBreakdown).map(([category, data]: [string, any]) => {
-            const pct = totalSpend > 0 ? ((data.spend / totalSpend) * 100).toFixed(1) : 0;
-            const categoryLabel = category === 'pmax_sale' ? 'PMax - Sale' :
-                category === 'pmax_aon' ? 'PMax - AON' :
-                    category === 'search_dsa' ? 'Search - DSA' :
-                        category === 'search_nonbrand' ? 'Search - NonBrand' :
-                            category === 'upper_funnel' ? 'Video/Display' :
-                                category === 'brand' ? 'Brand' : 'Other';
-            return `
+      const pct = totalSpend > 0 ? ((data.spend / totalSpend) * 100).toFixed(1) : 0;
+      const categoryLabel = category === 'pmax_sale' ? 'PMax - Sale' :
+        category === 'pmax_aon' ? 'PMax - AON' :
+          category === 'search_dsa' ? 'Search - DSA' :
+            category === 'search_nonbrand' ? 'Search - NonBrand' :
+              category === 'upper_funnel' ? 'Video/Display' :
+                category === 'brand' ? 'Brand' : 'Other';
+      return `
 ${categoryLabel}:
 - Spend: €${data.spend?.toFixed(0) || 0} (${pct}% of total) | Campaigns: ${data.campaigns || 0}
 - Conversions: ${data.conversions?.toFixed(0) || 0} | ROAS: ${data.spend > 0 && data.conversions > 0 ? (data.conversions * 300 / data.spend).toFixed(2) : 'N/A'}x (estimated)`;
-        }).join('\n')}
+    }).join('\n')}
 
 === TOTAL ACCOUNT SPEND: €${totalSpend.toFixed(2)} ===
 
@@ -957,27 +1048,27 @@ For each scenario, show: source campaign(s), destination campaign(s), € amount
 
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Budget Increase|Budget Decrease|Reallocation|Optimization", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
-    },
+  },
 
-    campaign_structure_health: (data: any, language: 'bg' | 'en') => {
-        const isEn = language === 'en';
-        const campaigns = data.campaigns || [];
-        const adGroups = data.adGroups || [];
-        const keywords = data.keywords || [];
+  campaign_structure_health: (data: any, language: 'bg' | 'en') => {
+    const isEn = language === 'en';
+    const campaigns = data.campaigns || [];
+    const adGroups = data.adGroups || [];
+    const keywords = data.keywords || [];
 
-        const avgAdGroupsPerCampaign = campaigns.length > 0 ? (adGroups.length / campaigns.length).toFixed(1) : 0;
-        const avgKeywordsPerAdGroup = adGroups.length > 0 ? (keywords.length / adGroups.length).toFixed(1) : 0;
-        const matchTypeDistribution = keywords.reduce((acc: any, k: any) => {
-            const type = k.matchType || 'UNKNOWN';
-            acc[type] = (acc[type] || 0) + 1;
-            return acc;
-        }, {});
+    const avgAdGroupsPerCampaign = campaigns.length > 0 ? (adGroups.length / campaigns.length).toFixed(1) : 0;
+    const avgKeywordsPerAdGroup = adGroups.length > 0 ? (keywords.length / adGroups.length).toFixed(1) : 0;
+    const matchTypeDistribution = keywords.reduce((acc: any, k: any) => {
+      const type = k.matchType || 'UNKNOWN';
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {});
 
-        const languageInstruction = isEn
-            ? 'IMPORTANT: Your entire response MUST be in English.'
-            : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+    const languageInstruction = isEn
+      ? 'IMPORTANT: Your entire response MUST be in English.'
+      : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
 
-        return `${ANALYSIS_SYSTEM_PROMPT}
+    return `${ANALYSIS_SYSTEM_PROMPT}
 
 ${languageInstruction}
 
@@ -995,10 +1086,10 @@ ${Object.entries(matchTypeDistribution).map(([type, count]) => `- ${type}: ${cou
 
 === CAMPAIGN BREAKDOWN ===
 ${campaigns.map((c: any) => {
-            const campaignAdGroups = adGroups.filter((ag: any) => ag.campaignId === c.id);
-            return `
+      const campaignAdGroups = adGroups.filter((ag: any) => ag.campaignId === c.id);
+      return `
 Campaign: ${c.name} | Ad Groups: ${campaignAdGroups.length} | Spend: €${(c.cost || 0).toFixed(2)} | Status: ${c.status}`;
-        }).join('\n')}
+    }).join('\n')}
 
 === AD GROUP ANALYSIS (Top 30 by spend) ===
 ${adGroups.slice(0, 30).map((ag: any) => `
@@ -1033,18 +1124,18 @@ Present as the standard Action Plan table with specific structural changes, time
 
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Consolidation|Expansion|Match Type|Simplification|Pause", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
-    },
+  },
 
-    change_impact_analysis: (data: any, language: 'bg' | 'en') => {
-        const isEn = language === 'en';
-        const campaigns = data.campaigns || [];
-        const changeDescription = data.changeDescription || 'No change description provided';
+  change_impact_analysis: (data: any, language: 'bg' | 'en') => {
+    const isEn = language === 'en';
+    const campaigns = data.campaigns || [];
+    const changeDescription = data.changeDescription || 'No change description provided';
 
-        const languageInstruction = isEn
-            ? 'IMPORTANT: Your entire response MUST be in English.'
-            : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+    const languageInstruction = isEn
+      ? 'IMPORTANT: Your entire response MUST be in English.'
+      : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
 
-        return `${ANALYSIS_SYSTEM_PROMPT}
+    return `${ANALYSIS_SYSTEM_PROMPT}
 
 ${languageInstruction}
 
@@ -1057,16 +1148,16 @@ ${changeDescription}
 
 === PERIOD-OVER-PERIOD DATA ===
 ${campaigns.map((c: any) => {
-            const prev = c.previous || {};
-            const costChange = prev.cost ? (((c.cost - prev.cost) / prev.cost) * 100).toFixed(1) : 'N/A';
-            const convChange = prev.conversions ? (((c.conversions - prev.conversions) / prev.conversions) * 100).toFixed(1) : 'N/A';
-            const cpaChange = prev.cpa && c.cpa ? (((c.cpa - prev.cpa) / prev.cpa) * 100).toFixed(1) : 'N/A';
-            return `
+      const prev = c.previous || {};
+      const costChange = prev.cost ? (((c.cost - prev.cost) / prev.cost) * 100).toFixed(1) : 'N/A';
+      const convChange = prev.conversions ? (((c.conversions - prev.conversions) / prev.conversions) * 100).toFixed(1) : 'N/A';
+      const cpaChange = prev.cpa && c.cpa ? (((c.cpa - prev.cpa) / prev.cpa) * 100).toFixed(1) : 'N/A';
+      return `
 Campaign: ${c.name}
 CURRENT: Spend €${(c.cost || 0).toFixed(2)} | Conv: ${c.conversions || 0} | CPA: €${c.cpa || 0} | ROAS: ${c.roas || 0}x
 PREVIOUS: Spend €${(prev.cost || 0).toFixed(2)} | Conv: ${prev.conversions || 0} | CPA: €${prev.cpa || 0} | ROAS: ${prev.roas || 0}x
 CHANGE: Spend ${costChange}% | Conv ${convChange}% | CPA ${cpaChange}%`;
-        }).join('\n')}
+    }).join('\n')}
 
 === ANALYSIS REQUIREMENTS ===
 In the Technical Analysis:
@@ -1102,5 +1193,5 @@ Based on confidence level:
 
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Scale Change|Revert|Refine|Monitor", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
-    }
+  }
 };

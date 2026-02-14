@@ -5,6 +5,9 @@ import anthropic from "@/lib/anthropic";
 import { REPORT_TEMPLATES } from "@/lib/prompts";
 import { upsertReport } from "@/lib/pinecone";
 import { logActivity } from "@/lib/activity-logger";
+import { buildQualityScoreRequest, QSKeyword, QSAdGroup, QSComponent } from "@/lib/quality-score";
+import { getQSSnapshotsForDate } from "@/lib/supabase";
+import { KeywordWithQS, AdGroupPerformance, CampaignPerformance } from "@/lib/google-ads";
 import { calculateDerivedMetrics, buildEnhancedDataInventory } from "@/lib/derived-metrics";
 import type { ReportTemplateId, ReportSettings } from "@/types/google-ads";
 
@@ -89,6 +92,119 @@ export async function POST(request: Request) {
                 }
                 return c;
             });
+        }
+
+        // --- Quality Score Diagnostics Data Enrichment ---
+        if (templateId === 'quality_score_diagnostics' && data.customerId) {
+            try {
+                console.log('[Report/QS] Enriching data for Quality Score Diagnostics...');
+
+                // 1. Fetch Historical Snapshots (30 days ago)
+                const today = new Date();
+                const pastDate = new Date();
+                pastDate.setDate(today.getDate() - 30);
+                const snapshots = await getQSSnapshotsForDate(data.customerId, pastDate.toISOString().split('T')[0]);
+                console.log(`[Report/QS] Fetched ${snapshots.length} historical snapshots from ~30 days ago.`);
+
+                // 2. Map Keywords to QSKeyword
+                // We need to join with adGroups/campaigns to get names
+                const adGroupMap = new Map<string, AdGroupPerformance>();
+                if (Array.isArray(data.adGroups)) {
+                    data.adGroups.forEach((ag: AdGroupPerformance) => adGroupMap.set(ag.id, ag));
+                }
+
+                const campaignMap = new Map<string, string>(); // id -> name
+                if (Array.isArray(data.campaigns)) {
+                    data.campaigns.forEach((c: CampaignPerformance) => campaignMap.set(c.id, c.name));
+                }
+
+                const formatQSComponent = (val: string): QSComponent => {
+                    if (val === 'ABOVE_AVERAGE' || val === 'AVERAGE' || val === 'BELOW_AVERAGE') return val;
+                    return 'AVERAGE'; // Fallback
+                };
+
+                const qsKeywords: QSKeyword[] = (data.keywords || []).map((k: KeywordWithQS) => {
+                    const ag = adGroupMap.get(k.adGroupId);
+                    const campaignName = ag ? campaignMap.get(ag.campaignId) || 'Unknown Campaign' : 'Unknown Campaign';
+                    const campaignId = ag ? ag.campaignId : '0';
+
+                    // Find historical match
+                    const history = snapshots.find(s => s.keyword_id === k.id);
+
+                    return {
+                        campaignId,
+                        campaignName,
+                        adGroupId: k.adGroupId,
+                        adGroupName: ag?.name || 'Unknown Ad Group',
+                        text: k.text,
+                        matchType: k.matchType as 'EXACT' | 'PHRASE' | 'BROAD',
+                        qualityScore: k.qualityScore || 0,
+                        expectedCtr: formatQSComponent(k.expectedCtr),
+                        adRelevance: formatQSComponent(k.adRelevance),
+                        landingPageExperience: formatQSComponent(k.landingPageExperience),
+                        impressions: k.impressions,
+                        clicks: k.clicks,
+                        cost: k.cost,
+                        conversions: k.conversions,
+                        conversionValue: k.conversionValue,
+                        avgCpc: k.cpc,
+                        qualityScoreHistory: history ? {
+                            previous: history.quality_score,
+                            periodDaysAgo: 30 // Approximate
+                        } : undefined,
+                        // These fields might need to be added to KeywordWithQS or calculated if missing
+                        // For now, filling with defaults or available data
+                        finalUrl: '', // Not currently in KeywordWithQS, would need to fetch or ignore
+                    };
+                });
+
+                // 3. Map Ad Groups to QSAdGroup
+                const qsAdGroups: QSAdGroup[] = (data.adGroups || []).map((ag: AdGroupPerformance) => ({
+                    campaignId: ag.campaignId,
+                    campaignName: campaignMap.get(ag.campaignId) || 'Unknown',
+                    adGroupId: ag.id,
+                    name: ag.name,
+                    avgQualityScore: ag.avgQualityScore || 0,
+                    keywordCount: 0, // Calculated by helper if needed, or ignored
+                    keywordsWithLowQS: ag.keywordsWithLowQS,
+                    impressions: ag.impressions,
+                    clicks: ag.clicks,
+                    cost: ag.cost,
+                    conversions: ag.conversions,
+                    conversionValue: ag.conversionValue,
+                }));
+
+                // 4. Build Structured Request
+                const qsRequest = buildQualityScoreRequest(qsKeywords, qsAdGroups, {
+                    dateRange: data.dateRange || { start: '2024-01-01', end: '2024-01-31' }, // Fallback if missing
+                    brandTokens: [], // TODO: Get from settings or analyze?
+                    language: settings.language,
+                    audience: (settings.audience === 'client' ? 'stakeholder' : 'specialist'),
+                    model: settings.model,
+                    lowQsThreshold: 5, // Custom config?
+                    topKeywordsBySpend: 50,
+                });
+
+                // REPLACE original data with the enriched structured request
+                // The prompt template will receive this 'qsRequest' as 'data'
+                // NOTE: The REPORT_TEMPLATE['quality_score_diagnostics'] function needs to know 
+                // to look for 'qsDetails' or we just pass 'qsRequest' directly?
+                // The template function signature is (data: any, language...). 
+                // In lib/prompts.ts, the function expects 'data' to be the QSData structure or similar.
+                // Let's rely on the template extracting what it needs. 
+                // Since we can't easily replace the entire 'data' object variable reference used later 
+                // without changing the 'const promptBuilder = ...' line which takes 'data', 
+                // let's actually just update the 'data' variable reference if we could, 
+                // but we can't reassign inputs easily. 
+                // Instead, we'll assign the result to a new field in data or reuse data.
+
+                // Actually, let's just merge it.
+                Object.assign(data, qsRequest);
+
+            } catch (error) {
+                console.error('[Report/QS] Enrichment failed:', error);
+                // Fallback: Proceed with original data, prompt handles missing fields gracefully?
+            }
         }
 
         // Build prompt using template (no RAG — each report is a clean snapshot of the period)

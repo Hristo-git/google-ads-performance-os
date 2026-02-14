@@ -9,6 +9,7 @@ import { ACCOUNTS, DEFAULT_ACCOUNT_ID } from "../config/accounts";
 import { processNGrams } from "@/lib/n-gram";
 import AIAnalysisModal from "./AIAnalysisModal";
 import StrategicInsights from "./StrategicInsights";
+import { AuctionInsights } from "./dashboard/AuctionInsights";
 import AIReportsHub from "./AIReportsHub";
 import AccountHealthWidget from "./AccountHealthWidget";
 import NGramInsights from "./NGramInsights";
