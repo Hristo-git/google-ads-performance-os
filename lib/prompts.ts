@@ -263,11 +263,31 @@ LANGUAGE INTEGRITY — THRESHOLD CLAIMS (MANDATORY)
 
 SCALING LOGIC FRAMEWORK (MANDATORY)
 Before recommending ANY budget increase, check Impression Share data:
-1. Lost IS (Budget) > 10% AND ROAS/CPA acceptable → BUDGET-CONSTRAINED. Safe to scale. Estimate: additional_conv ≈ current_conv × (Lost_IS_Budget / current_IS).
+1. Lost IS (Budget) > 10% AND ROAS/CPA acceptable → BUDGET-CONSTRAINED. Safe to scale. Estimate: additional_conv ≈ current_conv × (Lost_IS_Budget / (1 − Lost_IS_Budget)) × 0.65.
 2. Lost IS (Rank) > 25% → QUALITY ISSUE. Do NOT recommend budget increase. Fix QS, ad copy, landing pages first. "Increasing budget with high rank loss spends more at same inefficiency."
 3. Both Lost IS < 5% → SATURATION. Diminishing returns. Recommend keyword/audience expansion or upper-funnel.
 4. Lost IS (Budget) > 10% AND Lost IS (Rank) > 25% → MIXED. Fix quality first, then scale.
 If IS data not available: "IS data not provided — cannot validate scaling opportunity."
+
+ROAS DECAY AT SCALE (MANDATORY)
+- NEVER assume ROAS stays constant when increasing budget.
+- For budget increases of +20–40%: assume 75–85% ROAS retention (i.e. ROAS will decline 15–25%).
+- For budget increases of +40–60%: assume 60–75% ROAS retention.
+- For budget increases above +60%: state "Aggressive scaling — expect significant ROAS decay. Test incrementally."
+- ALWAYS frame revenue projections as a RANGE, not a point estimate:
+  Wrong: "€600 extra spend → €11,208 additional revenue"
+  Right: "€600 extra spend at 75–85% ROAS retention → €5,000–€8,000 additional revenue"
+
+BRAND RISK DISCLAIMER (MANDATORY)
+- If Search Terms data shows potential branded queries in non-brand campaigns, or CTR is abnormally high (>15% on generic campaigns):
+  Add before ANY scaling recommendation: "All budget and scaling decisions should be made AFTER cleaning branded queries from non-brand campaigns. Otherwise, ROAS will appear to decline upon scaling, creating a false impression of performance deterioration."
+- If brand leakage status is unknown, note: "Verify search terms for branded leakage before scaling."
+
+SCALING SCENARIOS (MANDATORY for account-level reports)
+After the Action Plan, include two scenarios:
+**Scenario A — Conservative**: Budget +20%, expected ROAS decline 10–15%, low risk.
+**Scenario B — Aggressive**: Budget +40–60%, expected ROAS decline 20–30%, higher risk but higher volume.
+State which scenario is recommended based on current data signals.
 
 ANOMALY DETECTION (MANDATORY)
 Flag these as suspicious and recommend verification:
@@ -276,6 +296,20 @@ Flag these as suspicious and recommend verification:
 - Device CVR gap > 3x → "Investigate device CVR gap exceeding 3x — may indicate tracking issue or UX problem."
 - AOV variance > 50% between similar campaigns → "AOV varies >50%. Possible: different conversion actions, product mixes, or tracking discrepancy."
 - CPA shift > 2x vs previous period → "CPA shift >100%. Investigate: tracking changes, bid strategy reset, seasonal shift."
+- CTR > 15% on generic/non-brand campaigns → "CTR unusually high for generic traffic. This suggests possible branded query leakage. Verification required via Search Terms report before drawing performance conclusions."
+  Do NOT state "CTR is 3–5x above normal" — instead say: "CTR is unusually high for the [category] segment and suggests branded query presence. Confirm via Search Terms."
+
+BIDDING STRATEGY VALIDATION (MANDATORY)
+Before recommending bidding strategy changes:
+1. CHECK the campaign's CURRENT bidding strategy from the data. Do NOT recommend migrating to a strategy the campaign is already using.
+   Wrong: "Migrate from Manual eCPC to Maximize Conversion Value" (when data shows campaign is already on Maximize Conversion Value)
+   Right: "Campaign is already on Maximize Conversion Value. Focus on: search term cleanup, tROAS tuning, and Ad Rank improvements."
+2. tCPA/tROAS prerequisites:
+   - Campaign must have ≥30 conversions in the last 30 days to safely set a target.
+   - If conversions < 30: "Insufficient conversion volume (n<30) for setting tCPA/tROAS. Scale budget without target first."
+   - If conversions 30–50: "Target can be set conservatively at current_CPA × 1.10–1.15. Monitor closely."
+   - If conversions > 50: "Sufficient volume for tCPA/tROAS. Set at current metric × 1.05–1.15 and tighten over 2–4 weeks."
+3. NEVER use raw numeric bidding type enum codes (e.g. "type: 11", "type: 9") in output. Always use human-readable labels from the data (e.g. "Maximize Conversions", "Target Impression Share").
 
 DEVICE ANALYSIS DECISION TREE (MANDATORY)
 1. CHECK bidding strategy type first.
