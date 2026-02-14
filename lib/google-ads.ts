@@ -140,10 +140,14 @@ export interface AdGroupPerformance {
     // Ad Strength summary
     adsCount: number;
     poorAdsCount: number;
+    adStrength?: string;
     conversionValue: number;
     roas: number | null;
     cpa: number | null;
     campaignName?: string;
+    // Type classification
+    adGroupType?: string;   // SEARCH_STANDARD, SEARCH_DYNAMIC_AD, etc.
+    campaignType?: string;  // SEARCH, PERFORMANCE_MAX, DISPLAY, VIDEO
 }
 
 export interface NegativeKeyword {
@@ -462,8 +466,10 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
                 ad_group.id,
                 ad_group.name,
                 ad_group.status,
+                ad_group.type,
                 campaign.id,
                 campaign.name,
+                campaign.advertising_channel_type,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
@@ -594,6 +600,8 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
                     conversionValue,
                     roas: cost > 0 ? conversionValue / cost : null,
                     cpa: conversions > 0 ? cost / conversions : null,
+                    adGroupType: String(row.ad_group?.type || 'UNKNOWN'),
+                    campaignType: String(row.campaign?.advertising_channel_type || 'UNKNOWN'),
                 };
             });
         } catch (error: unknown) {

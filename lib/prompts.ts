@@ -899,9 +899,27 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
     const isEn = language === 'en';
     const adGroups = data.adGroups || [];
     const ads = data.ads || [];
-    const poorStrengthAdGroups = adGroups.filter((ag: any) =>
-      ag.adStrength && (ag.adStrength === 'POOR' || ag.adStrength === 'AVERAGE')
-    );
+
+    // Separate RSA-eligible (Search) from non-RSA (DSA, Display, Video)
+    const NON_RSA_TYPES = ['SEARCH_DYNAMIC_AD'];
+    const NON_RSA_CAMPAIGN_TYPES = ['DISPLAY', 'VIDEO', '6', '3']; // enum codes + strings
+    const isRSAEligible = (ag: any) =>
+      !NON_RSA_TYPES.includes(ag.adGroupType) &&
+      !NON_RSA_CAMPAIGN_TYPES.includes(ag.campaignType);
+
+    const searchAdGroups = adGroups.filter(isRSAEligible);
+    const dsaAdGroups = adGroups.filter((ag: any) => !isRSAEligible(ag));
+    const poorSearchAdGroups = searchAdGroups
+      .filter((ag: any) => ag.adStrength === 'POOR' || ag.adStrength === 'AVERAGE')
+      .sort((a: any, b: any) => (b.cost || 0) - (a.cost || 0));
+
+    // Build ads-by-adGroupId lookup
+    const adsByGroup = new Map<string, any[]>();
+    for (const ad of ads) {
+      const list = adsByGroup.get(ad.adGroupId) || [];
+      list.push(ad);
+      adsByGroup.set(ad.adGroupId, list);
+    }
 
     const languageInstruction = isEn
       ? 'IMPORTANT: Your entire response MUST be in English.'
@@ -915,40 +933,50 @@ ${languageInstruction}
 Audit RSA ad strength and provide specific copy improvements to increase CTR and conversions.
 Produce BOTH an Executive Summary and a Technical Analysis as specified in the output format.
 
-=== AD STRENGTH DISTRIBUTION ===
-${adGroups.map((ag: any) => `
-Ad Group: ${ag.name}
-- Ad Strength: ${ag.adStrength || 'N/A'} | Ads Count: ${ag.adsCount || 0} | Poor Ads: ${ag.poorAdsCount || 0}
-- Spend: €${(ag.cost || 0).toFixed(2)} | CTR: ${(ag.ctr || 0).toFixed(2)}% | Conversions: ${ag.conversions || 0} | ROAS: ${ag.roas || 0}x
+=== RSA-ELIGIBLE AD GROUPS (${searchAdGroups.length} Search) ===
+${searchAdGroups.map((ag: any) => `
+Ad Group: ${ag.name} | Campaign: ${ag.campaignName || 'N/A'}
+- Ad Strength: ${ag.adStrength || 'N/A'} | Ads: ${ag.adsCount || 0} | Poor Ads: ${ag.poorAdsCount || 0}
+- Spend: €${(ag.cost || 0).toFixed(2)} | CTR: ${(ag.ctr || 0).toFixed(2)}% | Conv: ${ag.conversions || 0} | ROAS: ${ag.roas || 0}x
 `).join('\n')}
 
-=== AD GROUPS WITH POOR/AVERAGE AD STRENGTH ===
-${poorStrengthAdGroups.map((ag: any) => `
-Ad Group: ${ag.name}
-- Ad Strength: ${ag.adStrength}
-- Performance: CTR ${(ag.ctr || 0).toFixed(2)}%, Conv Rate ${ag.conversions > 0 && ag.clicks > 0 ? ((ag.conversions / ag.clicks) * 100).toFixed(2) : 0}%
-- Active Ads: ${ag.adsCount || 0} (Google recommends 2-3 per ad group)
-`).join('\n')}
+=== POOR/AVERAGE AD GROUPS — FULL AD COPY (Top 10 by spend) ===
+${poorSearchAdGroups.slice(0, 10).map((ag: any) => {
+      const groupAds = adsByGroup.get(ag.id) || [];
+      return `
+--- Ad Group: ${ag.name} | Strength: ${ag.adStrength} | Spend: €${(ag.cost || 0).toFixed(2)} ---
+${groupAds.length > 0 ? groupAds.map((ad: any) => `
+  Ad ID: ${ad.id} | Strength: ${ad.adStrength || 'N/A'} | Type: ${ad.type || 'N/A'}
+  Headlines (${ad.headlinesCount || 0}/15): ${ad.headlines?.join(' | ') || 'N/A'}
+  Descriptions (${ad.descriptionsCount || 0}/4): ${ad.descriptions?.join(' | ') || 'N/A'}
+  Final URL: ${(ad.finalUrls || [])[0] || ad.finalUrl || 'N/A'}
+  CTR: ${(ad.ctr || 0).toFixed(2)}% | Impr: ${ad.impressions || 0} | Conv: ${ad.conversions || 0}
+`).join('') : '  (No individual ad data available)'}`;
+    }).join('\n')}
+${poorSearchAdGroups.length === 0 ? 'No POOR/AVERAGE search ad groups found.' : ''}
 
-=== SAMPLE ADS (Top 10 by spend) ===
-${ads.slice(0, 10).map((ad: any) => `
-Ad ID: ${ad.id} | Ad Strength: ${ad.adStrength || 'N/A'}
-- Headlines (${ad.headlinesCount || 0}): ${ad.headlines?.join(' | ') || 'N/A'}
-- Descriptions (${ad.descriptionsCount || 0}): ${ad.descriptions?.join(' | ') || 'N/A'}
-- Final URL: ${ad.finalUrl || 'N/A'}
-- Impr: ${ad.impressions || 0} | CTR: ${(ad.ctr || 0).toFixed(2)}% | Conv: ${ad.conversions || 0}
-`).join('\n')}
+=== DSA / NON-RSA AD GROUPS (${dsaAdGroups.length}) ===
+${dsaAdGroups.length > 0 ? dsaAdGroups.map((ag: any) => `
+Ad Group: ${ag.name} | Type: ${ag.adGroupType || 'N/A'} | Campaign Type: ${ag.campaignType || 'N/A'}
+- Spend: €${(ag.cost || 0).toFixed(2)} | CTR: ${(ag.ctr || 0).toFixed(2)}% | Conv: ${ag.conversions || 0}
+`).join('\n') : 'None'}
+NOTE: These ad groups use Dynamic Search Ads or non-search formats. Ad Strength does NOT apply. Do NOT recommend RSA copy improvements for these groups.
 
 === ANALYSIS REQUIREMENTS ===
 In the Technical Analysis:
 
-1. AD STRENGTH AUDIT
-- Distribution: how many EXCELLENT / GOOD / AVERAGE / POOR / UNSPECIFIED?
+CRITICAL RULES:
+- Exclude DSA/Display/Video ad groups from all RSA audit counts. UNSPECIFIED adStrength on DSA groups is EXPECTED — do NOT flag as a problem.
+- Only count Search ad groups (adGroupType = SEARCH_STANDARD or similar) in "missing RSA" or "POOR Ad Strength" statistics.
+- When reporting "X% of ad groups have POOR strength", the denominator MUST be RSA-eligible (Search) ad groups only (${searchAdGroups.length}), NOT total ad groups (${adGroups.length}).
+
+1. AD STRENGTH AUDIT (Search ad groups only: ${searchAdGroups.length})
+- Distribution: how many EXCELLENT / GOOD / AVERAGE / POOR among Search ad groups?
 - Correlation between Ad Strength and CTR/conversions (if data permits)
 - Ad groups exceeding 3 RSA ads: list them, flag the problem, recommend which to pause (by ID)
 
 2. HEADLINE DIVERSITY ANALYSIS
-For each ad group, categorize headlines into:
+For each POOR/AVERAGE ad group above, categorize its headlines into:
 | Category | Examples |
 |----------|----------|
 | Brand | Company name, URL |
@@ -967,10 +995,11 @@ Identify ads with time-sensitive language (holiday names, month names, seasonal 
 Keyword → ad copy → landing page consistency. Flag mismatches.
 
 5. SPECIFIC COPY RECOMMENDATIONS
-For the top 5 ad groups by spend, provide:
-- 3 new headline suggestions per category gap
+For the top 5 POOR/AVERAGE ad groups by spend, provide:
+- 3 new headline suggestions per category gap (you have the current headlines above — be specific)
 - 2 new description suggestions
 - Pin recommendations (what to pin to Position 1/2 and what to leave dynamic)
+- If headlines < 10 or descriptions < 3, explicitly note how many more are needed
 
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Ad Copy|Headlines|Descriptions|Message Match|Structure", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
