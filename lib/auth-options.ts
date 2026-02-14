@@ -105,8 +105,8 @@ export const authOptions: NextAuthOptions = {
                 session.user.id = token.id as string;
                 session.user.role = token.role as 'admin' | 'viewer';
                 session.user.allowedCustomerIds = token.allowedCustomerIds as string[];
-                // @ts-expect-error - adding custom field
-                session.accessToken = token.accessToken;
+                session.accessToken = token.accessToken as string;
+                session.refreshToken = token.refreshToken as string;
             }
             return session;
         },

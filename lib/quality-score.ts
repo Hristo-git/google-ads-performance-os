@@ -74,6 +74,9 @@ export interface QSKeyword {
     searchTopImpressionShare?: number;      // 0–100 (percentage)
     searchAbsTopImpressionShare?: number;   // 0–100 (percentage)
 
+    // — Context —
+    biddingStrategyType?: string;           // e.g. "TARGET_CPA", "MANUAL_CPC"
+
     // — Landing Page —
     finalUrl: string;                 // Full URL or path
 }
@@ -121,6 +124,7 @@ SELECT
   ad_group_criterion.quality_info.post_click_quality_score,
   ad_group_criterion.quality_info.search_predicted_ctr,
   ad_group_criterion.final_urls,
+  campaign.bidding_strategy_type,
   metrics.impressions,
   metrics.clicks,
   metrics.cost_micros,
@@ -139,6 +143,21 @@ WHERE
   AND ad_group.status = 'ENABLED'
   AND metrics.impressions > 0
 ORDER BY metrics.cost_micros DESC
+`;
+
+/**
+ * Query 1.1: Ad-level Final URLs (fallback)
+ */
+export const AD_LEVEL_URL_QUERY = `
+SELECT
+  ad_group.id,
+  ad_group_ad.ad.final_urls
+FROM ad_group_ad
+WHERE
+  campaign.status = 'ENABLED'
+  AND ad_group.status = 'ENABLED'
+  AND ad_group_ad.status = 'ENABLED'
+  AND ad_group_ad.ad.final_urls IS NOT EMPTY
 `;
 
 /**
@@ -175,22 +194,21 @@ ORDER BY metrics.cost_micros DESC
 
 /**
  * Maps Google Ads API response fields to QSKeyword interface.
- *
- * Notes:
- * - cost_micros needs division by 1_000_000
- * - average_cpc is in micros too
- * - search_predicted_ctr maps to expectedCtr
- * - creative_quality_score maps to adRelevance
- * - post_click_quality_score maps to landingPageExperience
- * - Impression share fields come as fractions (0.42) — multiply by 100 for percentages
- * - final_urls is an array — take the first element
  */
-export function mapKeyword(row: any): QSKeyword {
+export function mapKeyword(row: any, adLevelUrls?: Map<string, string>): QSKeyword {
+    // Robust campaign name fallback
+    const campaignName = row.campaign.name || row.campaign.resourceName?.split('/').pop() || 'Unknown Campaign';
+
+    // Final URL with ad-level fallback
+    const keywordUrl = row.adGroupCriterion.finalUrls?.[0];
+    const adFallbackUrl = adLevelUrls ? adLevelUrls.get(row.adGroup.id) : undefined;
+    const finalUrl = keywordUrl || adFallbackUrl || '';
+
     return {
         campaignId: String(row.campaign.id),
-        campaignName: row.campaign.name,
+        campaignName: campaignName,
         adGroupId: String(row.adGroup.id),
-        adGroupName: row.adGroup.name,
+        adGroupName: row.adGroup.name || 'Unknown Ad Group',
         text: row.adGroupCriterion.keyword.text,
         matchType: row.adGroupCriterion.keyword.matchType,
 
@@ -211,7 +229,46 @@ export function mapKeyword(row: any): QSKeyword {
         searchTopImpressionShare: toPercent(row.metrics.searchTopImpressionShare),
         searchAbsTopImpressionShare: toPercent(row.metrics.searchAbsoluteTopImpressionShare),
 
-        finalUrl: row.adGroupCriterion.finalUrls?.[0] ?? '',
+        biddingStrategyType: row.campaign.biddingStrategyType,
+        finalUrl: finalUrl,
+    };
+}
+
+/**
+ * Data Validation Layer
+ */
+export function validateQSData(data: QSData): { valid: boolean; warnings: string[] } {
+    const warnings: string[] = [];
+    const threshold = 5; // Default
+
+    // 1. Check critical fields in keywords
+    data.keywords.forEach(kw => {
+        if (!kw.campaignName || kw.campaignName === 'undefined' || kw.campaignName === 'Unknown Campaign') {
+            warnings.push(`Keyword "${kw.text}": campaignName is missing/undefined`);
+        }
+        if (!kw.finalUrl || kw.finalUrl === 'undefined' || kw.finalUrl === '') {
+            warnings.push(`Keyword "${kw.text}": finalUrl is missing (LP diagnosis blocked)`);
+        }
+        if (kw.qualityScore === 0) {
+            warnings.push(`Keyword "${kw.text}": qualityScore is 0 (unscored)`);
+        }
+    });
+
+    // 2. Check Ad Groups
+    data.adGroups.forEach(ag => {
+        if (ag.keywordCount === 0) {
+            warnings.push(`Ad Group "${ag.name}": keywordCount is 0 (context missing)`);
+        }
+    });
+
+    // 3. Check Date Range
+    if (!data.dateRange?.start || !data.dateRange?.end) {
+        warnings.push('Date range is missing/incomplete');
+    }
+
+    return {
+        valid: warnings.length === 0,
+        warnings
     };
 }
 

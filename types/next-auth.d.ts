@@ -9,7 +9,9 @@ declare module "next-auth" {
             image?: string | null;
             role: 'admin' | 'viewer';
             allowedCustomerIds: string[];
-        }
+        };
+        accessToken?: string;
+        refreshToken?: string;
     }
 }
 
@@ -18,5 +20,7 @@ declare module "next-auth/jwt" {
         id: string;
         role: 'admin' | 'viewer';
         allowedCustomerIds: string[];
+        accessToken?: string;
+        refreshToken?: string;
     }
 }

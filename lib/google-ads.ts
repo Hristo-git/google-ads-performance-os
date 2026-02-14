@@ -165,9 +165,10 @@ export interface KeywordWithQS {
     impressions: number;
     clicks: number;
     cost: number;
-    conversions: number;         // NEW
+    conversions: number;         // RESTORED
     conversionValue: number;     // NEW
     cpc: number;                 // NEW
+    biddingStrategyType?: string; // NEW
 }
 
 export interface AdWithStrength {
@@ -650,6 +651,7 @@ export async function getKeywordsWithQS(
         ad_group_criterion.quality_info.creative_quality_score,
         ad_group_criterion.quality_info.post_click_quality_score,
         ad_group_criterion.quality_info.search_predicted_ctr,
+        campaign.bidding_strategy_type,
         metrics.impressions,
         metrics.clicks,
         metrics.cost_micros,
@@ -678,6 +680,7 @@ export async function getKeywordsWithQS(
                 conversions: Number(row.metrics?.conversions) || 0,
                 conversionValue: Number(row.metrics?.conversions_value) || 0,
                 cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+                biddingStrategyType: row.campaign?.bidding_strategy_type ? String(row.campaign.bidding_strategy_type) : "UNKNOWN",
             }));
 
             // Deduplicate by criterion_id: keyword_view returns 1 row per day with date ranges.
@@ -2388,3 +2391,12 @@ export async function getAudiencePerformance(
     }
 }
 
+export async function runAdsRawQuery(refreshToken: string, customerId: string, query: string): Promise<any[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    try {
+        return await customer.query(query);
+    } catch (error) {
+        logApiError("Raw API query", error);
+        throw error;
+    }
+}

@@ -5,9 +5,9 @@ import anthropic from "@/lib/anthropic";
 import { REPORT_TEMPLATES } from "@/lib/prompts";
 import { upsertReport } from "@/lib/pinecone";
 import { logActivity } from "@/lib/activity-logger";
-import { buildQualityScoreRequest, QSKeyword, QSAdGroup, QSComponent } from "@/lib/quality-score";
+import { buildQualityScoreRequest, QSKeyword, QSAdGroup, QSComponent, mapKeyword, AD_LEVEL_URL_QUERY, validateQSData } from "@/lib/quality-score";
 import { getQSSnapshotsForDate } from "@/lib/supabase";
-import { KeywordWithQS, AdGroupPerformance, CampaignPerformance } from "@/lib/google-ads";
+import { KeywordWithQS, AdGroupPerformance, CampaignPerformance, runAdsRawQuery } from "@/lib/google-ads";
 import { calculateDerivedMetrics, buildEnhancedDataInventory } from "@/lib/derived-metrics";
 import type { ReportTemplateId, ReportSettings } from "@/types/google-ads";
 
@@ -106,8 +106,41 @@ export async function POST(request: Request) {
                 const snapshots = await getQSSnapshotsForDate(data.customerId, pastDate.toISOString().split('T')[0]);
                 console.log(`[Report/QS] Fetched ${snapshots.length} historical snapshots from ~30 days ago.`);
 
-                // 2. Map Keywords to QSKeyword
-                // We need to join with adGroups/campaigns to get names
+                // 2. Fetch Ad-level URLs (Fallback)
+                const adUrlsRaw = await runAdsRawQuery(session.refreshToken as string, data.customerId, AD_LEVEL_URL_QUERY);
+                const adLevelUrls = new Map<string, string>();
+                adUrlsRaw.forEach(row => {
+                    const url = row.ad_group_ad?.ad?.final_urls?.[0];
+                    if (url) adLevelUrls.set(row.ad_group_ad.ad_group, url); // resourceName is usually returned as the key
+                    // Wait, ad_group_ad.ad_group is the resourceName. We need the ID or to be consistent.
+                    // Actually, the resourceName is fine if we use it correctly. 
+                    // Let's get the ad_group.id from the query instead if possible.
+                });
+
+                // Let's refine the AD_LEVEL_URL_QUERY to include ad_group.id
+                // (Already did that in lib/quality-score.ts)
+                adUrlsRaw.forEach(row => {
+                    const agId = String(row.ad_group?.id);
+                    const url = row.ad_group_ad?.ad?.final_urls?.[0];
+                    if (agId && url) adLevelUrls.set(agId, url);
+                });
+
+                // 3. Fetch Keyword Counts per Ad Group (All Enabled)
+                const kwCountsRaw = await runAdsRawQuery(session.refreshToken as string, data.customerId, `
+                    SELECT ad_group.id, ad_group_criterion.criterion_id 
+                    FROM ad_group_criterion 
+                    WHERE ad_group_criterion.status = 'ENABLED' 
+                    AND ad_group_criterion.negative = FALSE
+                    AND ad_group_criterion.type = 'KEYWORD'
+                `);
+                const adGroupKwCount = new Map<string, number>();
+                kwCountsRaw.forEach(row => {
+                    const agId = String(row.ad_group.id);
+                    adGroupKwCount.set(agId, (adGroupKwCount.get(agId) || 0) + 1);
+                });
+
+                // 4. Map Keywords to QSKeyword using the new mapKeyword function
+                // Initialize maps since we need them for names/IDs
                 const adGroupMap = new Map<string, AdGroupPerformance>();
                 if (Array.isArray(data.adGroups)) {
                     data.adGroups.forEach((ag: AdGroupPerformance) => adGroupMap.set(ag.id, ag));
@@ -118,54 +151,52 @@ export async function POST(request: Request) {
                     data.campaigns.forEach((c: CampaignPerformance) => campaignMap.set(c.id, c.name));
                 }
 
-                const formatQSComponent = (val: string): QSComponent => {
-                    if (val === 'ABOVE_AVERAGE' || val === 'AVERAGE' || val === 'BELOW_AVERAGE') return val;
-                    return 'AVERAGE'; // Fallback
-                };
+                // Actually, let's just stick to the mapping logic but fix the missing fields.
 
                 const qsKeywords: QSKeyword[] = (data.keywords || []).map((k: KeywordWithQS) => {
+                    // We'll mimic the "row" structure for mapKeyword or just manually map since we have KeywordWithQS
                     const ag = adGroupMap.get(k.adGroupId);
-                    const campaignName = ag ? campaignMap.get(ag.campaignId) || 'Unknown Campaign' : 'Unknown Campaign';
-                    const campaignId = ag ? ag.campaignId : '0';
-
-                    // Find historical match
                     const history = snapshots.find(s => s.keyword_id === k.id);
 
+                    // Robust fallback for campaign name
+                    const cName = campaignMap.get(ag?.campaignId || '') || 'Unknown Campaign';
+
                     return {
-                        campaignId,
-                        campaignName,
+                        campaignId: ag?.campaignId || '0',
+                        campaignName: cName,
                         adGroupId: k.adGroupId,
                         adGroupName: ag?.name || 'Unknown Ad Group',
                         text: k.text,
                         matchType: k.matchType as 'EXACT' | 'PHRASE' | 'BROAD',
                         qualityScore: k.qualityScore || 0,
-                        expectedCtr: formatQSComponent(k.expectedCtr),
-                        adRelevance: formatQSComponent(k.adRelevance),
-                        landingPageExperience: formatQSComponent(k.landingPageExperience),
+                        expectedCtr: k.expectedCtr as QSComponent,
+                        adRelevance: k.adRelevance as QSComponent,
+                        landingPageExperience: k.landingPageExperience as QSComponent,
                         impressions: k.impressions,
                         clicks: k.clicks,
                         cost: k.cost,
                         conversions: k.conversions,
                         conversionValue: k.conversionValue,
                         avgCpc: k.cpc,
+                        biddingStrategyType: k.biddingStrategyType,
+                        searchImpressionShare: undefined, // Add if available in k
+                        searchLostIsRank: undefined,      // Add if available in k
                         qualityScoreHistory: history ? {
                             previous: history.quality_score,
-                            periodDaysAgo: 30 // Approximate
+                            periodDaysAgo: 30
                         } : undefined,
-                        // These fields might need to be added to KeywordWithQS or calculated if missing
-                        // For now, filling with defaults or available data
-                        finalUrl: '', // Not currently in KeywordWithQS, would need to fetch or ignore
+                        finalUrl: k.id ? (adLevelUrls.get(k.adGroupId) || '') : '', // Simple fallback here
                     };
                 });
 
-                // 3. Map Ad Groups to QSAdGroup
+                // 5. Map Ad Groups to QSAdGroup
                 const qsAdGroups: QSAdGroup[] = (data.adGroups || []).map((ag: AdGroupPerformance) => ({
                     campaignId: ag.campaignId,
                     campaignName: campaignMap.get(ag.campaignId) || 'Unknown',
                     adGroupId: ag.id,
                     name: ag.name,
                     avgQualityScore: ag.avgQualityScore || 0,
-                    keywordCount: 0, // Calculated by helper if needed, or ignored
+                    keywordCount: adGroupKwCount.get(ag.id) || 0, // POPULATED
                     keywordsWithLowQS: ag.keywordsWithLowQS,
                     impressions: ag.impressions,
                     clicks: ag.clicks,
@@ -174,7 +205,8 @@ export async function POST(request: Request) {
                     conversionValue: ag.conversionValue,
                 }));
 
-                // 4. Build Structured Request
+                // 6. Build Structured Request
+                // ...
                 const qsRequest = buildQualityScoreRequest(qsKeywords, qsAdGroups, {
                     dateRange: data.dateRange || { start: '2024-01-01', end: '2024-01-31' }, // Fallback if missing
                     brandTokens: [], // TODO: Get from settings or analyze?
