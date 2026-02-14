@@ -1435,6 +1435,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 searchTerms={healthData?.searchTerms || []}
                                 loading={loadingHealth}
                             />
+                            <AuctionInsights
+                                customerId={selectedAccountId || undefined}
+                                dateRange={dateRange}
+                                campaignIds={navigation.level === 'campaign' && navigation.campaignId ? [navigation.campaignId] : undefined}
+                            />
                         </div>
                     </main>
                 ) : (

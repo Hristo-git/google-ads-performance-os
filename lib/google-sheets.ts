@@ -36,7 +36,7 @@ export async function getAuctionInsightsFromSheet(spreadsheetId: string): Promis
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Auction_Insights_Data!A2:G', // Up to Outranking Share (7 columns)
+            range: 'Auction Insights!A2:G', // Up to Outranking Share (7 columns)
         });
 
         const rows = response.data.values;

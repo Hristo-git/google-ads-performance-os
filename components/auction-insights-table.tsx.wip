@@ -1,0 +1,147 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { AlertCircle } from "lucide-react";
+
+interface AuctionInsight {
+    domain: string;
+    impressionShare: number;
+    overlapRate: number;
+    outrankingShare: number;
+    positionAboveRate: number;
+    topOfPageRate: number;
+    absTopOfPageRate: number;
+}
+
+interface AuctionInsightsTableProps {
+    customerId: string;
+    dateRange: { start: string; end: string };
+    campaignIds?: string[];
+}
+
+export function AuctionInsightsTable({ customerId, dateRange, campaignIds }: AuctionInsightsTableProps) {
+    const [data, setData] = useState<AuctionInsight[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        async function fetchData() {
+            setLoading(true);
+            setError(null);
+            try {
+                const response = await fetch("/api/df/auction-insights", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ customerId, dateRange, campaignIds }),
+                });
+
+                if (!response.ok) {
+                    throw new Error("Failed to fetch auction insights");
+                }
+
+                const result = await response.json();
+                setData(result.data || []);
+            } catch (err) {
+                console.error(err);
+                setError("Could not load auction insights.");
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        if (customerId) {
+            fetchData();
+        }
+    }, [customerId, dateRange, campaignIds]);
+
+    if (loading) {
+        return <Skeleton className="w-full h-[300px]" />;
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center text-red-500 gap-2 p-4 border border-red-200 rounded-md bg-red-50">
+                <AlertCircle className="w-5 h-5" />
+                <span>{error}</span>
+            </div>
+        );
+    }
+
+    if (data.length === 0) {
+        return (
+            <div className="text-center p-10 text-muted-foreground border rounded-md border-dashed">
+                No Auction Insights data found for this period.
+            </div>
+        );
+    }
+
+    // Sort: You first, then by Impression Share descending
+    const sortedData = [...data].sort((a, b) => {
+        if (a.domain === "You") return -1;
+        if (b.domain === "You") return 1;
+        return b.impressionShare - a.impressionShare;
+    });
+
+    const formatPercent = (val: number) => (val * 100).toFixed(1) + "%";
+
+    return (
+        <Card className="w-full">
+            <CardHeader>
+                <CardTitle className="text-lg flex items-center justify-between">
+                    <span>Competition Analysis</span>
+                    <Badge variant="outline">{data.length} Competitors</Badge>
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[180px]">Domain</TableHead>
+                                <TableHead className="text-right">Impression Share</TableHead>
+                                <TableHead className="text-right">Overlap Rate</TableHead>
+                                <TableHead className="text-right">Outranking Share</TableHead>
+                                <TableHead className="text-right">Pos. Above Rate</TableHead>
+                                <TableHead className="text-right">Top of Page</TableHead>
+                                <TableHead className="text-right">Abs. Top</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {sortedData.map((row) => {
+                                const isYou = row.domain === "You";
+                                return (
+                                    <TableRow key={row.domain} className={isYou ? "bg-muted/50 font-medium" : ""}>
+                                        <TableCell>
+                                            {isYou ? (
+                                                <span className="text-primary font-bold">You</span>
+                                            ) : (
+                                                row.domain
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right">{formatPercent(row.impressionShare)}</TableCell>
+                                        <TableCell className="text-right">{formatPercent(row.overlapRate)}</TableCell>
+                                        <TableCell className="text-right">{formatPercent(row.outrankingShare)}</TableCell>
+                                        <TableCell className="text-right">{formatPercent(row.positionAboveRate)}</TableCell>
+                                        <TableCell className="text-right">{formatPercent(row.topOfPageRate)}</TableCell>
+                                        <TableCell className="text-right">{formatPercent(row.absTopOfPageRate)}</TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}

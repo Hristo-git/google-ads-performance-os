@@ -1,91 +1,142 @@
 /**
- * Google Ads Script to Export Auction Insights to Google Sheets
+ * Google Ads Script - SINGLE ACCOUNT VERSION (Optimized)
+ * 
+ * Target Sheet: https://docs.google.com/spreadsheets/d/1nmSYTJK2Me11-bcVtNBolb8wXMViD6i8gdBEK6EOmd4/edit
  * 
  * INSTRUCTIONS:
- * 1. Create a new Google Sheet.
- * 2. Copy the Sheet URL.
- * 3. Paste the URL into the CONFIG object below.
- * 4. Run this script in your Google Ads account (Tools & Settings > Bulk Actions > Scripts).
- * 5. Schedule it to run Daily.
+ * 1. RUN THIS SCRIPT IN THE CLIENT ACCOUNT (e.g. Videnov.BG), NOT IN MCC.
+ * 2. It does NOT use AdsManagerApp.
  */
 
 const CONFIG = {
-    // REPLACE THIS WITH YOUR SHEET URL
-    SPREADSHEET_URL: 'YOUR_GOOGLE_SHEET_URL_HERE',
-
-    // Name of the tab/sheet to write to. Will be created if it doesn't exist.
-    SHEET_NAME: 'Auction_Insights_Data',
-
-    // Date range for the report (LAST_30_DAYS, LAST_7_DAYS, YESTERDAY, etc.)
-    DATE_RANGE: 'LAST_30_DAYS'
+    SPREADSHEET_URL: 'https://docs.google.com/spreadsheets/d/1nmSYTJK2Me11-bcVtNBolb8wXMViD6i8gdBEK6EOmd4/edit',
+    SHEET_NAME: 'Auction Insights',
+    DATE_RANGE: 'LAST_30_DAYS',
+    LIMIT: 50
 };
 
 function main() {
-    var spreadsheet = SpreadsheetApp.openByUrl(CONFIG.SPREADSHEET_URL);
-    var sheet = spreadsheet.getSheetByName(CONFIG.SHEET_NAME);
+    Logger.log('>>> SINGLE ACCOUNT SCRIPT STARTED');
+    var accountName = AdsApp.currentAccount().getName();
+    Logger.log('Account: ' + accountName);
 
-    // Create sheet if it doesn't exist
-    if (!sheet) {
-        sheet = spreadsheet.insertSheet(CONFIG.SHEET_NAME);
-    }
+    // Step 1: Find Active Search Campaigns
+    Logger.log('Step 1: Fetching top active campaigns...');
+    var campaignIds = [];
 
-    sheet.clear(); // Clear old data
-
-    // Define the report query
-    // Optimizing by removing daily segmentation (segments.date) to avoid timeouts 
-    // and provide a consolidated view for the date range.
-    var query =
-        "SELECT " +
-        "auction_insight_domain_view.display_name, " +
-        "metrics.auction_insight_search_impression_share, " +
-        "metrics.auction_insight_search_overlap_rate, " +
-        "metrics.auction_insight_search_position_above_rate, " +
-        "metrics.auction_insight_search_top_impression_share, " +
-        "metrics.auction_insight_search_absolute_top_impression_share, " +
-        "metrics.auction_insight_search_outranking_share " +
-        "FROM " +
-        "auction_insight_domain_view " +
-        "WHERE " +
-        "campaign.status = 'ENABLED' " +
+    // We get campaigns that have had impressions to ensure they have data
+    var campQuery =
+        "SELECT campaign.id, campaign.name " +
+        "FROM campaign " +
+        "WHERE campaign.status = 'ENABLED' " +
+        "AND campaign.advertising_channel_type = 'SEARCH' " +
+        "AND metrics.impressions > 0 " +
         "AND segments.date DURING " + CONFIG.DATE_RANGE + " " +
-        "ORDER BY " +
-        "metrics.auction_insight_search_impression_share DESC";
+        "LIMIT 10";
 
-    var report = AdsApp.report(query);
-
-    // Write headers
-    var headers = [
-        'Domain',
-        'Impression Share',
-        'Overlap Rate',
-        'Position Above Rate',
-        'Top of Page Rate',
-        'Abs. Top of Page Rate',
-        'Outranking Share'
-    ];
-
-    sheet.appendRow(headers);
-
-    var rows = report.rows();
-    var data = [];
-
-    while (rows.hasNext()) {
-        var row = rows.next();
-        data.push([
-            row['auction_insight_domain_view.display_name'],
-            row['metrics.auction_insight_search_impression_share'],
-            row['metrics.auction_insight_search_overlap_rate'],
-            row['metrics.auction_insight_search_position_above_rate'],
-            row['metrics.auction_insight_search_top_impression_share'],
-            row['metrics.auction_insight_search_absolute_top_impression_share'],
-            row['metrics.auction_insight_search_outranking_share']
-        ]);
+    try {
+        var campSearch = AdsApp.search(campQuery);
+        while (campSearch.hasNext()) {
+            campaignIds.push(campSearch.next().campaign.id);
+        }
+    } catch (e) {
+        Logger.log('Error listing campaigns: ' + e.message);
     }
 
-    if (data.length > 0) {
-        // Write all data in one batch for performance
+    if (campaignIds.length === 0) {
+        Logger.log('>>> No active Search campaigns with impressions found. Trying without impression filter...');
+        // Fallback: Try without impression filter
+        var campQuery2 = "SELECT campaign.id FROM campaign WHERE campaign.status = 'ENABLED' AND campaign.advertising_channel_type = 'SEARCH' LIMIT 10";
+        var campSearch2 = AdsApp.search(campQuery2);
+        while (campSearch2.hasNext()) {
+            campaignIds.push(campSearch2.next().campaign.id);
+        }
+    }
+
+    if (campaignIds.length === 0) {
+        Logger.log('>>> NO CAMPAIGNS FOUND. Cannot run Auction Insights.');
+        return;
+    }
+
+    Logger.log('Found ' + campaignIds.length + ' campaigns to analyze.');
+
+    // Step 2: Query Auction Insights
+    var idsString = campaignIds.join(',');
+
+    // Using AdsApp.report (Robust Mode) for Single Account
+    var gaqlQuery =
+        "SELECT " +
+        "  auction_insight_domain_view.display_name, " +
+        "  metrics.auction_insight_search_impression_share, " +
+        "  metrics.auction_insight_search_overlap_rate, " +
+        "  metrics.auction_insight_search_outranking_share " +
+        "FROM auction_insight_domain_view " +
+        "WHERE campaign.id IN (" + idsString + ") " +
+        "  AND segments.date DURING " + CONFIG.DATE_RANGE;
+
+    Logger.log('Step 2: Querying Auction Insights resource...');
+
+    try {
+        var report = AdsApp.report(gaqlQuery);
+        var rows = report.rows();
+
+        var dataMap = {};
+        var foundRows = 0;
+
+        while (rows.hasNext()) {
+            var row = rows.next();
+            foundRows++;
+
+            // Note: report.rows() returns objects where keys are "Table.Field" string
+            var domain = row['auction_insight_domain_view.display_name'] || 'You';
+            var share = parseFloat(row['metrics.auction_insight_search_impression_share']) || 0;
+            var overlap = row['metrics.auction_insight_search_overlap_rate'] || 0;
+            var outranking = row['metrics.auction_insight_search_outranking_share'] || 0;
+
+            if (!dataMap[domain] || share > dataMap[domain].share) {
+                dataMap[domain] = {
+                    share: share,
+                    overlap: overlap,
+                    outranking: outranking
+                };
+            }
+        }
+
+        Logger.log('Found ' + foundRows + ' raw rows of insights.');
+
+        var data = [];
+        for (var domain in dataMap) {
+            data.push([
+                accountName, // Add Account Name column for consistency
+                domain,
+                dataMap[domain].share,
+                dataMap[domain].overlap,
+                0, 0, 0,
+                dataMap[domain].outranking
+            ]);
+        }
+
+        if (data.length === 0) {
+            Logger.log('>>> CAMPAIGNS FOUND, BUT NO AUCTION INSIGHTS DATA returned.');
+            return;
+        }
+
+        // Sort
+        data.sort(function (a, b) { return b[2] - a[2]; }); // Sort by Share (index 2)
+        data = data.slice(0, CONFIG.LIMIT);
+
+        // Step 3: Write
+        Logger.log('Step 3: Writing to sheet...');
+        var spreadsheet = SpreadsheetApp.openByUrl(CONFIG.SPREADSHEET_URL);
+        var sheet = spreadsheet.getSheetByName(CONFIG.SHEET_NAME) || spreadsheet.insertSheet(CONFIG.SHEET_NAME);
+        sheet.clear();
+        var headers = ['Account', 'Domain', 'Impression Share', 'Overlap Rate', 'Position Above Rate', 'Top of Page Rate', 'Abs. Top of Page Rate', 'Outranking Share'];
+        sheet.appendRow(headers);
         sheet.getRange(2, 1, data.length, headers.length).setValues(data);
-    }
+        Logger.log('>>> SUCCESS! Data written.');
 
-    Logger.log('Export complete. ' + data.length + ' rows written.');
+    } catch (e) {
+        Logger.log('!!! ERROR: ' + e.message);
+        Logger.log('If this says "Could not identify resource", then Auction Insights via Scripts is NOT supported for your specific account setup.');
+    }
 }

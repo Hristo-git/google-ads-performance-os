@@ -1,34 +1,75 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, TrendingUp } from 'lucide-react';
-import { AuctionInsightsRow } from '@/lib/google-sheets';
 
-export function AuctionInsights() {
+interface AuctionInsightsRow {
+    domain: string;
+    impressionShare: number;
+    overlapRate: number;
+    outrankingShare: number;
+    positionAboveRate: number;
+    topRate: number;
+    absTopRate: number;
+}
+
+interface AuctionInsightsProps {
+    customerId?: string;
+    dateRange?: { start: string; end: string };
+    campaignIds?: string[];
+}
+
+export function AuctionInsights({ customerId, dateRange, campaignIds }: AuctionInsightsProps) {
     const [data, setData] = useState<AuctionInsightsRow[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        async function fetchData() {
+        if (!customerId) return;
+
+        const fetchData = async () => {
+            setLoading(true);
+            setError(null);
             try {
-                const res = await fetch('/api/auction-insights');
-                const json = await res.json();
+                // Default date range to last 30 days if not provided
+                const effectiveDateRange = dateRange || {
+                    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    end: new Date().toISOString().split('T')[0]
+                };
+
+                const res = await fetch('/api/df/auction-insights', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customerId,
+                        dateRange: effectiveDateRange,
+                        campaignIds
+                    })
+                });
 
                 if (!res.ok) {
-                    throw new Error(json.error || 'Failed to fetch data');
+                    try {
+                        const json = await res.json();
+                        throw new Error(json.error || 'Failed to fetch auction insights');
+                    } catch (e) {
+                        throw new Error('Failed to fetch auction insights');
+                    }
                 }
 
-                setData(json.data);
+                const result = await res.json();
+                if (result.error) throw new Error(result.error);
+
+                setData(result.data || []);
             } catch (err: any) {
-                setError(err.message);
+                console.error("Error loading auction insights:", err);
+                setError(err.message || 'Failed to load data');
             } finally {
                 setLoading(false);
             }
-        }
+        };
 
         fetchData();
-    }, []);
+    }, [customerId, dateRange?.start, dateRange?.end, JSON.stringify(campaignIds)]);
 
     if (loading) {
         return (
@@ -44,13 +85,10 @@ export function AuctionInsights() {
                 <div className="flex items-center gap-3 text-red-400 bg-red-400/10 p-4 rounded-lg border border-red-400/20">
                     <AlertCircle className="h-5 w-5" />
                     <div>
-                        <h3 className="font-semibold">Error Loading Auction Insights</h3>
+                        <h3 className="font-semibold">Error Loading</h3>
                         <p className="text-sm opacity-90">{error}</p>
                     </div>
                 </div>
-                <p className="text-slate-400 text-sm mt-4">
-                    Ensure the Google Sheet is shared with the service account and the ID is correct.
-                </p>
             </div>
         );
     }
@@ -63,7 +101,7 @@ export function AuctionInsights() {
                 </div>
                 <h3 className="text-lg font-medium text-slate-200">No Auction Insights Data</h3>
                 <p className="text-slate-500 mt-2 max-w-md mx-auto">
-                    We couldn't find any data in the connected Google Sheet. Please ensure the Google Ads Script has run and populated the sheet.
+                    No auction insights data available for this period. Try adjusting the date range.
                 </p>
             </div>
         );
@@ -74,36 +112,35 @@ export function AuctionInsights() {
             <div className="p-6 border-b border-slate-800">
                 <h2 className="text-xl font-semibold text-slate-100 flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-violet-500" />
-                    Auction Insights (Competitors)
+                    Auction Insights
                 </h2>
                 <p className="text-slate-400 text-sm mt-1">
-                    Competitive landscape data from the last 30 days.
+                    Competitive landscape data.
                 </p>
             </div>
-
             <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-slate-400 uppercase bg-slate-950/50 border-b border-slate-800">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-950/50 text-slate-400 uppercase text-xs border-b border-slate-800">
                         <tr>
                             <th className="px-6 py-4 font-medium">Domain</th>
-                            <th className="px-6 py-4 font-medium text-right">Impression Share</th>
-                            <th className="px-6 py-4 font-medium text-right">Overlap Rate</th>
-                            <th className="px-6 py-4 font-medium text-right">Outranking Share</th>
-                            <th className="px-6 py-4 font-medium text-right">Pos. Above Rate</th>
-                            <th className="px-6 py-4 font-medium text-right">Top of Page</th>
-                            <th className="px-6 py-4 font-medium text-right">Abs. Top</th>
+                            <th className="px-6 py-4 text-right font-medium">Impression Share</th>
+                            <th className="px-6 py-4 text-right font-medium">Overlap Rate</th>
+                            <th className="px-6 py-4 text-right font-medium">Outranking Share</th>
+                            <th className="px-6 py-4 text-right font-medium">Position Above Rate</th>
+                            <th className="px-6 py-4 text-right font-medium">Top Rate</th>
+                            <th className="px-6 py-4 text-right font-medium">Abs. Top Rate</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
-                        {data.map((row, i) => (
-                            <tr key={i} className="hover:bg-slate-800/30 transition-colors">
+                        {data.map((row, idx) => (
+                            <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
                                 <td className="px-6 py-4 font-medium text-slate-200">{row.domain}</td>
                                 <td className="px-6 py-4 text-right text-slate-300">{(row.impressionShare * 100).toFixed(1)}%</td>
                                 <td className="px-6 py-4 text-right text-slate-300">{(row.overlapRate * 100).toFixed(1)}%</td>
                                 <td className="px-6 py-4 text-right text-slate-300">{(row.outrankingShare * 100).toFixed(1)}%</td>
                                 <td className="px-6 py-4 text-right text-slate-300">{(row.positionAboveRate * 100).toFixed(1)}%</td>
-                                <td className="px-6 py-4 text-right text-slate-300">{(row.topOfPageRate * 100).toFixed(1)}%</td>
-                                <td className="px-6 py-4 text-right text-slate-300">{(row.absTopOfPageRate * 100).toFixed(1)}%</td>
+                                <td className="px-6 py-4 text-right text-slate-300">{(row.topRate * 100).toFixed(1)}%</td>
+                                <td className="px-6 py-4 text-right text-slate-300">{(row.absTopRate * 100).toFixed(1)}%</td>
                             </tr>
                         ))}
                     </tbody>

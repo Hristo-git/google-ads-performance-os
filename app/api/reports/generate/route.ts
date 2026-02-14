@@ -248,7 +248,7 @@ export async function POST(request: Request) {
 
                         const pass1Stream = anthropic.messages.stream({
                             model: modelId,
-                            max_tokens: 16000,
+                            max_tokens: 20000,
                             system: languageConstraint,
                             messages: [{ role: "user", content: prompt }],
                         });
@@ -343,7 +343,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         analysis = ''; // Reset — pass 2 output replaces pass 1
                         const pass2Stream = anthropic.messages.stream({
                             model: modelId,
-                            max_tokens: 16000,
+                            max_tokens: 20000,
                             system: languageConstraint,
                             messages: [{ role: "user", content: expertPrompt }],
                         });
@@ -359,7 +359,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         // ── Single pass: stream directly ──
                         const stream = anthropic.messages.stream({
                             model: modelId,
-                            max_tokens: 16000,
+                            max_tokens: 20000,
                             system: languageConstraint,
                             messages: [{ role: "user", content: prompt }],
                         });
