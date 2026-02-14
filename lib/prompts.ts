@@ -722,7 +722,7 @@ Bulleted list of specific data requests.
 
 --- LOW QS KEYWORDS (Top by spend) ---
 ${(keywords || []).map((k: any) => `
-Keyword: "${k.text}" (${k.matchType})
+Keyword: "${k.text}" (${k.matchType}) | Campaign: "${k.campaignName}" | Ad Group: "${k.adGroupName}"
 - QS: ${k.qualityScore} | Exp.CTR: ${k.expectedCtr} | Ad Rel: ${k.adRelevance} | LP Exp: ${k.landingPageExperience}
 - Impr: ${k.impressions} | Clicks: ${k.clicks} | Cost: ${fmt(k.cost)} | Conv: ${k.conversions}
 - CPC: ${fmt(k.avgCpc, 3)} | Lost IS (Rank): ${fmt(k.searchLostIsRank)}%

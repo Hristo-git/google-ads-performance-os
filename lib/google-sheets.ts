@@ -36,7 +36,7 @@ export async function getAuctionInsightsFromSheet(spreadsheetId: string): Promis
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Auction_Insights_Data!A2:H', // Skip header
+            range: 'Auction_Insights_Data!A2:G', // Up to Outranking Share (7 columns)
         });
 
         const rows = response.data.values;
@@ -45,14 +45,14 @@ export async function getAuctionInsightsFromSheet(spreadsheetId: string): Promis
         }
 
         return rows.map((row) => ({
-            date: row[0] || '',
-            domain: row[1] || '',
-            impressionShare: parseFloat(row[2]) || 0,
-            overlapRate: parseFloat(row[3]) || 0,
-            positionAboveRate: parseFloat(row[4]) || 0,
-            topOfPageRate: parseFloat(row[5]) || 0,
-            absTopOfPageRate: parseFloat(row[6]) || 0,
-            outrankingShare: parseFloat(row[7]) || 0,
+            date: '', // No longer providing daily data to optimize performance
+            domain: row[0] || '',
+            impressionShare: parseFloat(row[1]) || 0,
+            overlapRate: parseFloat(row[2]) || 0,
+            positionAboveRate: parseFloat(row[3]) || 0,
+            topOfPageRate: parseFloat(row[4]) || 0,
+            absTopOfPageRate: parseFloat(row[5]) || 0,
+            outrankingShare: parseFloat(row[6]) || 0,
         }));
 
     } catch (error) {

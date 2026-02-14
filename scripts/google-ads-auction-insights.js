@@ -32,11 +32,10 @@ function main() {
     sheet.clear(); // Clear old data
 
     // Define the report query
-    // Note: We use 'segments.date' to get daily data if needed, or just aggregate.
-    // Here we'll get a summary for the date range.
+    // Optimizing by removing daily segmentation (segments.date) to avoid timeouts 
+    // and provide a consolidated view for the date range.
     var query =
         "SELECT " +
-        "segments.date, " +
         "auction_insight_domain_view.display_name, " +
         "metrics.auction_insight_search_impression_share, " +
         "metrics.auction_insight_search_overlap_rate, " +
@@ -56,7 +55,6 @@ function main() {
 
     // Write headers
     var headers = [
-        'Date',
         'Domain',
         'Impression Share',
         'Overlap Rate',
@@ -74,7 +72,6 @@ function main() {
     while (rows.hasNext()) {
         var row = rows.next();
         data.push([
-            row['segments.date'],
             row['auction_insight_domain_view.display_name'],
             row['metrics.auction_insight_search_impression_share'],
             row['metrics.auction_insight_search_overlap_rate'],

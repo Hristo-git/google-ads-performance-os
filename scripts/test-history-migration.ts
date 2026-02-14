@@ -10,7 +10,7 @@ async function testHistoryMigration() {
     console.log('🧪 Starting History Migration Test...');
 
     // Dynamic import to ensure env vars are loaded first
-    const { saveReport, getReports, deleteReport, GadsReport } = await import('../lib/supabase');
+    const { saveReport, getReports, deleteReport } = await import('../lib/supabase');
 
     const testReportId = `test_report_${Date.now()}`;
     const testCustomerId = '1234567890';
