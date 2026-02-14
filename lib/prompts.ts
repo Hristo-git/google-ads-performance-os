@@ -1,4 +1,23 @@
 // ============================================
+// HELPERS
+// ============================================
+
+const BIDDING_LABELS: Record<number | string, string> = {
+    0: 'Unspecified', 1: 'Unknown', 2: 'Manual CPC', 3: 'Manual CPM',
+    4: 'Manual CPV', 5: 'Maximize Conversions', 6: 'Maximize Conversion Value',
+    7: 'Target CPA', 8: 'Target ROAS', 9: 'Target Impression Share',
+    10: 'Manual CPC (Enhanced)', 11: 'Maximize Conversions',
+    12: 'Maximize Conversion Value', 13: 'Target Spend',
+};
+
+function getBiddingLabel(code: number | string | undefined): string {
+    if (code === undefined || code === null) return 'N/A';
+    // If already a readable string (not a pure number), return as-is
+    if (typeof code === 'string' && isNaN(Number(code))) return code;
+    return BIDDING_LABELS[code] || `Strategy ${code}`;
+}
+
+// ============================================
 // IMPROVED ANALYSIS SYSTEM PROMPT v2
 // ============================================
 
@@ -335,6 +354,17 @@ BRAND RISK DISCLAIMER (MANDATORY)
   Add before ANY scaling recommendation: "All budget and scaling decisions should be made AFTER cleaning branded queries from non-brand campaigns. Otherwise, ROAS will appear to decline upon scaling, creating a false impression of performance deterioration."
 - If brand leakage status is unknown, note: "Verify search terms for branded leakage before scaling."
 
+POST-CLEANUP ROAS BASELINE (MANDATORY)
+- When branded query leakage is detected (or suspected) in non-brand campaigns, the CURRENT ROAS is INFLATED by branded conversions.
+- NEVER use the inflated ROAS as the baseline for post-cleanup revenue projections.
+  Wrong: "After cleanup, reallocating €750 at current 24.2x ROAS × 0.75 = €13.6k"
+  Right: "Current 24.2x ROAS includes branded traffic. Post-cleanup non-brand baseline is estimated at 3–8x ROAS (based on typical non-brand performance in this vertical). Projections should use this adjusted baseline."
+- Estimation logic for post-cleanup ROAS:
+  - If account-level non-brand ROAS is available → use it as the baseline
+  - If not available → estimate post-cleanup ROAS as 15–35% of the current campaign ROAS (branded queries typically drive 3–5x higher ROAS than generic)
+  - ALWAYS state this is an estimate: "**Post-cleanup ROAS baseline (estimate):** [formula/reasoning] = [range]"
+- Revenue projections after cleanup MUST use the post-cleanup baseline, NOT the inflated current ROAS.
+
 SCALING SCENARIOS (MANDATORY for account-level reports)
 After the Action Plan, include two scenarios:
 **Scenario A — Conservative**: Budget +20%, expected ROAS decline 10–15%, low risk.
@@ -361,7 +391,10 @@ Before recommending bidding strategy changes:
    - If conversions < 30: "Insufficient conversion volume (n<30) for setting tCPA/tROAS. Scale budget without target first."
    - If conversions 30–50: "Target can be set conservatively at current_CPA × 1.10–1.15. Monitor closely."
    - If conversions > 50: "Sufficient volume for tCPA/tROAS. Set at current metric × 1.05–1.15 and tighten over 2–4 weeks."
-3. NEVER use raw numeric bidding type enum codes (e.g. "type: 11", "type: 9") in output. Always use human-readable labels from the data (e.g. "Maximize Conversions", "Target Impression Share").
+3. NEVER use raw numeric bidding type enum codes in output. This includes ANY of these patterns:
+   Banned: "тип 10", "тип 11", "type: 9", "strategy 6", "бидинг стратегия 11", "bidding type 10/11/9"
+   Always use human-readable labels from the data (e.g. "Maximize Conversions", "Target Impression Share", "Manual CPC (Enhanced)").
+   If you see a numeric code in the data and cannot map it, write "Bidding strategy: [see campaign data]" — NEVER output the number.
 
 DEVICE ANALYSIS DECISION TREE (MANDATORY)
 1. CHECK bidding strategy type first.
@@ -644,7 +677,7 @@ Campaign: ${c.name}
 - Lost IS (Rank): ${((c.searchLostISRank || 0) * 100).toFixed(1)}% | Lost IS (Budget): ${((c.searchLostISBudget || 0) * 100).toFixed(1)}%
 - Current IS: ${((c.searchImpressionShare || 0) * 100).toFixed(1)}%
 - Spend: €${(c.cost || 0).toFixed(2)} | ROAS: ${c.roas || 0}x | Conversions: ${c.conversions || 0}
-- Bidding: ${c.biddingStrategyType || 'N/A'}
+- Bidding: ${getBiddingLabel(c.biddingStrategyType)}
 ${c.targetRoas ? `- Target ROAS: ${c.targetRoas}x` : ''}${c.targetCpa ? `- Target CPA: €${c.targetCpa}` : ''}
 `).join('\n')}
 

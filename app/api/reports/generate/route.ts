@@ -156,7 +156,13 @@ ${analysis}
    - Ensure every projection is marked as "**Projection (model):** [formula] = [result]"
    - Add Confidence: HIGH/MEDIUM/LOW to each major recommendation
 
-3. **Rewrite** the final output as an improved version.
+3. **Verify mandatory sections** are present:
+   - Section 8: Scaling Scenarios (A/B/C) — REQUIRED for account/category reports
+   - Section 9: Decision Requests (3-5 items)
+   - Section 10: Definition of Done (4-6 measurable criteria)
+   If any are missing, ADD them.
+
+4. **Rewrite** the final output as an improved version.
 
 Output the enhanced analysis directly — no meta-commentary, no "reviewer notes", no preamble about what was changed.`
                             : `Ти си senior performance marketing експерт, преглеждащ следния AI-генериран анализ.
@@ -185,7 +191,13 @@ ${analysis}
    - Маркирай всяка прогноза като "**Прогноза (модел):** [формула] = [резултат]"
    - Добави Confidence: HIGH/MEDIUM/LOW към всяка основна препоръка
 
-3. **Препиши** финалния output като подобрена версия.
+3. **Провери задължителните секции**:
+   - Секция 8: Scaling Scenarios (A/B/C) — ЗАДЪЛЖИТЕЛНА за account/category репорти
+   - Секция 9: Decision Requests (3-5 решения)
+   - Секция 10: Definition of Done (4-6 измерими критерия)
+   Ако липсват, ДОБАВИ ги.
+
+4. **Препиши** финалния output като подобрена версия.
 
 Изведи подобрения анализ директно — без мета-коментари, без "бележки на рецензент", без предговор.`;
 
