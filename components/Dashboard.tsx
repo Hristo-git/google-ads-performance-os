@@ -795,6 +795,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                     const ctxData = await ctxRes.json();
                     if (ctxData.contextBlock) dataToAnalyze.contextBlock = ctxData.contextBlock;
                     if (ctxData.pmaxBlock) dataToAnalyze.pmaxBlock = ctxData.pmaxBlock;
+                    if (ctxData.context?.device) dataToAnalyze.deviceData = ctxData.context.device;
                 }
             } catch (err) {
                 console.warn("Failed to fetch context signals (non-blocking)", err);
@@ -869,7 +870,29 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
         switch (navigation.level) {
             case 'account':
-                return { campaigns: enrichWithSmartBidding(campaigns), strategicBreakdown, level: 'account' };
+                // Trim keywords if >1000: keep top by cost, low QS, and 0 impressions
+                let trimmedKeywords = keywords;
+                if (keywords.length > 1000) {
+                    const bySpend = [...keywords].sort((a, b) => (b.cost || 0) - (a.cost || 0)).slice(0, 500);
+                    const lowQS = keywords.filter(k => k.qualityScore !== null && k.qualityScore <= 5).slice(0, 300);
+                    const zeroImpr = keywords.filter(k => !k.impressions || k.impressions === 0).slice(0, 200);
+                    const idSet = new Set<string>();
+                    trimmedKeywords = [...bySpend, ...lowQS, ...zeroImpr].filter(k => {
+                        if (idSet.has(k.id)) return false;
+                        idSet.add(k.id);
+                        return true;
+                    });
+                }
+                return {
+                    campaigns: enrichWithSmartBidding(campaigns),
+                    adGroups,
+                    keywords: trimmedKeywords,
+                    ads,
+                    negativeKeywords,
+                    deviceData: deviceBreakdown,
+                    strategicBreakdown,
+                    level: 'account'
+                };
             case 'campaign':
                 const campaign = campaigns.find(c => c.id === navigation.campaignId);
                 const isPMax = campaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
