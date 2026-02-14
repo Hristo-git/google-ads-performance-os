@@ -120,101 +120,131 @@ export default function AIReportsHub({
                 dataPayload.strategicBreakdown = strategicBreakdown;
             }
 
-            // On-demand fetch for ad groups when empty (account-level reports view)
-            if (selectedTemplate.requiredData.includes('adGroups')) {
-                if (adGroups.length === 0 && customerId) {
-                    try {
-                        console.log("[AIReports] Fetching ad groups on demand...");
-                        const dateParams = dateRange ? `&startDate=${dateRange.start}&endDate=${dateRange.end}` : '';
-                        const res = await fetch(`/api/google-ads/ad-groups?customerId=${customerId}&status=ENABLED${dateParams}`);
-                        const agData = await res.json();
-                        if (agData.adGroups?.length > 0) {
-                            console.log(`[AIReports] Fetched ${agData.adGroups.length} ad groups on demand`);
-                            dataPayload.adGroups = agData.adGroups.slice(0, settings.rowLimit);
-                        } else {
-                            dataPayload.adGroups = [];
-                        }
-                    } catch (e) {
-                        console.warn("[AIReports] Failed to fetch ad groups on demand", e);
-                        dataPayload.adGroups = [];
-                    }
-                } else {
-                    dataPayload.adGroups = adGroups.slice(0, settings.rowLimit);
-                }
-            }
-
             if (selectedTemplate.requiredData.includes('searchTerms')) {
                 dataPayload.searchTerms = searchTerms.slice(0, settings.rowLimit);
                 dataPayload.nGramAnalysis = nGramAnalysis;
             }
 
-            // On-demand fetch for keywords when empty (account-level reports view)
+            // ── Parallel on-demand data fetching ──────────────────────────
+            // Build array of fetch promises for data that needs on-demand loading.
+            // This runs all fetches in parallel instead of sequentially (3-5× faster).
+            const dateParams = dateRange ? `&startDate=${dateRange.start}&endDate=${dateRange.end}` : '';
+            const fetchPromises: { key: string; promise: Promise<any>; required: boolean }[] = [];
+
+            // Ad Groups
+            if (selectedTemplate.requiredData.includes('adGroups')) {
+                if (adGroups.length === 0 && customerId) {
+                    console.log("[AIReports] Queuing ad groups fetch...");
+                    fetchPromises.push({
+                        key: 'adGroups',
+                        required: true,
+                        promise: fetch(`/api/google-ads/ad-groups?customerId=${customerId}&status=ENABLED${dateParams}`)
+                            .then(r => r.json())
+                            .then(d => d.adGroups || []),
+                    });
+                } else {
+                    dataPayload.adGroups = adGroups.slice(0, settings.rowLimit);
+                }
+            }
+
+            // Keywords
             if (selectedTemplate.requiredData.includes('keywords')) {
                 if (keywords.length === 0 && customerId) {
-                    try {
-                        console.log("[AIReports] Fetching keywords on demand...");
-                        const qsFilter = selectedTemplate.id === 'quality_score_diagnostics' ? '&maxQualityScore=5' : '';
-                        const res = await fetch(`/api/google-ads/keywords?customerId=${customerId}${qsFilter}`);
-                        const kwData = await res.json();
-                        if (kwData.keywords?.length > 0) {
-                            console.log(`[AIReports] Fetched ${kwData.keywords.length} keywords on demand`);
-                            dataPayload.keywords = kwData.keywords.slice(0, settings.rowLimit);
-                        } else {
-                            dataPayload.keywords = [];
-                        }
-                    } catch (e) {
-                        console.warn("[AIReports] Failed to fetch keywords on demand", e);
-                        dataPayload.keywords = [];
-                    }
+                    console.log("[AIReports] Queuing keywords fetch...");
+                    const qsFilter = selectedTemplate.id === 'quality_score_diagnostics' ? '&maxQualityScore=5' : '';
+                    fetchPromises.push({
+                        key: 'keywords',
+                        required: true,
+                        promise: fetch(`/api/google-ads/keywords?customerId=${customerId}${qsFilter}`)
+                            .then(r => r.json())
+                            .then(d => d.keywords || []),
+                    });
                 } else {
                     dataPayload.keywords = keywords.slice(0, settings.rowLimit);
                 }
             }
 
-            // On-demand fetch for ads when empty (account-level reports view)
+            // Ads
             if (selectedTemplate.requiredData.includes('ads')) {
                 if (ads.length === 0 && customerId) {
-                    try {
-                        console.log("[AIReports] Fetching ads on demand...");
-                        const dateParams = dateRange ? `&startDate=${dateRange.start}&endDate=${dateRange.end}` : '';
-                        const res = await fetch(`/api/google-ads/ads?customerId=${customerId}${dateParams}`);
-                        const adsData = await res.json();
-                        if (adsData.ads?.length > 0) {
-                            console.log(`[AIReports] Fetched ${adsData.ads.length} ads on demand`);
-                            dataPayload.ads = adsData.ads.slice(0, settings.rowLimit);
-                        } else {
-                            dataPayload.ads = [];
-                        }
-                    } catch (e) {
-                        console.warn("[AIReports] Failed to fetch ads on demand", e);
-                        dataPayload.ads = [];
-                    }
+                    console.log("[AIReports] Queuing ads fetch...");
+                    fetchPromises.push({
+                        key: 'ads',
+                        required: true,
+                        promise: fetch(`/api/google-ads/ads?customerId=${customerId}${dateParams}`)
+                            .then(r => r.json())
+                            .then(d => d.ads || []),
+                    });
                 } else {
                     dataPayload.ads = ads.slice(0, settings.rowLimit);
                 }
             }
 
-            // Fetch context signals (device/geo/hour/day/auction/LP/conversions + PMax)
+            // Context signals (optional — never blocks report)
             if (customerId && dateRange) {
-                try {
-                    console.log("[AIReports] Fetching analysis context signals...");
-                    const pmaxIds = (campaigns || [])
-                        .filter((c: any) => c.advertisingChannelType === 'PERFORMANCE_MAX' || c.advertisingChannelType === 6)
-                        .map((c: any) => c.id)
-                        .filter(Boolean);
-                    const pmaxParam = pmaxIds.length > 0 ? `&pmaxCampaignIds=${pmaxIds.join(',')}` : '';
-                    const ctxRes = await fetch(
+                const pmaxIds = (campaigns || [])
+                    .filter((c: any) => c.advertisingChannelType === 'PERFORMANCE_MAX' || c.advertisingChannelType === 6)
+                    .map((c: any) => c.id)
+                    .filter(Boolean);
+                const pmaxParam = pmaxIds.length > 0 ? `&pmaxCampaignIds=${pmaxIds.join(',')}` : '';
+                fetchPromises.push({
+                    key: 'context',
+                    required: false,
+                    promise: fetch(
                         `/api/google-ads/analysis-context?customerId=${customerId}&startDate=${dateRange.start}&endDate=${dateRange.end}&language=${settings.language}${pmaxParam}`
-                    );
-                    if (ctxRes.ok) {
-                        const ctxData = await ctxRes.json();
-                        if (ctxData.contextBlock) dataPayload.contextBlock = ctxData.contextBlock;
-                        if (ctxData.pmaxBlock) dataPayload.pmaxBlock = ctxData.pmaxBlock;
-                        if (ctxData.context?.device) dataPayload.deviceData = ctxData.context.device;
-                        console.log(`[AIReports] Context signals loaded (${(ctxData.contextBlock || '').length} chars)`);
+                    ).then(r => r.ok ? r.json() : null),
+                });
+            }
+
+            // Execute all fetches in parallel
+            if (fetchPromises.length > 0) {
+                console.log(`[AIReports] Fetching ${fetchPromises.length} data sources in parallel...`);
+                const results = await Promise.allSettled(fetchPromises.map(f => f.promise));
+
+                const failedRequired: string[] = [];
+
+                results.forEach((result, i) => {
+                    const { key, required } = fetchPromises[i];
+
+                    if (result.status === 'fulfilled' && result.value) {
+                        if (key === 'context') {
+                            const ctxData = result.value;
+                            if (ctxData.contextBlock) dataPayload.contextBlock = ctxData.contextBlock;
+                            if (ctxData.pmaxBlock) dataPayload.pmaxBlock = ctxData.pmaxBlock;
+                            if (ctxData.context?.device) dataPayload.deviceData = ctxData.context.device;
+                            console.log(`[AIReports] Context signals loaded`);
+                        } else {
+                            const rows = Array.isArray(result.value) ? result.value : [];
+                            dataPayload[key] = rows.slice(0, settings.rowLimit);
+                            console.log(`[AIReports] ${key}: ${rows.length} rows loaded`);
+                            if (rows.length === 0 && required) {
+                                failedRequired.push(key);
+                            }
+                        }
+                    } else {
+                        const reason = result.status === 'rejected' ? result.reason : 'empty response';
+                        console.error(`[AIReports] ${key} fetch failed:`, reason);
+                        if (required) {
+                            failedRequired.push(key);
+                        }
+                        if (key !== 'context') dataPayload[key] = [];
                     }
-                } catch (e) {
-                    console.warn("[AIReports] Failed to fetch context signals (non-blocking)", e);
+                });
+
+                // If ALL required data sources failed, abort with a clear error
+                const requiredKeys = fetchPromises.filter(f => f.required).map(f => f.key);
+                if (requiredKeys.length > 0 && failedRequired.length === requiredKeys.length) {
+                    const labels: Record<string, string> = {
+                        adGroups: language === 'en' ? 'Ad Groups' : 'Рекламни групи',
+                        ads: language === 'en' ? 'Ads' : 'Реклами',
+                        keywords: language === 'en' ? 'Keywords' : 'Ключови думи',
+                    };
+                    const failedLabels = failedRequired.map(k => labels[k] || k).join(', ');
+                    throw new Error(
+                        language === 'en'
+                            ? `Failed to load required data: ${failedLabels}. Please try again or check the browser console for details.`
+                            : `Неуспешно зареждане на данни: ${failedLabels}. Моля, опитайте отново или проверете конзолата на браузъра.`
+                    );
                 }
             }
 

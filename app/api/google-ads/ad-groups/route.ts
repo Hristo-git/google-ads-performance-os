@@ -4,6 +4,9 @@ import { authOptions } from "@/lib/auth-options";
 import { getAdGroups } from "@/lib/google-ads";
 import { getQSSnapshotsForDate, getAdStrengthSnapshotsForDate } from "@/lib/supabase";
 
+// getAdGroups internally enriches with keywords + ads (3 GAQL queries)
+export const maxDuration = 60;
+
 // Mock data for demonstration
 const mockAdGroups = [
     // Brand Awareness Campaign (id: 1)

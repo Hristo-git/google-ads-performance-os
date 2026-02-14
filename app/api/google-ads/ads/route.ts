@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getAdsWithStrength } from "@/lib/google-ads";
 
+// Heavy GAQL query with date segmentation — needs extended timeout
+export const maxDuration = 60;
+
 // Mock ads with Ad Strength data
 const mockAds = [
     // High Intent - Buy Now (id: 401) - Poor ads

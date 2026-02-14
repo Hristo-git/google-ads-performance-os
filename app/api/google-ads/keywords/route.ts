@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getKeywordsWithQS } from "@/lib/google-ads";
 
+// GAQL keyword_view query can be slow on large accounts
+export const maxDuration = 60;
+
 // Mock keywords with Quality Score data
 const mockKeywords = [
     // High Intent - Buy Now (id: 401) - Poor QS ad group
