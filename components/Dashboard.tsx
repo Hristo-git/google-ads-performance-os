@@ -1442,6 +1442,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             />
                         </div>
                     </main>
+                ) : navigation.view === 'auction_insights' ? (
+                    <main className="flex-1 overflow-auto p-6">
+                        <AuctionInsights
+                            customerId={selectedAccountId || undefined}
+                            dateRange={dateRange}
+                            campaignIds={navigation.level === 'campaign' && navigation.campaignId ? [navigation.campaignId] : undefined}
+                        />
+                    </main>
                 ) : (
                     <main className="flex-1 overflow-auto p-6 space-y-6">
                         {/* KPI Cards */}
