@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
 import { ANALYSIS_SYSTEM_PROMPT, getAdGroupAnalysisPrompt } from "@/lib/prompts";
 import { upsertReport } from "@/lib/pinecone";
+import { saveReport } from "@/lib/supabase";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
 import { logActivity } from "@/lib/activity-logger";
 import { calculateDerivedMetrics, buildEnhancedDataInventory } from "@/lib/derived-metrics";
@@ -193,7 +194,7 @@ export async function POST(request: Request) {
         // Stream from Anthropic
         const stream = anthropic.messages.stream({
             model: modelId,
-            max_tokens: 16384,
+            max_tokens: 16000,
             ...(systemPrompt ? { system: systemPrompt } : {}),
             messages: [{ role: "user", content: finalPrompt }],
         });
@@ -229,6 +230,19 @@ export async function POST(request: Request) {
                         const reportId = `insight_${data.level}_${data.analysisType || 'gen'}_${Date.now()}`;
 
                         await Promise.all([
+                            // Save to SQL (Reliable History)
+                            saveReport({
+                                id: reportId,
+                                customer_id: data.customerId || 'unknown',
+                                template_id: `analysis_${data.level || 'account'}`,
+                                title: reportTitle,
+                                analysis: fullText,
+                                audience: 'specialist',
+                                language: data.language || 'bg',
+                                model: modelLabel,
+                                metadata: { level: data.level, analysisType: data.analysisType, periodLabel },
+                            }),
+                            // Save to Vector DB (Search/RAG)
                             upsertReport(reportId, fullText, {
                                 customerId: data.customerId || 'unknown',
                                 campaignId: data.campaignId || 'unknown',
