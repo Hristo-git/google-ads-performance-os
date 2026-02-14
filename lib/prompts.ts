@@ -14,7 +14,7 @@ function getBiddingLabel(code: number | string | undefined): string {
     if (code === undefined || code === null) return 'N/A';
     // If already a readable string (not a pure number), return as-is
     if (typeof code === 'string' && isNaN(Number(code))) return code;
-    return BIDDING_LABELS[code] || `Strategy ${code}`;
+    return BIDDING_LABELS[code] || BIDDING_LABELS[Number(code)] || 'Unknown Bidding Strategy';
 }
 
 // ============================================
@@ -358,12 +358,22 @@ POST-CLEANUP ROAS BASELINE (MANDATORY)
 - When branded query leakage is detected (or suspected) in non-brand campaigns, the CURRENT ROAS is INFLATED by branded conversions.
 - NEVER use the inflated ROAS as the baseline for post-cleanup revenue projections.
   Wrong: "After cleanup, reallocating €750 at current 24.2x ROAS × 0.75 = €13.6k"
-  Right: "Current 24.2x ROAS includes branded traffic. Post-cleanup non-brand baseline is estimated at 3–8x ROAS (based on typical non-brand performance in this vertical). Projections should use this adjusted baseline."
+  Wrong: "Реалната non-brand ефективност е вероятно 3–5 пъти по-ниска" (too specific without campaign-level data)
+  Right: "Current ROAS includes branded traffic and is therefore inflated. Post-cleanup ROAS will be significantly lower — exact baseline unknown without Search Terms campaign-level split. Estimate: 30–70% decline from current ROAS."
 - Estimation logic for post-cleanup ROAS:
   - If account-level non-brand ROAS is available → use it as the baseline
-  - If not available → estimate post-cleanup ROAS as 15–35% of the current campaign ROAS (branded queries typically drive 3–5x higher ROAS than generic)
-  - ALWAYS state this is an estimate: "**Post-cleanup ROAS baseline (estimate):** [formula/reasoning] = [range]"
+  - If not available → state "Post-cleanup ROAS baseline is unknown. Expect significant decline (30–70%)." Do NOT cite specific multipliers (e.g. "3–5x lower") without campaign-level Search Terms data.
+  - ALWAYS state this is an estimate: "**Post-cleanup ROAS baseline (estimate):** [reasoning] = [wide range]"
 - Revenue projections after cleanup MUST use the post-cleanup baseline, NOT the inflated current ROAS.
+
+CVR/CONVERSION PROJECTION CLAIMS (MANDATORY)
+- NEVER write "+X.Ypp CVR improvement ≈ +Z conversions" without showing inline math:
+  Required formula: additional_conversions = current_clicks × (new_CVR - current_CVR)
+  Must specify: which campaigns/segments this applies to (not "на ниво акаунт" without justification)
+- NEVER project account-level conversion gains from a single-segment CVR improvement without stating the scope:
+  Wrong: "+0.2pp CVR на mobile ≈ +220 conv/период на ниво акаунт"
+  Right: "+0.2pp mobile CVR × [mobile_clicks] = [calculated delta]. Note: applies only to mobile traffic ([X]% of total clicks)."
+- Any CVR improvement claim above +0.5pp requires Confidence: LOW tag unless backed by A/B test data.
 
 SCALING SCENARIOS (MANDATORY for account-level reports)
 After the Action Plan, include two scenarios:

@@ -23,7 +23,9 @@ const BIDDING_LABELS: Record<number | string, string> = {
 
 function getBiddingLabel(code: number | string | undefined): string {
     if (code === undefined || code === null) return 'N/A';
-    return BIDDING_LABELS[code] || `Strategy ${code}`;
+    // If already a readable string (not a pure number), return as-is
+    if (typeof code === 'string' && isNaN(Number(code))) return code;
+    return BIDDING_LABELS[code] || BIDDING_LABELS[Number(code)] || 'Unknown Bidding Strategy';
 }
 
 function enrichCampaignData(campaigns: any[]): any[] {
@@ -191,7 +193,7 @@ export async function POST(request: Request) {
         // Stream from Anthropic
         const stream = anthropic.messages.stream({
             model: modelId,
-            max_tokens: 8192,
+            max_tokens: 16384,
             ...(systemPrompt ? { system: systemPrompt } : {}),
             messages: [{ role: "user", content: finalPrompt }],
         });

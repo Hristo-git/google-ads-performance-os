@@ -455,7 +455,7 @@ ${isEn
 
         const response = await anthropic.messages.create({
             model: "claude-opus-4-6",
-            max_tokens: 8192,  // Increased from 4000 to support two-document output
+            max_tokens: 16384,  // Increased from 4000 to support two-document output
             ...(systemPrompt ? { system: systemPrompt } : {}),
             messages: [
                 {
@@ -520,7 +520,7 @@ ${analysis}
 
             const secondPassResponse = await anthropic.messages.create({
                 model: "claude-opus-4-6",
-                max_tokens: 8192,
+                max_tokens: 16384,
                 ...(systemPrompt ? { system: systemPrompt } : {}),
                 messages: [
                     {

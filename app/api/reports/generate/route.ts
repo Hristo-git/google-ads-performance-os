@@ -69,6 +69,28 @@ export async function POST(request: Request) {
 
         console.log(`Generating report: ${templateId}, Model: ${modelLabel}, Language: ${language}, Expert Mode: ${settings.expertMode}`);
 
+        // Sanitize campaign data — strip raw numeric bidding codes
+        if (data.campaigns?.length) {
+            const BIDDING_LABELS: Record<number | string, string> = {
+                0: 'Unspecified', 1: 'Unknown', 2: 'Manual CPC', 3: 'Manual CPM',
+                4: 'Manual CPV', 5: 'Maximize Conversions', 6: 'Maximize Conversion Value',
+                7: 'Target CPA', 8: 'Target ROAS', 9: 'Target Impression Share',
+                10: 'Manual CPC (Enhanced)', 11: 'Maximize Conversions',
+                12: 'Maximize Conversion Value', 13: 'Target Spend',
+            };
+            data.campaigns = data.campaigns.map((c: any) => {
+                if (c.biddingStrategyType !== undefined) {
+                    const code = c.biddingStrategyType;
+                    const label = (typeof code === 'string' && isNaN(Number(code)))
+                        ? code
+                        : BIDDING_LABELS[code] || BIDDING_LABELS[Number(code)] || 'Unknown Bidding Strategy';
+                    const { biddingStrategyType: _raw, ...rest } = c;
+                    return { ...rest, biddingStrategyType: label };
+                }
+                return c;
+            });
+        }
+
         // Build prompt using template (no RAG — each report is a clean snapshot of the period)
         const promptBuilder = REPORT_TEMPLATES[templateId];
         let prompt = customPrompt || promptBuilder(data, settings.language);
@@ -112,7 +134,7 @@ export async function POST(request: Request) {
 
                         const pass1Stream = anthropic.messages.stream({
                             model: modelId,
-                            max_tokens: 8192,
+                            max_tokens: 16384,
                             system: languageConstraint,
                             messages: [{ role: "user", content: prompt }],
                         });
@@ -204,7 +226,7 @@ ${analysis}
                         analysis = ''; // Reset — pass 2 output replaces pass 1
                         const pass2Stream = anthropic.messages.stream({
                             model: modelId,
-                            max_tokens: 8192,
+                            max_tokens: 16384,
                             system: languageConstraint,
                             messages: [{ role: "user", content: expertPrompt }],
                         });
@@ -220,7 +242,7 @@ ${analysis}
                         // ── Single pass: stream directly ──
                         const stream = anthropic.messages.stream({
                             model: modelId,
-                            max_tokens: 8192,
+                            max_tokens: 16384,
                             system: languageConstraint,
                             messages: [{ role: "user", content: prompt }],
                         });
