@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
 import { REPORT_TEMPLATES } from "@/lib/prompts";
-import { upsertReport } from "@/lib/pinecone";
+import { saveReport, GadsReport } from "@/lib/supabase";
+import { upsertReport } from "@/lib/pinecone"; // Keep for RAG/Vectors
 import { logActivity } from "@/lib/activity-logger";
 import { buildQualityScoreRequest, QSKeyword, QSAdGroup, QSComponent, mapKeyword, AD_LEVEL_URL_QUERY, validateQSData } from "@/lib/quality-score";
 import { getQSSnapshotsForDate } from "@/lib/supabase";
@@ -159,7 +160,8 @@ export async function POST(request: Request) {
                     const history = snapshots.find(s => s.keyword_id === k.id);
 
                     // Robust fallback for campaign name
-                    const cName = campaignMap.get(ag?.campaignId || '') || 'Unknown Campaign';
+                    // k.campaignName is now populated by getKeywordsWithQS in lib/google-ads.ts
+                    const cName = k.campaignName || campaignMap.get(ag?.campaignId || '') || 'Unknown Campaign';
 
                     return {
                         campaignId: ag?.campaignId || '0',
@@ -185,7 +187,7 @@ export async function POST(request: Request) {
                             previous: history.quality_score,
                             periodDaysAgo: 30
                         } : undefined,
-                        finalUrl: k.finalUrl || (k.id ? (adLevelUrls.get(k.adGroupId) || '') : ''), // Keyword-level first, then ad-level fallback
+                        finalUrl: k.finalUrl || '', // Fallback is now handled in lib/google-ads.ts
                     };
                 });
 
@@ -217,7 +219,7 @@ export async function POST(request: Request) {
                     console.log('=== QS DEBUG: Full first keyword ===');
                     console.log(JSON.stringify(qsKeywords[0], null, 2));
                 }
-                // --- END DEBUG ---
+                // --- END DEBUG --
 
                 // 6. Build Structured Request
                 // ...
@@ -456,6 +458,19 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                                 expertMode: settings.expertMode,
                                 responseLength: analysis?.length || 0
                             }) : Promise.resolve(),
+                            // Save to SQL (Reliable History)
+                            saveReport({
+                                id: reportId,
+                                customer_id: data.customerId || 'unknown',
+                                template_id: templateId,
+                                title: reportTitle,
+                                analysis: analysis,
+                                audience: settings.audience,
+                                language: settings.language,
+                                model: modelLabel,
+                                metadata: { settings, periodLabel }
+                            }),
+                            // Save to Vector DB (Search/RAG) - Optional but kept for now
                             upsertReport(reportId, analysis, {
                                 templateId,
                                 audience: settings.audience,

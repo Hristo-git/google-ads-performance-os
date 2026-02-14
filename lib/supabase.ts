@@ -368,5 +368,71 @@ export async function getAdStrengthSnapshotsForDate(
     }
   }
 
+
   return data.filter(r => r.snapshot_date === bestDate) as AdStrengthSnapshot[];
+}
+
+// ============================================
+// Reports History (SQL)
+// ============================================
+
+export interface GadsReport {
+  id: string;
+  customer_id: string;
+  template_id: string;
+  title: string | null;
+  analysis: string | null;
+  audience: string | null;
+  language: string | null;
+  model: string | null;
+  created_at?: string;
+  metadata?: Record<string, any>;
+}
+
+export async function saveReport(report: GadsReport): Promise<{ saved: boolean; error?: string }> {
+  const { error } = await supabaseAdmin
+    .from('gads_reports')
+    .upsert(report, { onConflict: 'id' });
+
+  if (error) {
+    console.error('[Supabase] Error saving report:', error);
+    return { saved: false, error: error.message };
+  }
+
+  return { saved: true };
+}
+
+export async function getReports(customerId?: string, limit: number = 20): Promise<GadsReport[]> {
+  let query = supabaseAdmin
+    .from('gads_reports')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (customerId) {
+    query = query.eq('customer_id', customerId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('[Supabase] Error fetching reports:', error);
+    return [];
+  }
+
+  return data as GadsReport[];
+}
+
+export async function deleteReport(reportId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('gads_reports')
+    .delete()
+    .eq('id', reportId);
+
+  if (error) {
+    console.error('[Supabase] Error deleting report:', error);
+    return false;
+  }
+
+  return true;
 }

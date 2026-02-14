@@ -653,7 +653,9 @@ export async function getKeywordsWithQS(
         ad_group_criterion.quality_info.creative_quality_score,
         ad_group_criterion.quality_info.post_click_quality_score,
         ad_group_criterion.quality_info.search_predicted_ctr,
+        ad_group_criterion.quality_info.search_predicted_ctr,
         campaign.bidding_strategy_type,
+        campaign.name,
         metrics.impressions,
         metrics.clicks,
         metrics.cost_micros,
@@ -665,6 +667,27 @@ export async function getKeywordsWithQS(
             ORDER BY metrics.impressions DESC
             LIMIT 10000
         `);
+
+            // Fetch Ad-level URLs as fallback
+            const adUrlQuery = `
+                SELECT
+                    ad_group.id,
+                    ad_group_ad.ad.final_urls
+                FROM ad_group_ad
+                WHERE
+                    campaign.status = 'ENABLED'
+                    AND ad_group.status = 'ENABLED'
+                    AND ad_group_ad.status = 'ENABLED'
+            `;
+            const adUrlResults = await customer.query(adUrlQuery);
+            const adGroupUrlMap = new Map<string, string>();
+            for (const row of adUrlResults) {
+                const agId = String(row.ad_group?.id);
+                const url = row.ad_group_ad?.ad?.final_urls?.[0];
+                if (url && !adGroupUrlMap.has(agId)) {
+                    adGroupUrlMap.set(agId, url);
+                }
+            }
 
             const allKeywords = keywords.map((row) => ({
                 id: row.ad_group_criterion?.criterion_id?.toString() || "",
@@ -683,7 +706,8 @@ export async function getKeywordsWithQS(
                 conversionValue: Number(row.metrics?.conversions_value) || 0,
                 cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
                 biddingStrategyType: row.campaign?.bidding_strategy_type ? String(row.campaign.bidding_strategy_type) : "UNKNOWN",
-                finalUrl: row.ad_group_criterion?.final_urls?.[0] || undefined,
+                campaignName: row.campaign?.name || "Unknown Campaign",
+                finalUrl: row.ad_group_criterion?.final_urls?.[0] || adGroupUrlMap.get(row.ad_group?.id?.toString() || "") || undefined,
             }));
 
             // Deduplicate by criterion_id: keyword_view returns 1 row per day with date ranges.

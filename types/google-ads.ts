@@ -105,6 +105,12 @@ export interface KeywordWithQS {
     impressions: number;
     clicks: number;
     cost: number;
+    conversions: number;
+    conversionValue: number;
+    cpc: number;
+    biddingStrategyType: string;
+    finalUrl?: string;
+    campaignName?: string;
 }
 
 export interface AdWithStrength {

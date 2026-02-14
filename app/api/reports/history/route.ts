@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { querySimilarReports } from "@/lib/pinecone";
+import { getReports } from "@/lib/supabase";
 
 export async function GET(request: Request) {
     try {
@@ -13,21 +13,11 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url);
         const customerId = searchParams.get("customerId") || undefined;
-        const query = searchParams.get("query") || "";
-        const limit = parseInt(searchParams.get("limit") || "10");
+        // query param is ignored for now as we are doing chronological history, 
+        // but could be added back with ILIKE search in supabase if needed.
+        const limit = parseInt(searchParams.get("limit") || "20");
 
-        const searchQuery = query || "analysis"; // Default to broad search if empty to show recent
-        const matches = await querySimilarReports(searchQuery, customerId, limit);
-
-        const reports = matches.map((m: any) => ({
-            id: m.id,
-            score: m.score,
-            timestamp: m.metadata?.timestamp,
-            templateId: m.metadata?.templateId,
-            audience: m.metadata?.audience,
-            reportTitle: m.metadata?.reportTitle,
-            analysis: m.metadata?.analysis_content || m.analysis_content,
-        }));
+        const reports = await getReports(customerId, limit);
 
         return NextResponse.json({ reports });
     } catch (error: any) {
