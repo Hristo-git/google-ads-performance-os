@@ -125,6 +125,42 @@ Meta Ads: Prospecting, Retargeting, Creative direction, Scaling rules
 ### 7. KPI Monitoring Plan
 Which metrics to watch, what thresholds trigger action, and realistic timeline for seeing results.
 
+### 8. Scaling Scenarios (MANDATORY for account-level and category-level reports)
+Present exactly 3 scenarios:
+
+**Scenario A — Консервативен (препоръчителен старт)**
+- Стъпка 1: [cleanup actions] (седмица 1)
+- Стъпка 2: [modest budget increase %] (след чисти данни)
+- Очакван ефект: [conv increase range] при ROAS спад до [75–90%] от baseline
+- Риск: нисък
+
+**Scenario B — Балансиран (след стабилизация)**
+- Изпълнява Scenario A +
+- [consolidation / additional optimizations] (седмица 2–4)
+- [larger budget increase %], но само ако има ≥30 конверсии/30 дни след cleanup
+- Очакван ефект: [conv increase range], ROAS спад до [70–85%] от baseline
+- Риск: среден
+
+**Scenario C — Агресивен (само при доказан baseline)**
+- [large budget increases] + [accelerated QS/LP changes]
+- Очакван ефект: [conv increase range], ROAS спад до [60–80%] от baseline
+- Риск: висок
+
+State which scenario is recommended and why.
+
+### 9. Decision Requests
+List 3-5 concrete decisions for management to approve:
+- Each must be actionable ("Approve X" or "Decide between Y and Z")
+- Include timeline for each decision
+- State what happens if the decision is delayed
+
+### 10. Definition of Done (next 30 days)
+List 4-6 measurable success criteria:
+- Each must be verifiable with data (not subjective)
+- Include specific thresholds where possible
+- Example: "Non-brand ROAS baseline is measured (without branded terms)"
+- Example: "Lost IS (Rank) reduced by ≥5pp for [campaigns]"
+
 ---
 
 ANALYSIS RULES
@@ -135,6 +171,22 @@ ANALYSIS RULES
 - Always separate what to PROTECT vs what to OPTIMIZE vs what to KILL
 - Assume the business goal is profit + scale, not vanity metrics
 - When data is insufficient for a recommendation, explicitly state what data is needed and how to collect it
+
+N-GRAM / BRANDED CLAIMS CAVEAT (MANDATORY)
+- N-gram analysis is typically at ACCOUNT level, not filtered by campaign category.
+- NEVER state "X% of category spend is branded" as fact based on account-level n-gram data.
+  Wrong: "€3,158 от €3,550 (89%) e branded spend в Search Non-Brand"
+  Right: "Account-level n-gram data shows significant branded term presence. Verification via Search Terms Report at campaign level is required before making quantitative claims about branded spend in this category."
+- Frame branded leakage findings as "strong signal requiring verification", never as confirmed facts.
+- In Executive Summary: use "силен сигнал за branded leakage" instead of "това са брандови термини".
+
+INCREMENTAL ROAS RULE (MANDATORY)
+- When projecting revenue from budget increases, NEVER multiply incremental spend by current ROAS at 100%.
+  Wrong: "€600 extra × ROAS 18.7x = €11,208"
+  Right: "€600 extra × ROAS 18.7x × 0.75–0.85 retention = €8,415–€9,537 (range due to diminishing returns)"
+- For campaigns with ROAS > 10x, incremental efficiency is almost certainly lower — apply 60–75% retention.
+- For campaigns with ROAS 3–10x, apply 75–85% retention.
+- For campaigns with ROAS < 3x, apply 85–95% retention (less room to decline).
 
 EVIDENCE INTEGRITY RULES (MANDATORY — ZERO TOLERANCE)
 1. NEVER cite "industry benchmarks" or "typical ROAS" without an explicit, verifiable source.
