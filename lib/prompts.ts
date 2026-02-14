@@ -909,6 +909,12 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
 
     const searchAdGroups = adGroups.filter(isRSAEligible);
     const dsaAdGroups = adGroups.filter((ag: any) => !isRSAEligible(ag));
+
+    // Cap to top 30 by spend to keep prompt size manageable
+    const topSearchAdGroups = [...searchAdGroups]
+      .sort((a: any, b: any) => (b.cost || 0) - (a.cost || 0))
+      .slice(0, 30);
+
     const poorSearchAdGroups = searchAdGroups
       .filter((ag: any) => ag.adStrength === 'POOR' || ag.adStrength === 'AVERAGE')
       .sort((a: any, b: any) => (b.cost || 0) - (a.cost || 0));
@@ -933,8 +939,8 @@ ${languageInstruction}
 Audit RSA ad strength and provide specific copy improvements to increase CTR and conversions.
 Produce BOTH an Executive Summary and a Technical Analysis as specified in the output format.
 
-=== RSA-ELIGIBLE AD GROUPS (${searchAdGroups.length} Search) ===
-${searchAdGroups.map((ag: any) => `
+=== RSA-ELIGIBLE AD GROUPS (Top ${topSearchAdGroups.length} of ${searchAdGroups.length} Search, by spend) ===
+${topSearchAdGroups.map((ag: any) => `
 Ad Group: ${ag.name} | Campaign: ${ag.campaignName || 'N/A'}
 - Ad Strength: ${ag.adStrength || 'N/A'} | Ads: ${ag.adsCount || 0} | Poor Ads: ${ag.poorAdsCount || 0}
 - Spend: €${(ag.cost || 0).toFixed(2)} | CTR: ${(ag.ctr || 0).toFixed(2)}% | Conv: ${ag.conversions || 0} | ROAS: ${ag.roas || 0}x
@@ -956,7 +962,7 @@ ${groupAds.length > 0 ? groupAds.map((ad: any) => `
 ${poorSearchAdGroups.length === 0 ? 'No POOR/AVERAGE search ad groups found.' : ''}
 
 === DSA / NON-RSA AD GROUPS (${dsaAdGroups.length}) ===
-${dsaAdGroups.length > 0 ? dsaAdGroups.map((ag: any) => `
+${dsaAdGroups.length > 0 ? dsaAdGroups.slice(0, 20).map((ag: any) => `
 Ad Group: ${ag.name} | Type: ${ag.adGroupType || 'N/A'} | Campaign Type: ${ag.campaignType || 'N/A'}
 - Spend: €${(ag.cost || 0).toFixed(2)} | CTR: ${(ag.ctr || 0).toFixed(2)}% | Conv: ${ag.conversions || 0}
 `).join('\n') : 'None'}

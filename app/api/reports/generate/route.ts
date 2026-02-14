@@ -253,12 +253,20 @@ export async function POST(request: Request) {
                             messages: [{ role: "user", content: prompt }],
                         });
 
+                        // Keepalive: send a dot every 15s during silent pass 1
+                        // so Vercel doesn't think the connection is stalled
+                        const keepalive = setInterval(() => {
+                            controller.enqueue(encoder.encode('.'));
+                        }, 15_000);
+
                         for await (const event of pass1Stream) {
                             if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                                 analysis += event.delta.text;
-                                // DO NOT stream pass 1 content to client — avoid duplication
                             }
                         }
+
+                        clearInterval(keepalive);
+                        controller.enqueue(encoder.encode('\n\n'));
 
                         // Pass 2: stream refinement to client
                         controller.enqueue(encoder.encode(
@@ -373,8 +381,10 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         }
                     }
 
-                    // Store in Pinecone + log BEFORE closing stream
-                    // (Vercel serverless may kill the function after controller.close())
+                    // Close stream FIRST so the user sees the result immediately
+                    controller.close();
+
+                    // Then persist report (best-effort, Vercel may kill after close)
                     try {
                         const templateNames: Record<string, string> = {
                             quality_score_diagnostics: 'QS Diagnostics',
@@ -399,6 +409,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         const reportTitle = `[${modelLabel}] ${contextLabel}${periodLabel}`;
                         const reportId = `${templateId}_${Date.now()}`;
 
+                        // Save to SQL + log activity (fast, ~100ms)
                         await Promise.all([
                             session?.user?.id ? logActivity(session.user.id, 'AI_ANALYSIS', {
                                 level: 'report',
@@ -408,7 +419,6 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                                 expertMode: settings.expertMode,
                                 responseLength: analysis?.length || 0
                             }) : Promise.resolve(),
-                            // Save to SQL (Reliable History)
                             saveReport({
                                 id: reportId,
                                 customer_id: data.customerId || 'unknown',
@@ -420,20 +430,19 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                                 model: modelLabel,
                                 metadata: { settings, periodLabel }
                             }),
-                            // Save to Vector DB (Search/RAG) - Optional but kept for now
-                            upsertReport(reportId, analysis, {
-                                templateId,
-                                audience: settings.audience,
-                                language: settings.language,
-                                customerId: data.customerId || 'unknown',
-                                reportTitle,
-                            }),
                         ]);
-                    } catch (storeError) {
-                        console.error("Failed to store report in Pinecone:", storeError);
-                    }
 
-                    controller.close();
+                        // Pinecone upsert (slow, 30-60s embedding) — fire-and-forget
+                        upsertReport(reportId, analysis, {
+                            templateId,
+                            audience: settings.audience,
+                            language: settings.language,
+                            customerId: data.customerId || 'unknown',
+                            reportTitle,
+                        }).catch(err => console.error("Pinecone upsert failed (non-blocking):", err));
+                    } catch (storeError) {
+                        console.error("Failed to store report:", storeError);
+                    }
                 } catch (err) {
                     const errMsg = err instanceof Error ? err.message : String(err);
                     controller.enqueue(encoder.encode(`\n\n[ERROR: ${errMsg}]`));

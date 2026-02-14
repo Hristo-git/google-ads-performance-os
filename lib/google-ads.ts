@@ -40,7 +40,7 @@ async function withCache<T>(category: keyof typeof CACHE_TTL, keyParts: unknown[
 }
 // ─────────────────────────────────────────────────────────────────────
 
-function getClient() {
+export function getClient() {
     if (!client) {
         console.log("Initializing Google Ads client with:", {
             client_id: process.env.GOOGLE_CLIENT_ID ? "present" : "missing",
