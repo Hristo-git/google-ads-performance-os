@@ -8,6 +8,7 @@ export default function ActivityDashboard() {
     const { data: session } = useSession();
     const [loading, setLoading] = useState(true);
     const [logs, setLogs] = useState<any[]>([]);
+    const [days, setDays] = useState('1');
     const [stats, setStats] = useState({
         logins24h: 0,
         aiCalls24h: 0,
@@ -20,12 +21,12 @@ export default function ActivityDashboard() {
         if (session?.user?.role === 'admin') {
             fetchLogs();
         }
-    }, [session]);
+    }, [session, days]);
 
     const fetchLogs = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/admin/activity?limit=100');
+            const res = await fetch(`/api/admin/activity?limit=100&days=${days}`);
             const data = await res.json();
             if (data.logs) setLogs(data.logs);
             if (data.stats) setStats(data.stats);
@@ -36,13 +37,15 @@ export default function ActivityDashboard() {
         }
     };
 
-    // Use per-user summary from backend (covers 24h accurately)
+    // Use per-user summary from backend (covers period accurately)
     const userStats = Object.entries(stats.userSummary).map(([uid, u]) => ({
         id: uid,
         ...u
     })).sort((a, b) => b.sessionMinutes - a.sessionMinutes);
 
     const totalSessionMinutes = Object.values(stats.userSummary).reduce((a, b) => a + b.sessionMinutes, 0);
+
+    const periodLabel = days === '1' ? '24h' : days === '7' ? '7d' : `${days}d`;
 
     if (!session || session.user.role !== 'admin') {
         return <div className="p-8 text-center text-slate-400">Unauthorized Access</div>;
@@ -62,20 +65,41 @@ export default function ActivityDashboard() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-white italic">Activity Monitor</h1>
-                    <p className="text-slate-400 mt-1">Real-time tracking of engagement, session time and AI usage.</p>
+                    <div className="flex items-center gap-2 mt-1">
+                        <p className="text-slate-400">Real-time tracking for the selected period.</p>
+                    </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 items-center">
+                    <div className="flex items-center gap-2 px-1 py-1 bg-slate-900 border border-slate-800 rounded-lg">
+                        {[
+                            { label: '24h', value: '1' },
+                            { label: '7d', value: '7' },
+                            { label: '30d', value: '30' }
+                        ].map((p) => (
+                            <button
+                                key={p.value}
+                                onClick={() => setDays(p.value)}
+                                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${days === p.value
+                                    ? 'bg-indigo-600 text-white shadow-lg'
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                                    }`}
+                            >
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="h-8 w-px bg-slate-800 mx-2" />
                     <a
                         href="/admin"
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition-colors border border-slate-700"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition-colors border border-slate-700 text-sm"
                     >
-                        ← Back to Admin
+                        ← Back
                     </a>
                     <button
                         onClick={fetchLogs}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors border border-indigo-400/20 shadow-lg shadow-indigo-500/20"
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors border border-indigo-400/20 shadow-lg shadow-indigo-500/20 text-sm"
                     >
-                        <RefreshCw className="h-4 w-4" />
+                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         Refresh
                     </button>
                 </div>
@@ -86,7 +110,7 @@ export default function ActivityDashboard() {
                 {/* Total Engagement Time */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 bg-gradient-to-br from-indigo-500/10 to-transparent">
                     <div className="flex flex-row items-center justify-between pb-2">
-                        <div className="text-sm font-medium text-slate-400">Total Engagement (24h)</div>
+                        <div className="text-sm font-medium text-slate-400">Engagement ({periodLabel})</div>
                         <Activity className="h-4 w-4 text-indigo-500" />
                     </div>
                     <div className="text-2xl font-bold text-white">
@@ -97,7 +121,7 @@ export default function ActivityDashboard() {
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                     <div className="flex flex-row items-center justify-between pb-2">
-                        <div className="text-sm font-medium text-slate-400">Active Users (24h)</div>
+                        <div className="text-sm font-medium text-slate-400">Active Users ({periodLabel})</div>
                         <Users className="h-4 w-4 text-emerald-500" />
                     </div>
                     <div className="text-2xl font-bold text-white">{stats.activeUsers24h}</div>
@@ -106,7 +130,7 @@ export default function ActivityDashboard() {
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                     <div className="flex flex-row items-center justify-between pb-2">
-                        <div className="text-sm font-medium text-slate-400">Logins (24h)</div>
+                        <div className="text-sm font-medium text-slate-400">Logins ({periodLabel})</div>
                         <LogIn className="h-4 w-4 text-blue-500" />
                     </div>
                     <div className="text-2xl font-bold text-white">{stats.logins24h}</div>
@@ -115,7 +139,7 @@ export default function ActivityDashboard() {
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                     <div className="flex flex-row items-center justify-between pb-2">
-                        <div className="text-sm font-medium text-slate-400">Google Ads API (24h)</div>
+                        <div className="text-sm font-medium text-slate-400">API Calls ({periodLabel})</div>
                         <Activity className="h-4 w-4 text-blue-400" />
                     </div>
                     <div className="text-2xl font-bold text-white">{stats.apiCalls24h}</div>

@@ -13,8 +13,9 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const limit = parseInt(searchParams.get('limit') || '50');
+        const days = parseInt(searchParams.get('days') || '1');
 
-        // Fetch logs
+        // Fetch logs (recent events, regardless of date filter, but limited)
         const { data: logs, error } = await supabaseAdmin
             .from('user_activity_logs')
             .select('*, gads_users(username, name)')
@@ -23,37 +24,39 @@ export async function GET(request: Request) {
 
         if (error) throw error;
 
-        // Calculate simple stats (last 24h)
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
+        // Calculate start date based on 'days' parameter
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+        const startDateIso = startDate.toISOString();
 
-        const { count: logins24h } = await supabaseAdmin
+        // Calculate simple stats (last X days)
+        const { count: loginsXh } = await supabaseAdmin
             .from('user_activity_logs')
             .select('*', { count: 'exact', head: true })
             .eq('event_type', 'LOGIN')
-            .gte('created_at', yesterday.toISOString());
+            .gte('created_at', startDateIso);
 
-        const { count: aiCalls24h } = await supabaseAdmin
+        const { count: aiCallsXh } = await supabaseAdmin
             .from('user_activity_logs')
             .select('*', { count: 'exact', head: true })
             .eq('event_type', 'AI_ANALYSIS')
-            .gte('created_at', yesterday.toISOString());
+            .gte('created_at', startDateIso);
 
-        const { count: apiCalls24h } = await supabaseAdmin
+        const { count: apiCallsXh } = await supabaseAdmin
             .from('user_activity_logs')
             .select('*', { count: 'exact', head: true })
             .eq('event_type', 'API_CALL')
-            .gte('created_at', yesterday.toISOString());
+            .gte('created_at', startDateIso);
 
-        // Calculate session time and other stats per user (last 24h)
-        const { data: userData24h } = await supabaseAdmin
+        // Calculate session time and other stats per user (last X days)
+        const { data: userDataXh } = await supabaseAdmin
             .from('user_activity_logs')
             .select('user_id, event_type, gads_users(name, username)')
-            .gte('created_at', yesterday.toISOString());
+            .gte('created_at', startDateIso);
 
         const userSummary: Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number, apiCalls: number }> = {};
 
-        userData24h?.forEach(row => {
+        userDataXh?.forEach(row => {
             const uid = row.user_id;
             const gUser = Array.isArray(row.gads_users) ? row.gads_users[0] : row.gads_users;
 
@@ -71,15 +74,15 @@ export async function GET(request: Request) {
             if (row.event_type === 'API_CALL') userSummary[uid].apiCalls++;
         });
 
-        const activeUsers24h = Object.keys(userSummary).length;
+        const activeUsersXh = Object.keys(userSummary).length;
 
         return NextResponse.json({
             logs,
             stats: {
-                logins24h: logins24h || 0,
-                aiCalls24h: aiCalls24h || 0,
-                apiCalls24h: apiCalls24h || 0,
-                activeUsers24h,
+                logins24h: loginsXh || 0,
+                aiCalls24h: aiCallsXh || 0,
+                apiCalls24h: apiCallsXh || 0,
+                activeUsers24h: activeUsersXh,
                 userSummary
             }
         });
