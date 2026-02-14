@@ -98,28 +98,15 @@ export async function POST(request: Request) {
         // --- Quality Score Diagnostics Data Enrichment ---
         if (templateId === 'quality_score_diagnostics' && data.customerId) {
             try {
-                console.log('[Report/QS] Enriching data for Quality Score Diagnostics...');
-
                 // 1. Fetch Historical Snapshots (30 days ago)
                 const today = new Date();
                 const pastDate = new Date();
                 pastDate.setDate(today.getDate() - 30);
                 const snapshots = await getQSSnapshotsForDate(data.customerId, pastDate.toISOString().split('T')[0]);
-                console.log(`[Report/QS] Fetched ${snapshots.length} historical snapshots from ~30 days ago.`);
 
-                // 2. Fetch Ad-level URLs (Fallback)
+                // 2. Fetch Ad-level URLs (Fallback) - Already handled in lib/google-ads.ts but kept for safety if needed
                 const adUrlsRaw = await runAdsRawQuery(session.refreshToken as string, data.customerId, AD_LEVEL_URL_QUERY);
                 const adLevelUrls = new Map<string, string>();
-                adUrlsRaw.forEach(row => {
-                    const url = row.ad_group_ad?.ad?.final_urls?.[0];
-                    if (url) adLevelUrls.set(row.ad_group_ad.ad_group, url); // resourceName is usually returned as the key
-                    // Wait, ad_group_ad.ad_group is the resourceName. We need the ID or to be consistent.
-                    // Actually, the resourceName is fine if we use it correctly. 
-                    // Let's get the ad_group.id from the query instead if possible.
-                });
-
-                // Let's refine the AD_LEVEL_URL_QUERY to include ad_group.id
-                // (Already did that in lib/quality-score.ts)
                 adUrlsRaw.forEach(row => {
                     const agId = String(row.ad_group?.id);
                     const url = row.ad_group_ad?.ad?.final_urls?.[0];
@@ -140,34 +127,27 @@ export async function POST(request: Request) {
                     adGroupKwCount.set(agId, (adGroupKwCount.get(agId) || 0) + 1);
                 });
 
-                // 4. Map Keywords to QSKeyword using the new mapKeyword function
-                // Initialize maps since we need them for names/IDs
+                // 4. Map Keywords to QSKeyword
                 const adGroupMap = new Map<string, AdGroupPerformance>();
                 if (Array.isArray(data.adGroups)) {
                     data.adGroups.forEach((ag: AdGroupPerformance) => adGroupMap.set(ag.id, ag));
                 }
 
-                const campaignMap = new Map<string, string>(); // id -> name
+                const campaignMap = new Map<string, string>();
                 if (Array.isArray(data.campaigns)) {
                     data.campaigns.forEach((c: CampaignPerformance) => campaignMap.set(c.id, c.name));
                 }
 
-                // Actually, let's just stick to the mapping logic but fix the missing fields.
-
                 const qsKeywords: QSKeyword[] = (data.keywords || []).map((k: KeywordWithQS) => {
-                    // We'll mimic the "row" structure for mapKeyword or just manually map since we have KeywordWithQS
                     const ag = adGroupMap.get(k.adGroupId);
                     const history = snapshots.find(s => s.keyword_id === k.id);
-
-                    // Robust fallback for campaign name
-                    // k.campaignName is now populated by getKeywordsWithQS in lib/google-ads.ts
                     const cName = k.campaignName || campaignMap.get(ag?.campaignId || '') || 'Unknown Campaign';
 
                     return {
                         campaignId: ag?.campaignId || '0',
                         campaignName: cName,
                         adGroupId: k.adGroupId,
-                        adGroupName: ag?.name || 'Unknown Ad Group',
+                        adGroupName: k.adGroupName || ag?.name || 'Unknown Ad Group',
                         text: k.text,
                         matchType: k.matchType as 'EXACT' | 'PHRASE' | 'BROAD',
                         qualityScore: k.qualityScore || 0,
@@ -181,24 +161,24 @@ export async function POST(request: Request) {
                         conversionValue: k.conversionValue,
                         avgCpc: k.cpc,
                         biddingStrategyType: k.biddingStrategyType,
-                        searchImpressionShare: undefined, // Add if available in k
-                        searchLostIsRank: undefined,      // Add if available in k
+                        searchImpressionShare: undefined,
+                        searchLostIsRank: undefined,
                         qualityScoreHistory: history ? {
                             previous: history.quality_score,
                             periodDaysAgo: 30
                         } : undefined,
-                        finalUrl: k.finalUrl || '', // Fallback is now handled in lib/google-ads.ts
+                        finalUrl: k.finalUrl || adLevelUrls.get(k.adGroupId) || '',
                     };
                 });
 
                 // 5. Map Ad Groups to QSAdGroup
                 const qsAdGroups: QSAdGroup[] = (data.adGroups || []).map((ag: AdGroupPerformance) => ({
                     campaignId: ag.campaignId,
-                    campaignName: campaignMap.get(ag.campaignId) || 'Unknown',
+                    campaignName: ag.campaignName || campaignMap.get(ag.campaignId) || 'Unknown',
                     adGroupId: ag.id,
                     name: ag.name,
                     avgQualityScore: ag.avgQualityScore || 0,
-                    keywordCount: adGroupKwCount.get(ag.id) || 0, // POPULATED
+                    keywordCount: adGroupKwCount.get(ag.id) || 0,
                     keywordsWithLowQS: ag.keywordsWithLowQS,
                     impressions: ag.impressions,
                     clicks: ag.clicks,
@@ -206,52 +186,22 @@ export async function POST(request: Request) {
                     conversionValue: ag.conversionValue,
                 }));
 
-                // --- DEBUG: Remove after fix ---
-                console.log('=== QS DEBUG: First 3 keywords ===');
-                qsKeywords.slice(0, 3).forEach((kw, i) => {
-                    console.log(`KW ${i}: text="${kw.text}" campaignName="${kw.campaignName}" finalUrl="${kw.finalUrl}"`);
-                });
-                console.log('=== QS DEBUG: First 2 adGroups ===');
-                qsAdGroups.slice(0, 2).forEach((ag, i) => {
-                    console.log(`AG ${i}: name="${ag.name}" campaignName="${ag.campaignName}"`);
-                });
-                if (qsKeywords.length > 0) {
-                    console.log('=== QS DEBUG: Full first keyword ===');
-                    console.log(JSON.stringify(qsKeywords[0], null, 2));
-                }
-                // --- END DEBUG --
-
                 // 6. Build Structured Request
-                // ...
                 const qsRequest = buildQualityScoreRequest(qsKeywords, qsAdGroups, {
-                    dateRange: data.dateRange || { start: '2024-01-01', end: '2024-01-31' }, // Fallback if missing
-                    brandTokens: [], // TODO: Get from settings or analyze?
+                    dateRange: data.dateRange || { start: '2024-01-01', end: '2024-01-31' },
+                    brandTokens: [],
                     language: settings.language,
                     audience: (settings.audience === 'client' ? 'stakeholder' : 'specialist'),
                     model: settings.model,
-                    lowQsThreshold: 5, // Custom config?
+                    lowQsThreshold: 5,
                     topKeywordsBySpend: 50,
                 });
 
-                // REPLACE original data with the enriched structured request
-                // The prompt template will receive this 'qsRequest' as 'data'
-                // NOTE: The REPORT_TEMPLATE['quality_score_diagnostics'] function needs to know 
-                // to look for 'qsDetails' or we just pass 'qsRequest' directly?
-                // The template function signature is (data: any, language...). 
-                // In lib/prompts.ts, the function expects 'data' to be the QSData structure or similar.
-                // Let's rely on the template extracting what it needs. 
-                // Since we can't easily replace the entire 'data' object variable reference used later 
-                // without changing the 'const promptBuilder = ...' line which takes 'data', 
-                // let's actually just update the 'data' variable reference if we could, 
-                // but we can't reassign inputs easily. 
-                // Instead, we'll assign the result to a new field in data or reuse data.
-
-                // Actually, let's just merge it.
+                // Merge into data for the template
                 Object.assign(data, qsRequest);
 
             } catch (error) {
                 console.error('[Report/QS] Enrichment failed:', error);
-                // Fallback: Proceed with original data, prompt handles missing fields gracefully?
             }
         }
 

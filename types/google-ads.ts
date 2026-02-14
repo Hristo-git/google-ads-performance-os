@@ -83,7 +83,7 @@ export interface AdGroup {
     adsCount: number;
     poorAdsCount: number;
     adStrength?: string;
-    category?: string;
+    campaignName?: string;
 }
 
 export interface NegativeKeyword {
@@ -111,6 +111,7 @@ export interface KeywordWithQS {
     biddingStrategyType: string;
     finalUrl?: string;
     campaignName?: string;
+    adGroupName?: string;
 }
 
 export interface AdWithStrength {

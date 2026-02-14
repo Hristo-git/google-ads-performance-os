@@ -143,6 +143,7 @@ export interface AdGroupPerformance {
     conversionValue: number;
     roas: number | null;
     cpa: number | null;
+    campaignName?: string;
 }
 
 export interface NegativeKeyword {
@@ -170,6 +171,8 @@ export interface KeywordWithQS {
     cpc: number;
     biddingStrategyType?: string;
     finalUrl?: string;
+    campaignName?: string;
+    adGroupName?: string;
 }
 
 export interface AdWithStrength {
@@ -207,6 +210,7 @@ export interface AssetGroupPerformance {
     conversionValue: number;
     roas: number | null;
     cpa: number | null;
+    campaignName?: string;
 }
 
 export function extractApiErrorInfo(error: unknown): { message: string; isQuotaError: boolean; retryAfterSeconds?: number } {
@@ -281,6 +285,34 @@ function mapStatus(status: any): string {
     if (status === 3 || status === '3' || status === 'PAUSED') return 'PAUSED';
     if (status === 4 || status === '4' || status === 'REMOVED') return 'REMOVED';
     return String(status || 'UNKNOWN');
+}
+
+export function mapMatchType(type: any): string {
+    const MAP: Record<number | string, string> = {
+        0: 'UNSPECIFIED', 1: 'UNKNOWN', 2: 'EXACT', 3: 'PHRASE', 4: 'BROAD'
+    };
+    if (typeof type === 'string' && isNaN(Number(type))) return type;
+    return MAP[type] || MAP[Number(type)] || 'UNKNOWN';
+}
+
+export function mapQSComponent(score: any): string {
+    const MAP: Record<number | string, string> = {
+        0: 'UNSPECIFIED', 1: 'UNKNOWN', 2: 'BELOW_AVERAGE', 3: 'AVERAGE', 4: 'ABOVE_AVERAGE'
+    };
+    if (typeof score === 'string' && isNaN(Number(score))) return score;
+    return MAP[score] || MAP[Number(score)] || 'UNSPECIFIED';
+}
+
+export function mapBiddingStrategyType(type: any): string {
+    const MAP: Record<number | string, string> = {
+        0: 'UNSPECIFIED', 1: 'UNKNOWN', 2: 'MANUAL_CPC', 3: 'MANUAL_CPM',
+        4: 'MANUAL_CPV', 5: 'MAXIMIZE_CONVERSIONS', 6: 'MAXIMIZE_CONVERSION_VALUE',
+        7: 'TARGET_CPA', 8: 'TARGET_ROAS', 9: 'TARGET_IMPRESSION_SHARE',
+        10: 'ENHANCED_CPC', 11: 'MAXIMIZE_CONVERSIONS', 12: 'MAXIMIZE_CONVERSION_VALUE',
+        13: 'TARGET_SPEND'
+    };
+    if (typeof type === 'string' && isNaN(Number(type))) return type;
+    return MAP[type] || MAP[Number(type)] || 'UNKNOWN';
 }
 
 import { logActivity } from "./activity-logger";
@@ -431,6 +463,7 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
                 ad_group.name,
                 ad_group.status,
                 campaign.id,
+                campaign.name,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
@@ -536,6 +569,7 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
                 return {
                     id,
                     campaignId: row.campaign?.id?.toString() || "",
+                    campaignName: row.campaign?.name || "",
                     name: row.ad_group?.name || "",
                     status: mapStatus(row.ad_group?.status),
                     impressions: Number(row.metrics?.impressions) || 0,
@@ -653,7 +687,7 @@ export async function getKeywordsWithQS(
         ad_group_criterion.quality_info.creative_quality_score,
         ad_group_criterion.quality_info.post_click_quality_score,
         ad_group_criterion.quality_info.search_predicted_ctr,
-        ad_group_criterion.quality_info.search_predicted_ctr,
+        ad_group.name,
         campaign.bidding_strategy_type,
         campaign.name,
         metrics.impressions,
@@ -693,20 +727,21 @@ export async function getKeywordsWithQS(
                 id: row.ad_group_criterion?.criterion_id?.toString() || "",
                 adGroupId: row.ad_group?.id?.toString() || "",
                 text: row.ad_group_criterion?.keyword?.text || "",
-                matchType: String(row.ad_group_criterion?.keyword?.match_type) || "",
+                matchType: mapMatchType(row.ad_group_criterion?.keyword?.match_type),
                 status: mapStatus(row.ad_group_criterion?.status),
                 qualityScore: row.ad_group_criterion?.quality_info?.quality_score ?? null,
-                expectedCtr: String(row.ad_group_criterion?.quality_info?.search_predicted_ctr) || "UNSPECIFIED",
-                landingPageExperience: String(row.ad_group_criterion?.quality_info?.post_click_quality_score) || "UNSPECIFIED",
-                adRelevance: String(row.ad_group_criterion?.quality_info?.creative_quality_score) || "UNSPECIFIED",
+                expectedCtr: mapQSComponent(row.ad_group_criterion?.quality_info?.search_predicted_ctr),
+                landingPageExperience: mapQSComponent(row.ad_group_criterion?.quality_info?.post_click_quality_score),
+                adRelevance: mapQSComponent(row.ad_group_criterion?.quality_info?.creative_quality_score),
                 impressions: Number(row.metrics?.impressions) || 0,
                 clicks: Number(row.metrics?.clicks) || 0,
                 cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
                 conversions: Number(row.metrics?.conversions) || 0,
                 conversionValue: Number(row.metrics?.conversions_value) || 0,
                 cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
-                biddingStrategyType: row.campaign?.bidding_strategy_type ? String(row.campaign.bidding_strategy_type) : "UNKNOWN",
+                biddingStrategyType: mapBiddingStrategyType(row.campaign?.bidding_strategy_type),
                 campaignName: row.campaign?.name || "Unknown Campaign",
+                adGroupName: row.ad_group?.name || "Unknown Ad Group",
                 finalUrl: row.ad_group_criterion?.final_urls?.[0] || adGroupUrlMap.get(row.ad_group?.id?.toString() || "") || undefined,
             }));
 
@@ -882,6 +917,7 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
                 asset_group.status,
                 asset_group.ad_strength,
                 campaign.id,
+                campaign.name,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
@@ -915,6 +951,7 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
             return {
                 id: row.asset_group?.id?.toString() || "",
                 campaignId: row.campaign?.id?.toString() || "",
+                campaignName: row.campaign?.name || "",
                 name: row.asset_group?.name || "",
                 status: mapStatus(row.asset_group?.status),
                 impressions: Number(row.metrics?.impressions) || 0,
