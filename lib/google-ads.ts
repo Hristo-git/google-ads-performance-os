@@ -167,8 +167,9 @@ export interface KeywordWithQS {
     cost: number;
     conversions: number;         // RESTORED
     conversionValue: number;     // NEW
-    cpc: number;                 // NEW
-    biddingStrategyType?: string; // NEW
+    cpc: number;
+    biddingStrategyType?: string;
+    finalUrl?: string;
 }
 
 export interface AdWithStrength {
@@ -646,6 +647,7 @@ export async function getKeywordsWithQS(
         ad_group.id,
         ad_group_criterion.keyword.text,
         ad_group_criterion.keyword.match_type,
+        ad_group_criterion.final_urls,
         ad_group_criterion.status,
         ad_group_criterion.quality_info.quality_score,
         ad_group_criterion.quality_info.creative_quality_score,
@@ -681,6 +683,7 @@ export async function getKeywordsWithQS(
                 conversionValue: Number(row.metrics?.conversions_value) || 0,
                 cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
                 biddingStrategyType: row.campaign?.bidding_strategy_type ? String(row.campaign.bidding_strategy_type) : "UNKNOWN",
+                finalUrl: row.ad_group_criterion?.final_urls?.[0] || undefined,
             }));
 
             // Deduplicate by criterion_id: keyword_view returns 1 row per day with date ranges.

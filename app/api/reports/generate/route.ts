@@ -185,7 +185,7 @@ export async function POST(request: Request) {
                             previous: history.quality_score,
                             periodDaysAgo: 30
                         } : undefined,
-                        finalUrl: k.id ? (adLevelUrls.get(k.adGroupId) || '') : '', // Simple fallback here
+                        finalUrl: k.finalUrl || (k.id ? (adLevelUrls.get(k.adGroupId) || '') : ''), // Keyword-level first, then ad-level fallback
                     };
                 });
 
@@ -201,9 +201,23 @@ export async function POST(request: Request) {
                     impressions: ag.impressions,
                     clicks: ag.clicks,
                     cost: ag.cost,
-                    conversions: ag.conversions,
                     conversionValue: ag.conversionValue,
                 }));
+
+                // --- DEBUG: Remove after fix ---
+                console.log('=== QS DEBUG: First 3 keywords ===');
+                qsKeywords.slice(0, 3).forEach((kw, i) => {
+                    console.log(`KW ${i}: text="${kw.text}" campaignName="${kw.campaignName}" finalUrl="${kw.finalUrl}"`);
+                });
+                console.log('=== QS DEBUG: First 2 adGroups ===');
+                qsAdGroups.slice(0, 2).forEach((ag, i) => {
+                    console.log(`AG ${i}: name="${ag.name}" campaignName="${ag.campaignName}"`);
+                });
+                if (qsKeywords.length > 0) {
+                    console.log('=== QS DEBUG: Full first keyword ===');
+                    console.log(JSON.stringify(qsKeywords[0], null, 2));
+                }
+                // --- END DEBUG ---
 
                 // 6. Build Structured Request
                 // ...
@@ -290,6 +304,7 @@ export async function POST(request: Request) {
                         for await (const event of pass1Stream) {
                             if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                                 analysis += event.delta.text;
+                                // DO NOT stream pass 1 content to client — avoid duplication
                             }
                         }
 
@@ -361,15 +376,17 @@ ${analysis}
    - Маркирай всяка прогноза като "**Прогноза (модел):** [формула] = [резултат]"
    - Добави Confidence: HIGH/MEDIUM/LOW към всяка основна препоръка
 
-3. **Провери задължителните секции**:
-   - Секция 8: Scaling Scenarios (A/B/C) — ЗАДЪЛЖИТЕЛНА за account/category репорти
-   - Секция 9: Decision Requests (3-5 решения)
-   - Секция 10: Definition of Done (4-6 измерими критерия)
-   Ако липсват, ДОБАВИ ги.
+3. **Verify mandatory sections** are present:
+   - Section 8: Scaling Scenarios (A/B/C) — REQUIRED for account/category reports
+   - Section 9: Decision Requests (3-5 items)
+   - Section 10: Definition of Done (4-6 measurable criteria)
+   If any are missing, ADD them.
 
-4. **Препиши** финалния output като подобрена версия.
+4. **Rewrite** the final output as an improved version.
 
-Изведи подобрения анализ директно — без мета-коментари, без "бележки на рецензент", без предговор.`;
+Refine BOTH documents below. Return the complete refined version of DOCUMENT 1: EXECUTIVE SUMMARY and DOCUMENT 2: TECHNICAL ANALYSIS. Do not omit either document. Do not shorten or summarize — maintain full detail in both documents.
+
+Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recenzent", bez predgovor.`;
 
                         analysis = ''; // Reset — pass 2 output replaces pass 1
                         const pass2Stream = anthropic.messages.stream({
