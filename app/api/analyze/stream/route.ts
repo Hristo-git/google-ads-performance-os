@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
 import { ANALYSIS_SYSTEM_PROMPT, getAdGroupAnalysisPrompt } from "@/lib/prompts";
-import { upsertReport, querySimilarReports } from "@/lib/pinecone";
+import { upsertReport } from "@/lib/pinecone";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
 import { logActivity } from "@/lib/activity-logger";
 import { calculateDerivedMetrics, buildEnhancedDataInventory } from "@/lib/derived-metrics";
@@ -164,25 +164,8 @@ export async function POST(request: Request) {
         const { language = 'bg' } = data;
         const isEn = language === 'en';
 
-        // RAG context (non-blocking, fail-safe)
-        let historyContext = "";
-        try {
-            let searchQuery = `${data.level} analysis`;
-            if (data.analysisType === 'category' && data.category) searchQuery += ` ${data.category}`;
-            else if (data.level === 'campaign' && data.campaign?.name) searchQuery += ` ${data.campaign.name}`;
-
-            const matches = await querySimilarReports(searchQuery, data.customerId, 2);
-            if (matches?.length > 0) {
-                const past = (matches as any[]).map((m: any, i: number) =>
-                    `### PAST ANALYSIS ${i + 1} (${m.metadata?.timestamp || 'unknown'})\n${m.metadata?.analysis_content || ''}`
-                ).join('\n\n');
-                historyContext = isEn
-                    ? `\n\n=== SEMANTIC MEMORY: PREVIOUS ANALYSES ===\n${past}`
-                    : `\n\n=== СЕМАНТИЧНА ПАМЕТ: ПРЕДИШНИ АНАЛИЗИ ===\n${past}`;
-            }
-        } catch { /* proceed without history */ }
-
-        const finalPrompt = historyContext ? `${prompt}\n${historyContext}` : prompt;
+        // Each analysis is a clean snapshot — no RAG/history injection
+        const finalPrompt = prompt;
 
         const systemPrompt = data.level === 'adgroup'
             ? undefined
