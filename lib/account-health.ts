@@ -8,7 +8,7 @@
  *   import { calculateHealthScore, buildNGrams, formatHealthScoreForPrompt, formatNGramsForPrompt } from '@/lib/account-health';
  */
 
-import type { CampaignPerformance, AdGroupPerformance, KeywordWithQS, AdWithStrength, NegativeKeyword, AuctionInsight, AccountDevicePerformance } from './google-ads';
+import type { CampaignPerformance, AdGroupPerformance, KeywordWithQS, AdWithStrength, NegativeKeyword, AuctionInsight, AccountDevicePerformance, AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance } from './google-ads';
 
 // ============================================================
 // TYPES
@@ -35,7 +35,11 @@ export type HealthCategory =
     | 'NEGATIVE_KEYWORDS'
     | 'MATCH_TYPE_BALANCE'
     | 'DEVICE_PERFORMANCE'
-    | 'MARKET_COMPETITION';
+    | 'MARKET_COMPETITION'
+    | 'ASSET_PERFORMANCE'
+    | 'CHANGE_HISTORY'
+    | 'CONVERSION_ACTIONS'
+    | 'PMAX_PRODUCT_HEALTH';
 
 export interface HealthScoreReport {
     overallScore: number;           // 0-100 weighted
@@ -82,7 +86,11 @@ export function calculateHealthScore(
     negativeKeywords: NegativeKeyword[],
     searchTerms?: SearchTermInput[],
     auctionInsights?: AuctionInsight[],
-    deviceStats?: AccountDevicePerformance[]
+    deviceStats?: AccountDevicePerformance[],
+    assetPerformance?: AssetPerformance[],
+    changeEvents?: ChangeEvent[],
+    conversionActions?: ConversionAction[],
+    pmaxProducts?: PMaxProductPerformance[]
 ): HealthScoreReport {
     const enabledCampaigns = campaigns.filter(c => c.status === 'ENABLED');
     const checks: HealthCheckResult[] = [];
@@ -687,6 +695,148 @@ export function calculateHealthScore(
         });
     }
 
+    // ── CHECK 12: Asset Performance ──────────────────────────
+    if (assetPerformance && assetPerformance.length > 0) {
+        const totalAssets = assetPerformance.length;
+        const disapproved = assetPerformance.filter(a => a.approvalStatus !== 'APPROVED' && a.approvalStatus !== 'APPROVED_LIMITED').length;
+        const poorPerf = assetPerformance.filter(a => a.performanceLabel === 'POOR').length;
+        const goodPerf = assetPerformance.filter(a => ['GOOD', 'BEST', 'EXCELLENT'].includes(a.performanceLabel || '')).length;
+
+        const disapprovalPct = (disapproved / totalAssets) * 100;
+        const poorPct = (poorPerf / totalAssets) * 100;
+
+        let assetScore = 100;
+        let assetStatus: HealthCheckResult['status'] = 'EXCELLENT';
+
+        if (disapprovalPct > 10) {
+            assetScore = 40;
+            assetStatus = 'CRITICAL';
+        } else if (poorPct > 30) {
+            assetScore = 60;
+            assetStatus = 'WARNING';
+        } else if (goodPerf < totalAssets * 0.3) {
+            assetScore = 75;
+            assetStatus = 'GOOD';
+        }
+
+        checks.push({
+            name: 'Asset Performance',
+            category: 'ASSET_PERFORMANCE',
+            score: assetScore,
+            weight: 1.5,
+            status: assetStatus,
+            finding: `${disapproved} assets disapproved, ${poorPerf} performing poorly. ${goodPerf} rated Good/Best.`,
+            recommendation: disapproved > 0
+                ? 'Fix disapproved assets immediately to avoid policy flags.'
+                : poorPerf > 0
+                    ? 'Replace "Poor" performing assets with new variations.'
+                    : 'Asset health is solid.',
+            dataPoints: { total: totalAssets, disapproved, poor: poorPerf, good: goodPerf }
+        });
+    }
+
+    // ── CHECK 13: Change History Check ───────────────────────
+    if (changeEvents) { // Allow empty array to trigger "no changes" logic
+        const changeCount = changeEvents.length;
+        let changeScore = 100;
+        let changeStatus: HealthCheckResult['status'] = 'GOOD';
+        let changeFinding = `Recent activity: ${changeCount} changes detected.`;
+        let changeRec = 'Maintain regular optimization cadence.';
+
+        if (changeCount === 0) {
+            changeScore = 30; // Neglected account?
+            changeStatus = 'WARNING';
+            changeFinding = 'No changes detected in the recent period. Account may be neglected.';
+            changeRec = 'Resume regular optimizations to maintain performance.';
+        } else if (changeCount > 1000) {
+            changeScore = 60;
+            changeStatus = 'WARNING';
+            changeFinding = `High volume of changes (${changeCount}). Potential erratic automation or panic editing.`;
+            changeRec = 'Verify that automated rules are not flapping or over-optimizing.';
+        }
+
+        checks.push({
+            name: 'Account Activity',
+            category: 'CHANGE_HISTORY',
+            score: changeScore,
+            weight: 1.0,
+            status: changeStatus,
+            finding: changeFinding,
+            recommendation: changeRec,
+            dataPoints: { changeCount }
+        });
+    }
+
+    // ── CHECK 14: Conversion Action Health ───────────────────
+    if (conversionActions && conversionActions.length > 0) {
+        // Filter for primary actions that should be driving value
+        const primaryActions = conversionActions.filter(ca => ca.status === 'ENABLED' && ca.includeInConversionsMetric);
+        const actionsWithZeroConv = primaryActions.filter(ca => ca.allConversions === 0);
+
+        let convHealthScore = 100;
+        let convHealthStatus: HealthCheckResult['status'] = 'EXCELLENT';
+        let convHealthRec = 'Conversion actions are healthy.';
+
+        if (primaryActions.length === 0) {
+            convHealthScore = 0;
+            convHealthStatus = 'CRITICAL';
+            convHealthRec = 'No primary conversion actions enabled!';
+        } else if (actionsWithZeroConv.length > 0) {
+            convHealthScore = 60;
+            convHealthStatus = 'WARNING';
+            convHealthRec = `Investigate ${actionsWithZeroConv.length} primary conversion actions with 0 reported conversions.`;
+        }
+
+        checks.push({
+            name: 'Conversion Config',
+            category: 'CONVERSION_ACTIONS',
+            score: convHealthScore,
+            weight: 2.0,
+            status: convHealthStatus,
+            finding: `${primaryActions.length} primary actions. ${actionsWithZeroConv.length} have 0 conversions recently.`,
+            recommendation: convHealthRec,
+            dataPoints: {
+                totalPrimary: primaryActions.length,
+                zeroConvCount: actionsWithZeroConv.length,
+                names: actionsWithZeroConv.map(a => a.name).slice(0, 3)
+            }
+        });
+    }
+
+    // ── CHECK 15: PMax Product Health ────────────────────────
+    if (pmaxProducts && pmaxProducts.length > 0) {
+        const totalProducts = pmaxProducts.length;
+        const zeroImpressionProducts = pmaxProducts.filter(p => p.impressions === 0).length;
+        const zeroImpPct = (zeroImpressionProducts / totalProducts) * 100;
+
+        let pmaxScore = 100;
+        let pmaxStatus: HealthCheckResult['status'] = 'EXCELLENT';
+
+        if (zeroImpPct > 80) {
+            pmaxScore = 40;
+            pmaxStatus = 'CRITICAL';
+        } else if (zeroImpPct > 50) {
+            pmaxScore = 60;
+            pmaxStatus = 'WARNING';
+        } else if (zeroImpPct > 20) {
+            pmaxScore = 80;
+            pmaxStatus = 'GOOD';
+        }
+
+        checks.push({
+            name: 'PMax Product Health',
+            category: 'PMAX_PRODUCT_HEALTH',
+            score: pmaxScore,
+            weight: 1.5,
+            status: pmaxStatus,
+            finding: `${zeroImpressionProducts}/${totalProducts} products (${zeroImpPct.toFixed(0)}%) have 0 impressions.`,
+            recommendation: zeroImpPct > 50
+                ? 'Large catalog segment is invisible. Check Merchant Center for disapprovals or subdivide Listing Groups.'
+                : 'Consider isolating zombie products into a "Catch-All" campaign with lower ROAS targets.',
+            dataPoints: { totalProducts, zeroImpProducts: zeroImpressionProducts, zeroImpPct }
+        });
+    }
+
     // ── CALCULATE OVERALL SCORE ──────────────────────────────
     const totalWeight = checks.reduce((sum, c) => sum + c.weight, 0);
     const weightedSum = checks.reduce((sum, c) => sum + (c.score * c.weight), 0);
@@ -934,12 +1084,17 @@ export function runPreAnalysis(
     negativeKeywords: NegativeKeyword[],
     searchTerms?: SearchTermInput[],
     auctionInsights?: AuctionInsight[],
-    deviceStats?: AccountDevicePerformance[]
+    deviceStats?: AccountDevicePerformance[],
+    assetPerformance?: AssetPerformance[],
+    changeEvents?: ChangeEvent[],
+    conversionActions?: ConversionAction[],
+    pmaxProducts?: PMaxProductPerformance[]
 ): { healthBlock: string; ngramBlock: string; healthScore: HealthScoreReport } {
 
     // Health Score
     const healthScore = calculateHealthScore(
-        campaigns, adGroups, keywords, ads, negativeKeywords, searchTerms, auctionInsights, deviceStats
+        campaigns, adGroups, keywords, ads, negativeKeywords, searchTerms, auctionInsights, deviceStats,
+        assetPerformance, changeEvents, conversionActions, pmaxProducts
     );
     const healthBlock = formatHealthScoreForPrompt(healthScore);
 

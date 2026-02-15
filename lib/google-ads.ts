@@ -1,5 +1,13 @@
+
 import { GoogleAdsApi } from "google-ads-api";
-import { PMaxAsset, AccountAsset } from "@/types/google-ads";
+import {
+    PMaxAsset, AdWithStrength,
+    AssetPerformance,
+    ChangeEvent,
+    ConversionAction,
+    PMaxProductPerformance,
+    AccountAsset
+} from "@/types/google-ads";
 
 let client: GoogleAdsApi | null = null;
 
@@ -20,7 +28,7 @@ const CACHE_TTL = {
 };
 
 async function withCache<T>(category: keyof typeof CACHE_TTL, keyParts: unknown[], fn: () => Promise<T>): Promise<T> {
-    const key = `${category}:${JSON.stringify(keyParts)}`;
+    const key = `${category}:${JSON.stringify(keyParts)} `;
     const cached = apiCache.get(key);
     if (cached && cached.expiresAt > Date.now()) {
         console.log(`[Cache HIT] ${category} (${Math.round((cached.expiresAt - Date.now()) / 1000)}s left)`);
@@ -28,7 +36,7 @@ async function withCache<T>(category: keyof typeof CACHE_TTL, keyParts: unknown[
     }
     const result = await fn();
     apiCache.set(key, { data: result, expiresAt: Date.now() + (CACHE_TTL[category] || CACHE_TTL.default) });
-    console.log(`[Cache SET] ${category}`);
+    console.log(`[Cache SET] ${category} `);
     // Cleanup expired entries periodically
     if (apiCache.size > 100) {
         const now = Date.now();
@@ -66,10 +74,10 @@ export function getGoogleAdsCustomer(refreshToken: string, customerId?: string) 
     const targetCustomerId = rawTargetId.replace(/-/g, "").trim();
 
     console.log(`[GoogleAds] Initializing Customer:
-      - Raw Login ID: ${rawLoginId} -> Clean: ${loginCustomerId}
-      - Raw Target ID: ${rawTargetId} -> Clean: ${targetCustomerId}
-      - Refresh Token: ${refreshToken ? "PRESENT" : "MISSING"}
-    `);
+- Raw Login ID: ${rawLoginId} -> Clean: ${loginCustomerId}
+- Raw Target ID: ${rawTargetId} -> Clean: ${targetCustomerId}
+- Refresh Token: ${refreshToken ? "PRESENT" : "MISSING"}
+`);
 
     if (!loginCustomerId) {
         console.warn("[GoogleAds] WARNING: No login_customer_id provided!");
@@ -177,6 +185,24 @@ export interface KeywordWithQS {
     finalUrl?: string;
     campaignName?: string;
     adGroupName?: string;
+    // Added from instruction
+    quality_info?: {
+        quality_score: number;
+        post_click_quality_score: string;
+        ad_relevance: string;
+        ad_fairness: string;
+        landing_page_experience: string;
+        post_click_quality_score_range?: string;
+    };
+    final_urls?: string[];
+    approval_status?: string;
+    policy_summary?: {
+        approval_status: string;
+        policy_topic_entries: {
+            topic: string;
+            type: string;
+        }[];
+    };
 }
 
 export interface AdWithStrength {
@@ -243,7 +269,7 @@ export function extractApiErrorInfo(error: unknown): { message: string; isQuotaE
 }
 
 function logApiError(context: string, error: unknown) {
-    console.error(`\n=== Google Ads API Error (${context}) ===`);
+    console.error(`\n === Google Ads API Error(${context}) === `);
     if (error instanceof Error) {
         console.error("Message:", error.message);
         console.error("Stack:", error.stack);
@@ -333,24 +359,24 @@ export async function getCampaigns(refreshToken: string, customerId?: string, da
 
         try {
             const result = await customer.query(`
-                SELECT
-                    campaign.id, campaign.name, campaign.status,
-                    metrics.impressions, metrics.clicks, metrics.cost_micros,
-                    metrics.conversions, metrics.ctr, metrics.average_cpc,
-                    metrics.conversions_value,
-                    metrics.search_impression_share, metrics.search_top_impression_share,
-                    metrics.search_rank_lost_impression_share, metrics.search_budget_lost_impression_share,
-                    metrics.search_absolute_top_impression_share,
-                    campaign.bidding_strategy_type, campaign.advertising_channel_type,
-                    campaign.target_roas.target_roas, campaign.target_cpa.target_cpa_micros,
-                    campaign.campaign_budget, campaign_budget.amount_micros,
-                    campaign_budget.delivery_method, campaign_budget.status,
-                    campaign.optimization_score
+SELECT
+campaign.id, campaign.name, campaign.status,
+    metrics.impressions, metrics.clicks, metrics.cost_micros,
+    metrics.conversions, metrics.ctr, metrics.average_cpc,
+    metrics.conversions_value,
+    metrics.search_impression_share, metrics.search_top_impression_share,
+    metrics.search_rank_lost_impression_share, metrics.search_budget_lost_impression_share,
+    metrics.search_absolute_top_impression_share,
+    campaign.bidding_strategy_type, campaign.advertising_channel_type,
+    campaign.target_roas.target_roas, campaign.target_cpa.target_cpa_micros,
+    campaign.campaign_budget, campaign_budget.amount_micros,
+    campaign_budget.delivery_method, campaign_budget.status,
+    campaign.optimization_score
                 FROM campaign
                 WHERE campaign.status != 'REMOVED' ${statusFilter} ${dateFilter}
                 ORDER BY metrics.impressions DESC
                 LIMIT 1000
-            `);
+    `);
 
             return result.map((row) => {
                 const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
@@ -402,14 +428,14 @@ export async function getAccessibleCustomers(refreshToken: string): Promise<{ id
     try {
         // Query customer_client to get all accessible accounts under the MCC
         const result = await customer.query(`
-    SELECT
-    customer_client.id,
-        customer_client.descriptive_name,
-        customer_client.manager,
-        customer_client.status
+SELECT
+customer_client.id,
+    customer_client.descriptive_name,
+    customer_client.manager,
+    customer_client.status
             FROM customer_client
             WHERE customer_client.status = 'ENABLED'
-        `);
+    `);
 
         return result.map((row) => ({
             id: row.customer_client?.id?.toString() || "",
@@ -458,33 +484,33 @@ export async function getAdGroups(refreshToken: string, campaignId?: string, cus
                 : `ad_group.status != 'REMOVED'`;
 
             const campaignClause = campaignId
-                ? `AND campaign.id = ${campaignId}`
+                ? `AND campaign.id = ${campaignId} `
                 : '';
 
             const query = `
-            SELECT
-                ad_group.id,
-                ad_group.name,
-                ad_group.status,
-                ad_group.type,
-                campaign.id,
-                campaign.name,
-                campaign.advertising_channel_type,
-                metrics.impressions,
-                metrics.clicks,
-                metrics.cost_micros,
-                metrics.conversions,
-                metrics.ctr,
-                metrics.average_cpc,
-                metrics.conversions_value,
-                metrics.relative_ctr
+SELECT
+ad_group.id,
+    ad_group.name,
+    ad_group.status,
+    ad_group.type,
+    campaign.id,
+    campaign.name,
+    campaign.advertising_channel_type,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.ctr,
+    metrics.average_cpc,
+    metrics.conversions_value,
+    metrics.relative_ctr
             FROM ad_group
             WHERE ${statusClause} ${campaignClause} ${dateFilter}
             ORDER BY metrics.impressions DESC
             LIMIT 5000
-        `;
+    `;
 
-            console.log(`[getAdGroups] customerId=${customerId}, campaignId=${campaignId || 'ALL'}`);
+            console.log(`[getAdGroups] customerId = ${customerId}, campaignId = ${campaignId || 'ALL'} `);
 
             const adGroups = await customer.query(query);
 
@@ -620,11 +646,11 @@ export async function getNegativeKeywords(refreshToken: string, adGroupId?: stri
             : `WHERE ad_group_criterion.negative = TRUE AND ad_group_criterion.type = 'KEYWORD'`;
 
         const keywords = await customer.query(`
-    SELECT
-    ad_group_criterion.criterion_id,
-        ad_group.id,
-        ad_group_criterion.keyword.text,
-        ad_group_criterion.keyword.match_type
+SELECT
+ad_group_criterion.criterion_id,
+    ad_group.id,
+    ad_group_criterion.keyword.text,
+    ad_group_criterion.keyword.match_type
             FROM ad_group_criterion
             ${whereClause}
             LIMIT 500
@@ -691,43 +717,47 @@ export async function getKeywordsWithQS(
             }
 
             const keywords = await customer.query(`
-    SELECT
-    ad_group_criterion.criterion_id,
-        ad_group.id,
-        ad_group_criterion.keyword.text,
-        ad_group_criterion.keyword.match_type,
-        ad_group_criterion.final_urls,
-        ad_group_criterion.status,
-        ad_group_criterion.quality_info.quality_score,
-        ad_group_criterion.quality_info.creative_quality_score,
-        ad_group_criterion.quality_info.post_click_quality_score,
-        ad_group_criterion.quality_info.search_predicted_ctr,
-        ad_group.name,
-        campaign.bidding_strategy_type,
-        campaign.name,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.average_cpc
+SELECT
+ad_group_criterion.criterion_id,
+    ad_group.id,
+    ad_group_criterion.keyword.text,
+    ad_group_criterion.keyword.match_type,
+    ad_group_criterion.final_urls,
+    ad_group_criterion.status,
+    ad_group_criterion.quality_info.quality_score,
+    ad_group_criterion.quality_info.creative_quality_score,
+    ad_group_criterion.quality_info.post_click_quality_score,
+    ad_group_criterion.quality_info.search_predicted_ctr,
+    ad_group.name,
+    campaign.bidding_strategy_type,
+    campaign.name,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value,
+    metrics.average_cpc,
+    metrics.all_conversions,
+    metrics.view_through_conversions,
+    ad_group_criterion.approval_status,
+    ad_group_criterion.policy_summary
             FROM keyword_view
             ${whereClause} ${dateFilter}
             ORDER BY metrics.impressions DESC
             LIMIT 10000
-        `);
+    `);
 
             // Fetch Ad-level URLs as fallback
             const adUrlQuery = `
-                SELECT
-                    ad_group.id,
-                    ad_group_ad.ad.final_urls
+SELECT
+ad_group.id,
+    ad_group_ad.ad.final_urls
                 FROM ad_group_ad
-                WHERE
-                    campaign.status = 'ENABLED'
+WHERE
+campaign.status = 'ENABLED'
                     AND ad_group.status = 'ENABLED'
                     AND ad_group_ad.status = 'ENABLED'
-            `;
+    `;
             const adUrlResults = await customer.query(adUrlQuery);
             const adGroupUrlMap = new Map<string, string>();
             for (const row of adUrlResults) {
@@ -758,6 +788,10 @@ export async function getKeywordsWithQS(
                 campaignName: row.campaign?.name || "Unknown Campaign",
                 adGroupName: row.ad_group?.name || "Unknown Ad Group",
                 finalUrl: row.ad_group_criterion?.final_urls?.[0] || adGroupUrlMap.get(row.ad_group?.id?.toString() || "") || undefined,
+                allConversions: Number(row.metrics?.all_conversions) || 0,
+                viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
+                approvalStatus: String(row.ad_group_criterion?.approval_status || 'UNKNOWN'),
+                policySummary: row.ad_group_criterion?.policy_summary?.policy_topic_entries?.map((e: any) => e.topic) || [],
             }));
 
             // Deduplicate by criterion_id: keyword_view returns 1 row per day with date ranges.
@@ -816,23 +850,23 @@ export async function getAdsWithStrength(
             }
 
             const ads = await customer.query(`
-    SELECT
-    ad_group_ad.ad.id,
-        ad_group.id,
-        ad_group_ad.ad.type,
-        ad_group_ad.status,
-        ad_group_ad.ad.responsive_search_ad.headlines,
-        ad_group_ad.ad.responsive_search_ad.descriptions,
-        ad_group_ad.ad.responsive_display_ad.headlines,
-        ad_group_ad.ad.responsive_display_ad.descriptions,
-        ad_group_ad.ad.final_urls,
-        ad_group_ad.ad_strength,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.ctr
+SELECT
+ad_group_ad.ad.id,
+    ad_group.id,
+    ad_group_ad.ad.type,
+    ad_group_ad.status,
+    ad_group_ad.ad.responsive_search_ad.headlines,
+    ad_group_ad.ad.responsive_search_ad.descriptions,
+    ad_group_ad.ad.responsive_display_ad.headlines,
+    ad_group_ad.ad.responsive_display_ad.descriptions,
+    ad_group_ad.ad.final_urls,
+    ad_group_ad.ad_strength,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value,
+    metrics.ctr
             FROM ad_group_ad
             ${whereClause} ${dateFilter}
             LIMIT 10000
@@ -920,31 +954,31 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
             : `asset_group.status != 'REMOVED'`;
 
         const campaignClause = campaignId
-            ? `AND campaign.id = ${campaignId}`
+            ? `AND campaign.id = ${campaignId} `
             : '';
 
-        console.log(`[getAssetGroups] customerId=${customerId}, campaignId=${campaignId || 'ALL'}`);
+        console.log(`[getAssetGroups] customerId = ${customerId}, campaignId = ${campaignId || 'ALL'} `);
 
         const result = await customer.query(`
-            SELECT
-                asset_group.id,
-                asset_group.name,
-                asset_group.status,
-                asset_group.ad_strength,
-                campaign.id,
-                campaign.name,
-                metrics.impressions,
-                metrics.clicks,
-                metrics.cost_micros,
-                metrics.conversions,
-                metrics.ctr,
-                metrics.average_cpc,
-                metrics.conversions_value
+SELECT
+asset_group.id,
+    asset_group.name,
+    asset_group.status,
+    asset_group.ad_strength,
+    campaign.id,
+    campaign.name,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.ctr,
+    metrics.average_cpc,
+    metrics.conversions_value
             FROM asset_group
             WHERE ${statusClause} ${campaignClause} ${dateFilter}
             ORDER BY metrics.impressions DESC
             LIMIT 1000
-        `);
+    `);
 
         const STRENGTH_MAP: Record<string, string> = {
             '4': 'POOR',
@@ -996,21 +1030,21 @@ export async function getAssetGroupAssets(refreshToken: string, assetGroupId: st
             // Query asset_group_asset to get the assets linked to this group
             // performance_label is available on asset_group_asset
             const result = await customer.query(`
-    SELECT
-    asset_group_asset.asset_group,
-        asset_group_asset.asset,
-        asset_group_asset.field_type,
-        asset_group_asset.status,
-        asset.id,
-        asset.name,
-        asset.type,
-        asset.text_asset.text,
-        asset.image_asset.full_size.url,
-        asset.youtube_video_asset.youtube_video_id
+SELECT
+asset_group_asset.asset_group,
+    asset_group_asset.asset,
+    asset_group_asset.field_type,
+    asset_group_asset.status,
+    asset.id,
+    asset.name,
+    asset.type,
+    asset.text_asset.text,
+    asset.image_asset.full_size.url,
+    asset.youtube_video_asset.youtube_video_id
             FROM asset_group_asset
             WHERE asset_group.id = ${assetGroupId} AND asset_group_asset.status != 'REMOVED'
             LIMIT 500
-        `);
+    `);
 
             return result.map((row) => {
                 const asset = row.asset;
@@ -1042,18 +1076,18 @@ export async function getCustomerAssets(refreshToken: string, customerId?: strin
 
         try {
             const result = await customer.query(`
-    SELECT
-    customer_asset.asset,
-        customer_asset.field_type,
-        customer_asset.status,
-        asset.id,
-        asset.name,
-        asset.type,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value
+SELECT
+customer_asset.asset,
+    customer_asset.field_type,
+    customer_asset.status,
+    asset.id,
+    asset.name,
+    asset.type,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value
             FROM customer_asset
             WHERE customer_asset.status != 'REMOVED'
             ${dateFilter}
@@ -1112,18 +1146,18 @@ export async function getCampaignTrends(refreshToken: string, customerId?: strin
 
     try {
         const query = `
-    SELECT
-    campaign.id,
-        segments.date,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.clicks,
-        metrics.impressions
+SELECT
+campaign.id,
+    segments.date,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value,
+    metrics.clicks,
+    metrics.impressions
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${dateFilter} ${campaignFilter}
             ORDER BY segments.date ASC
-        `;
+    `;
 
         const result = await customer.query(query);
         const trends: Record<string, DailyMetric[]> = {};
@@ -1176,16 +1210,16 @@ export async function getAssetGroupSignals(refreshToken: string, assetGroupId: s
 
     try {
         const result = await customer.query(`
-    SELECT
-    asset_group_signal.asset_group,
-        asset_group_signal.audience.audience,
-        audience.id,
-        audience.name,
-        audience.description
+SELECT
+asset_group_signal.asset_group,
+    asset_group_signal.audience.audience,
+    audience.id,
+    audience.name,
+    audience.description
             FROM asset_group_signal
             WHERE asset_group.id = ${assetGroupId}
             LIMIT 100
-        `);
+    `);
 
         return result.map((row) => ({
             id: row.audience?.id?.toString() || "",
@@ -1212,11 +1246,11 @@ export async function getAssetGroupListingGroups(refreshToken: string, assetGrou
 
     try {
         const result = await customer.query(`
-    SELECT
-    asset_group_listing_group_filter.id,
-        asset_group_listing_group_filter.asset_group,
-        asset_group_listing_group_filter.type,
-        asset_group_listing_group_filter.path
+SELECT
+asset_group_listing_group_filter.id,
+    asset_group_listing_group_filter.asset_group,
+    asset_group_listing_group_filter.type,
+    asset_group_listing_group_filter.path
             FROM asset_group_listing_group_filter
             WHERE asset_group.id = ${assetGroupId}
             LIMIT 500
@@ -1260,19 +1294,19 @@ export async function getPMaxSearchInsights(refreshToken: string, campaignId: st
     try {
         // Note: campaign_search_term_insight requires filtering by campaign
         const result = await customer.query(`
-    SELECT
-    campaign_search_term_insight.id,
-        campaign_search_term_insight.campaign_id,
-        campaign_search_term_insight.category_label,
-        metrics.clicks,
-        metrics.impressions,
-        metrics.conversions,
-        metrics.conversions_value
+SELECT
+campaign_search_term_insight.id,
+    campaign_search_term_insight.campaign_id,
+    campaign_search_term_insight.category_label,
+    metrics.clicks,
+    metrics.impressions,
+    metrics.conversions,
+    metrics.conversions_value
             FROM campaign_search_term_insight
             WHERE campaign.id = ${campaignId}
             ORDER BY metrics.clicks DESC
             LIMIT 100
-        `);
+    `);
 
         return result.map((row) => {
             const insight = row.campaign_search_term_insight as any;
@@ -1328,21 +1362,21 @@ export async function getCampaignDeviceBreakdown(
 
     try {
         const result = await customer.query(`
-    SELECT
-    campaign.id,
-        campaign.name,
-        segments.device,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.ctr,
-        metrics.average_cpc
+SELECT
+campaign.id,
+    campaign.name,
+    segments.device,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value,
+    metrics.ctr,
+    metrics.average_cpc
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${dateFilter}
             ORDER BY metrics.cost_micros DESC
-        `);
+    `);
 
         const DEVICE_MAP: Record<number, string> = {
             2: 'MOBILE', 3: 'TABLET', 4: 'DESKTOP', 6: 'CONNECTED_TV'
@@ -1400,20 +1434,20 @@ export async function getConversionActions(
 
     try {
         const result = await customer.query(`
-    SELECT
-    campaign.id,
-        campaign.name,
-        segments.conversion_action_name,
-        segments.conversion_action_category,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.all_conversions,
-        metrics.all_conversions_value
+SELECT
+campaign.id,
+    campaign.name,
+    segments.conversion_action_name,
+    segments.conversion_action_category,
+    metrics.conversions,
+    metrics.conversions_value,
+    metrics.all_conversions,
+    metrics.all_conversions_value
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${dateFilter}
                 AND metrics.conversions > 0
             ORDER BY metrics.conversions DESC
-        `);
+    `);
 
         const CONV_CATEGORY_MAP: Record<number, string> = {
             0: 'UNSPECIFIED', 1: 'UNKNOWN', 2: 'DEFAULT',
@@ -1475,12 +1509,12 @@ export async function getConversionActionTrends(
 
     try {
         const result = await customer.query(`
-            SELECT
-                segments.date,
-                segments.conversion_action_name,
-                segments.conversion_action_category,
-                metrics.conversions,
-                metrics.conversions_value
+SELECT
+segments.date,
+    segments.conversion_action_name,
+    segments.conversion_action_category,
+    metrics.conversions,
+    metrics.conversions_value
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${dateFilter}
                 AND metrics.conversions > 0
@@ -1529,22 +1563,22 @@ export async function getAuctionInsights(
         dateFilter = " AND segments.date DURING LAST_30_DAYS";
     }
 
-    const campaignFilter = campaignId ? `AND campaign.id = ${campaignId}` : '';
+    const campaignFilter = campaignId ? `AND campaign.id = ${campaignId} ` : '';
 
     try {
         const result = await customer.query(`
-    SELECT
-        campaign.id,
-        segments.auction_insight_domain,
-        metrics.auction_insight_search_impression_share,
-        metrics.auction_insight_search_overlap_rate,
-        metrics.auction_insight_search_outranking_share,
-        metrics.auction_insight_search_position_above_rate,
-        metrics.auction_insight_search_top_of_page_rate,
-        metrics.auction_insight_search_absolute_top_of_page_rate
+SELECT
+campaign.id,
+    segments.auction_insight_domain,
+    metrics.auction_insight_search_impression_share,
+    metrics.auction_insight_search_overlap_rate,
+    metrics.auction_insight_search_outranking_share,
+    metrics.auction_insight_search_position_above_rate,
+    metrics.auction_insight_search_top_of_page_rate,
+    metrics.auction_insight_search_absolute_top_of_page_rate
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${campaignFilter} ${dateFilter}
-    `);
+`);
 
         return result.map((row: any) => ({
             campaignId: row.campaign?.id?.toString() || "",
@@ -1596,17 +1630,17 @@ export async function getDayOfWeekPerformance(
         };
 
         const result = await customer.query(`
-    SELECT
-    campaign.id,
-        segments.day_of_week,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value
+SELECT
+campaign.id,
+    segments.day_of_week,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${dateFilter} ${campaignFilter}
-    `);
+`);
 
         return result.map((row) => {
             const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
@@ -1664,19 +1698,19 @@ export async function getAccountDeviceStats(
 
     try {
         const result = await customer.query(`
-            SELECT 
-                segments.device,
-                metrics.cost_micros,
-                metrics.conversions,
-                metrics.conversions_value,
-                metrics.clicks,
-                metrics.impressions
-            FROM campaign 
-            WHERE 
-                campaign.status != 'REMOVED' 
+SELECT
+segments.device,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value,
+    metrics.clicks,
+    metrics.impressions
+            FROM campaign
+WHERE
+campaign.status != 'REMOVED' 
                 ${dateFilter}
                 AND metrics.impressions > 0
-        `);
+    `);
 
         // Aggregate by device
         const aggregator: Record<string, AccountDevicePerformance> = {};
@@ -1764,17 +1798,17 @@ export async function getHourOfDayPerformance(
 
     try {
         const result = await customer.query(`
-    SELECT
-    campaign.id,
-        segments.hour,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value
+SELECT
+campaign.id,
+    segments.hour,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${dateFilter} ${campaignFilter}
-    `);
+`);
 
         return result.map((row) => {
             const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
@@ -1834,25 +1868,25 @@ export async function getLandingPagePerformance(
 
     try {
         const result = await customer.query(`
-    SELECT
-    campaign.id,
-        landing_page_view.unexpanded_final_url,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.ctr,
-        metrics.mobile_friendly_clicks_percentage,
-        metrics.speed_score
+SELECT
+campaign.id,
+    landing_page_view.unexpanded_final_url,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value,
+    metrics.ctr,
+    metrics.mobile_friendly_clicks_percentage,
+    metrics.speed_score
             FROM landing_page_view
             WHERE metrics.impressions > 0 
             ${dateFilter} ${campaignFilter}
             ORDER BY metrics.cost_micros DESC
             LIMIT 200
-        `);
+    `);
 
-        console.log(`[GoogleAds/LandingPages] Found ${result.length} rows`);
+        console.log(`[GoogleAds / LandingPages] Found ${result.length} rows`);
 
         const baseResults: LandingPagePerformance[] = result.map((row: any) => {
             const m = row.metrics || {};
@@ -1937,14 +1971,14 @@ async function getLandingPageQualityScores(
     const adGroupUrlMap: Record<string, string> = {};
     try {
         const adsResult = await customer.query(`
-            SELECT
-                ad_group.id,
-                ad_group_ad.ad.final_urls
+SELECT
+ad_group.id,
+    ad_group_ad.ad.final_urls
             FROM ad_group_ad
             WHERE ad_group_ad.status = 'ENABLED'
             ${campaignFilter}
             LIMIT 2000
-        `);
+    `);
 
         adsResult.forEach((row: any) => {
             const agId = row.ad_group?.id?.toString();
@@ -1964,16 +1998,16 @@ async function getLandingPageQualityScores(
     const urlScores: Record<string, number[]> = {};
     try {
         const keywordResult = await customer.query(`
-            SELECT
-                ad_group.id,
-                ad_group_criterion.quality_info.post_click_quality_score,
-                metrics.impressions
+SELECT
+ad_group.id,
+    ad_group_criterion.quality_info.post_click_quality_score,
+    metrics.impressions
             FROM keyword_view
             WHERE ad_group_criterion.status = 'ENABLED'
             AND metrics.impressions > 0
             ${dateFilter} ${campaignFilter}
             LIMIT 2000
-        `);
+    `);
 
         keywordResult.forEach((row: any) => {
             const agId = row.ad_group?.id?.toString();
@@ -2008,7 +2042,7 @@ async function getLandingPageQualityScores(
         }
     });
 
-    console.log(`[GoogleAds/QualityScores] Mapped ${Object.keys(finalMapping).length} URLs with quality data`);
+    console.log(`[GoogleAds / QualityScores] Mapped ${Object.keys(finalMapping).length} URLs with quality data`);
     return finalMapping;
 }
 
@@ -2029,15 +2063,15 @@ async function getLandingPageMobilePercentages(
 
     try {
         const result = await customer.query(`
-            SELECT
-                landing_page_view.unexpanded_final_url,
-                segments.device,
-                metrics.clicks
+SELECT
+landing_page_view.unexpanded_final_url,
+    segments.device,
+    metrics.clicks
             FROM landing_page_view
             WHERE metrics.clicks > 0
             ${dateFilter} ${campaignFilter}
             LIMIT 5000
-        `);
+    `);
 
         // Device enum: 2=MOBILE, 3=TABLET, 4=DESKTOP, 5=CONNECTED_TV
         const urlDeviceClicks: Record<string, { mobile: number, tablet: number, total: number }> = {};
@@ -2072,7 +2106,7 @@ async function getLandingPageMobilePercentages(
             }
         });
 
-        console.log(`[GoogleAds/MobilePercentages] Calculated mobile % for ${Object.keys(mobilePercentages).length} URLs`);
+        console.log(`[GoogleAds / MobilePercentages] Calculated mobile % for ${Object.keys(mobilePercentages).length} URLs`);
         return mobilePercentages;
     } catch (error) {
         console.error("[GoogleAds/MobilePercentages] Failed to fetch device data:", error);
@@ -2108,19 +2142,19 @@ export async function getGeographicPerformance(
     try {
         const result = await customer.query(`
     SELECT
-    campaign.id,
-        geographic_view.country_criterion_id,
-        geographic_view.location_type,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value
+campaign.id,
+    geographic_view.country_criterion_id,
+    geographic_view.location_type,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value
             FROM geographic_view
             WHERE metrics.impressions > 0 ${dateFilter}
             ORDER BY metrics.cost_micros DESC
             LIMIT 500
-        `);
+    `);
 
         return result.map((row) => {
             const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
@@ -2185,13 +2219,13 @@ export async function getRegionalPerformance(
 
     // Use geographic_view with geo_target_most_specific_location for city/region data
     const result = await customer.query(`
-        SELECT
-            segments.geo_target_most_specific_location,
-            metrics.impressions,
-            metrics.clicks,
-            metrics.cost_micros,
-            metrics.conversions,
-            metrics.conversions_value
+SELECT
+segments.geo_target_most_specific_location,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value
         FROM geographic_view
         WHERE metrics.impressions > 0
             ${dateFilter}
@@ -2202,8 +2236,8 @@ export async function getRegionalPerformance(
     console.log(`[GoogleAds] getRegionalPerformance: got ${result.length} rows`);
     if (result.length > 0) {
         const sample = result[0] as any;
-        console.log(`[GoogleAds] Sample row segments:`, JSON.stringify(sample.segments));
-        console.log(`[GoogleAds] Sample row keys:`, Object.keys(sample));
+        console.log(`[GoogleAds] Sample row segments: `, JSON.stringify(sample.segments));
+        console.log(`[GoogleAds] Sample row keys: `, Object.keys(sample));
     }
 
     // Extract unique geo_target_constant IDs from location resource names
@@ -2220,7 +2254,7 @@ export async function getRegionalPerformance(
         }
     });
 
-    console.log(`[GoogleAds] Unique location IDs found: ${locationIds.size}`);
+    console.log(`[GoogleAds] Unique location IDs found: ${locationIds.size} `);
 
     // Batch resolve location names via geo_target_constant
     const locationNames: Record<string, { name: string; canonicalName: string; type: string }> = {};
@@ -2232,20 +2266,20 @@ export async function getRegionalPerformance(
             const idList = batch.join(', ');
             try {
                 const geoResult = await customer.query(`
-                    SELECT
-                        geo_target_constant.id,
-                        geo_target_constant.name,
-                        geo_target_constant.canonical_name,
-                        geo_target_constant.target_type
+SELECT
+geo_target_constant.id,
+    geo_target_constant.name,
+    geo_target_constant.canonical_name,
+    geo_target_constant.target_type
                     FROM geo_target_constant
-                    WHERE geo_target_constant.id IN (${idList})
+                    WHERE geo_target_constant.id IN(${idList})
                 `);
                 geoResult.forEach((geoRow: any) => {
                     const id = geoRow.geo_target_constant?.id?.toString();
                     if (id) {
                         const rawType = geoRow.geo_target_constant?.target_type;
                         locationNames[id] = {
-                            name: geoRow.geo_target_constant?.name || `Location ${id}`,
+                            name: geoRow.geo_target_constant?.name || `Location ${id} `,
                             canonicalName: geoRow.geo_target_constant?.canonical_name || '',
                             type: typeof rawType === 'string'
                                 ? rawType
@@ -2286,7 +2320,7 @@ export async function getRegionalPerformance(
 
             return {
                 locationId,
-                locationName: locInfo?.canonicalName || locInfo?.name || `Location ${locationId}`,
+                locationName: locInfo?.canonicalName || locInfo?.name || `Location ${locationId} `,
                 locationType: locInfo?.type || 'Location',
                 impressions: Number(row.metrics?.impressions) || 0,
                 clicks: Number(row.metrics?.clicks) || 0,
@@ -2309,9 +2343,9 @@ export async function getSearchTerms(
 ): Promise<any[]> {
     return withCache('search', [customerId, dateRange], async () => {
         try {
-            console.log(`\n========== 🔍 SEARCH TERMS START ==========`);
-            console.log(`Customer: ${customerId}`);
-            console.log(`Date Range:`, dateRange);
+            console.log(`\n ========== 🔍 SEARCH TERMS START ==========`);
+            console.log(`Customer: ${customerId} `);
+            console.log(`Date Range: `, dateRange);
 
             const customer = getGoogleAdsCustomer(refreshToken, customerId);
             // Fix: getDateFilter returns " AND segments.date...", which is invalid as first WHERE condition
@@ -2321,19 +2355,19 @@ export async function getSearchTerms(
 
             // Use fields known to work from the API route
             const query = `
-            SELECT 
-                search_term_view.search_term,
-                metrics.impressions,
-                metrics.clicks,
-                metrics.cost_micros,
-                metrics.conversions,
-                metrics.conversions_value
-            FROM 
-                search_term_view 
-            WHERE 
+SELECT
+search_term_view.search_term,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value
+FROM
+search_term_view
+WHERE 
                 ${dateFilter}
-            ORDER BY 
-                metrics.impressions DESC
+            ORDER BY
+metrics.impressions DESC
             LIMIT 10000
         `;
 
@@ -2359,7 +2393,7 @@ export async function getSearchTerms(
                 };
             });
         } catch (error) {
-            console.error(`\n❌ SEARCH TERMS FAILED:`, error);
+            console.error(`\n❌ SEARCH TERMS FAILED: `, error);
             console.log(`========== 🔍 SEARCH TERMS END ==========\n`);
             logApiError("getSearchTerms", error);
             return [];
@@ -2404,24 +2438,24 @@ export async function getAudiencePerformance(
 
     try {
         const result = await customer.query(`
-            SELECT
-                campaign.id,
-                campaign.name,
-                ad_group.id,
-                ad_group.name,
-                ad_group_criterion.criterion_id,
-                ad_group_criterion.keyword.text,
-                ad_group_criterion.user_list.user_list,
-                ad_group_criterion.custom_affinity.custom_affinity,
-                ad_group_criterion.custom_intent.custom_intent,
-                ad_group_criterion.type,
-                metrics.impressions,
-                metrics.clicks,
-                metrics.cost_micros,
-                metrics.conversions,
-                metrics.conversions_value,
-                metrics.average_cpc,
-                metrics.ctr
+SELECT
+campaign.id,
+    campaign.name,
+    ad_group.id,
+    ad_group.name,
+    ad_group_criterion.criterion_id,
+    ad_group_criterion.keyword.text,
+    ad_group_criterion.user_list.user_list,
+    ad_group_criterion.custom_affinity.custom_affinity,
+    ad_group_criterion.custom_intent.custom_intent,
+    ad_group_criterion.type,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value,
+    metrics.average_cpc,
+    metrics.ctr
             FROM ad_group_audience_view
             WHERE campaign.status != 'REMOVED' 
             AND ad_group.status != 'REMOVED'
@@ -2442,7 +2476,7 @@ export async function getAudiencePerformance(
             if (row.ad_group_criterion?.keyword?.text) {
                 name = row.ad_group_criterion.keyword.text;
             } else if (row.ad_group_criterion?.user_list?.user_list) {
-                name = `User List (${row.ad_group_criterion.criterion_id})`;
+                name = `User List(${row.ad_group_criterion.criterion_id})`;
             }
 
             return {
@@ -2489,7 +2523,7 @@ export async function getAccountAuctionInsights(
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
 
     // Cache key
-    const cacheKey = `account_auction_insights:${customerId}:${dateRange.start}:${dateRange.end}:${campaignIds ? campaignIds.join(',') : 'all'}`;
+    const cacheKey = `account_auction_insights:${customerId}:${dateRange.start}:${dateRange.end}:${campaignIds ? campaignIds.join(',') : 'all'} `;
     const cached = apiCache.get(cacheKey);
     // @ts-ignore
     if (cached && cached.expiresAt > Date.now()) return cached.data;
@@ -2497,20 +2531,20 @@ export async function getAccountAuctionInsights(
     try {
         // Construct query
         let query = `
-      SELECT 
-        segments.auction_insight_domain,
-        metrics.auction_insight_search_impression_share,
-        metrics.auction_insight_search_overlap_rate,
-        metrics.auction_insight_search_outranking_share,
-        metrics.auction_insight_search_position_above_rate,
-        metrics.auction_insight_search_absolute_top_impression_percentage,
-        metrics.auction_insight_search_top_impression_percentage
+SELECT
+segments.auction_insight_domain,
+    metrics.auction_insight_search_impression_share,
+    metrics.auction_insight_search_overlap_rate,
+    metrics.auction_insight_search_outranking_share,
+    metrics.auction_insight_search_position_above_rate,
+    metrics.auction_insight_search_absolute_top_impression_percentage,
+    metrics.auction_insight_search_top_impression_percentage
       FROM auction_insight_domain_view
       WHERE segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'
     `;
 
         if (campaignIds && campaignIds.length > 0) {
-            query += ` AND campaign.id IN (${campaignIds.join(',')})`;
+            query += ` AND campaign.id IN(${campaignIds.join(',')})`;
         }
 
         // Execute query
@@ -2577,3 +2611,240 @@ export async function getAccountAuctionInsights(
         throw error;
     }
 }
+
+// ============================================
+// PRIORITY 5: Asset Performance (Sitelinks, Callouts, etc.)
+// ============================================
+
+export async function getAssetPerformance(
+    refreshToken: string,
+    customerId?: string,
+    dateRange?: DateRange,
+    campaignIds?: string[]
+): Promise<AssetPerformance[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+    const campaignFilter = campaignIds?.length
+        ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
+
+    try {
+        // Query for asset_group_asset (PMax) and ad_group_ad_asset_view (Search/Display)
+        // For simplicity, we'll focus on ad_group_ad_asset_view first as it covers extensions
+        const query = `
+SELECT
+asset.id,
+    asset.type,
+    asset.name,
+    asset.text_asset.text,
+    asset.final_urls,
+    asset.policy_summary.approval_status,
+    asset.policy_summary.policy_topic_entries,
+    ad_group_ad_asset_view.performance_label,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.ctr,
+    metrics.conversions,
+    metrics.conversions_value
+            FROM ad_group_ad_asset_view
+            WHERE ad_group_ad_asset_view.enabled = TRUE
+            ${dateFilter} ${campaignFilter}
+            AND metrics.impressions > 0
+            ORDER BY metrics.impressions DESC
+            LIMIT 1000
+    `;
+
+        const result = await customer.query(query);
+
+        return result.map((row) => ({
+            id: row.asset?.id?.toString() || "",
+            type: String(row.asset?.type || 'UNKNOWN'),
+            name: row.asset?.name || "",
+            text: row.asset?.text_asset?.text || "",
+            finalUrls: row.asset?.final_urls || [],
+            performanceLabel: String(row.ad_group_ad_asset_view?.performance_label || 'UNKNOWN'),
+            approvalStatus: String(row.asset?.policy_summary?.approval_status || 'UNKNOWN'),
+            policySummary: row.asset?.policy_summary?.policy_topic_entries?.map((e: any) => e.topic) || [],
+            impressions: Number(row.metrics?.impressions) || 0,
+            clicks: Number(row.metrics?.clicks) || 0,
+            cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
+            ctr: Number(row.metrics?.ctr) || 0,
+            conversions: Number(row.metrics?.conversions) || 0,
+            conversionValue: Number(row.metrics?.conversions_value) || 0,
+        }));
+    } catch (error: unknown) {
+        logApiError("getAssetPerformance", error);
+        return [];
+    }
+}
+
+// ============================================
+// PRIORITY 6: Change History
+// ============================================
+
+export async function getChangeHistory(
+    refreshToken: string,
+    customerId?: string,
+    dateRange?: DateRange // Should default to last 30 days if not provided
+): Promise<ChangeEvent[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+
+    // Change history only supports specific date ranges, usually last 30 days is best for diagnostics
+    const dateFilter = getDateFilter(dateRange);
+
+    try {
+        const query = `
+SELECT
+change_event.change_date_time,
+    change_event.change_resource_type,
+    change_event.change_resource_name,
+    change_event.client_type,
+    change_event.user_email,
+    change_event.old_resource,
+    change_event.new_resource,
+    change_event.campaign,
+    change_event.ad_group
+            FROM change_event
+            WHERE change_event.change_date_time >= '${dateRange!.start}' 
+            AND change_event.change_date_time <= '${dateRange!.end}'
+            ORDER BY change_event.change_date_time DESC
+            LIMIT 100
+    `;
+
+        const result = await customer.query(query);
+
+        return result.map((row) => ({
+            id: row.change_event?.change_resource_name || "",
+            changeDateTime: row.change_event?.change_date_time || "",
+            changeResourceType: String(row.change_event?.change_resource_type || "UNKNOWN"),
+            changeResourceName: row.change_event?.change_resource_name || "",
+            clientType: String(row.change_event?.client_type || "UNKNOWN"),
+            userEmail: row.change_event?.user_email || "",
+            oldResource: row.change_event?.old_resource ? JSON.stringify(row.change_event.old_resource) : undefined,
+            newResource: row.change_event?.new_resource ? JSON.stringify(row.change_event.new_resource) : undefined,
+            resourceName: row.change_event?.campaign || row.change_event?.ad_group || "Unknown Entity",
+        }));
+    } catch (error: unknown) {
+        logApiError("getChangeHistory", error);
+        return [];
+    }
+}
+
+// ============================================
+// PRIORITY 7: Conversion Actions Diagnostics
+// ============================================
+
+export async function getConversionActions(
+    refreshToken: string,
+    customerId?: string,
+    dateRange?: DateRange
+): Promise<ConversionAction[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+
+    try {
+        const query = `
+SELECT
+conversion_action.id,
+    conversion_action.name,
+    conversion_action.type,
+    conversion_action.status,
+    conversion_action.category,
+    conversion_action.owner_customer,
+    conversion_action.include_in_conversions_metric,
+    metrics.all_conversions,
+    metrics.view_through_conversions,
+    metrics.all_conversions_value
+            FROM conversion_action
+            WHERE conversion_action.status = 'ENABLED'
+            ${dateFilter}
+`;
+
+        const result = await customer.query(query);
+
+        return result.map((row) => ({
+            id: row.conversion_action?.id?.toString() || "",
+            name: row.conversion_action?.name || "",
+            type: String(row.conversion_action?.type || "UNKNOWN"),
+            status: String(row.conversion_action?.status || "UNKNOWN"),
+            category: String(row.conversion_action?.category || "UNKNOWN"),
+            ownerCustomer: row.conversion_action?.owner_customer || "",
+            includeInConversionsMetric: row.conversion_action?.include_in_conversions_metric || false,
+            allConversions: Number(row.metrics?.all_conversions) || 0,
+            viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
+            value: Number(row.metrics?.all_conversions_value) || 0,
+        }));
+    } catch (error: unknown) {
+        logApiError("getConversionActions", error);
+        return [];
+    }
+}
+
+// ============================================
+// PRIORITY 8: Shopping/PMax Product Performance
+// ============================================
+
+
+
+
+export async function getPMaxProductPerformance(
+    refreshToken: string,
+    customerId?: string,
+    dateRange?: DateRange
+): Promise<PMaxProductPerformance[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+
+    try {
+        const query = `
+SELECT
+shopping_product_view.resource_name,
+    segments.product_merchant_id,
+    segments.product_channel,
+    segments.product_language_code,
+    segments.product_feed_label,
+    segments.product_item_id,
+    segments.product_title,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.cost_micros,
+    metrics.conversions,
+    metrics.conversions_value
+            FROM shopping_product_view
+            WHERE metrics.impressions > 0
+            ${dateFilter}
+            ORDER BY metrics.cost_micros DESC
+            LIMIT 500
+    `;
+
+        const result = await customer.query(query);
+
+        return result.map((row) => {
+            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+            const conversions = Number(row.metrics?.conversions) || 0;
+            const conversionValue = Number(row.metrics?.conversions_value) || 0;
+
+            return {
+                id: row.shopping_product_view?.resource_name || "",
+                merchantCenterId: Number(row.segments?.product_merchant_id) || 0,
+                channel: String(row.segments?.product_channel || "UNKNOWN"),
+                languageCode: row.segments?.product_language_code || "",
+                feedLabel: row.segments?.product_feed_label || "",
+                itemId: row.segments?.product_item_id || "",
+                title: row.segments?.product_title || "",
+                impressions: Number(row.metrics?.impressions) || 0,
+                clicks: Number(row.metrics?.clicks) || 0,
+                cost,
+                conversions,
+                conversionValue,
+                roas: cost > 0 ? conversionValue / cost : null,
+            };
+        });
+    } catch (error: unknown) {
+        logApiError("getPMaxProductPerformance", error);
+        return [];
+    }
+}
+
+
+

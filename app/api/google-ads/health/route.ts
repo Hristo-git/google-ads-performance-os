@@ -9,7 +9,11 @@ import {
     getNegativeKeywords,
     getSearchTerms,
     getAuctionInsights,
-    getAccountDeviceStats
+    getAccountDeviceStats,
+    getAssetPerformance,
+    getChangeHistory,
+    getConversionActions,
+    getPMaxProductPerformance
 } from "@/lib/google-ads";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
 
@@ -123,7 +127,31 @@ export async function GET(request: Request) {
             }
         } catch (e: any) {
             console.error(`[API/Health] Failed to fetch deviceStats:`, e);
+        } catch (e: any) {
+            console.error(`[API/Health] Failed to fetch deviceStats:`, e);
         }
+
+        // ── NEW: Diagnostic Data Fetches ──
+        let assetPerformance: any[] = [];
+        try {
+            assetPerformance = await getAssetPerformance(refreshToken, customerId, dateRange);
+        } catch (e: any) { console.error(`[API/Health] Failed assetPerformance:`, e); }
+
+        let changeEvents: any[] = [];
+        try {
+            changeEvents = await getChangeHistory(refreshToken, customerId, dateRange);
+        } catch (e: any) { console.error(`[API/Health] Failed changeEvents:`, e); }
+
+        let conversionActions: any[] = [];
+        try {
+            conversionActions = await getConversionActions(refreshToken, customerId, dateRange);
+        } catch (e: any) { console.error(`[API/Health] Failed conversionActions:`, e); }
+
+        let pmaxProducts: any[] = [];
+        try {
+            pmaxProducts = await getPMaxProductPerformance(refreshToken, customerId, dateRange);
+        } catch (e: any) { console.error(`[API/Health] Failed pmaxProducts:`, e); }
+
 
         if (auctionInsights.length > 0) {
             console.log(`[API/Health] Auction Insights Sample:`, JSON.stringify(auctionInsights.slice(0, 2)));
@@ -156,7 +184,11 @@ export async function GET(request: Request) {
             negatives,
             searchTermInputs,
             auctionInsights,
-            deviceStats
+            deviceStats,
+            assetPerformance,
+            changeEvents,
+            conversionActions,
+            pmaxProducts
         );
 
         return NextResponse.json({

@@ -112,6 +112,69 @@ export interface KeywordWithQS {
     finalUrl?: string;
     campaignName?: string;
     adGroupName?: string;
+    // New fields for diagnostics
+    approvalStatus?: string;
+    policySummary?: string[];
+    allConversions?: number;
+    viewThroughConversions?: number;
+}
+
+export interface AssetPerformance {
+    id: string;
+    type: string;
+    name?: string;
+    text?: string;
+    finalUrls?: string[];
+    performanceLabel?: string;
+    policySummary?: string[];
+    approvalStatus?: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    ctr: number;
+    conversions: number;
+    conversionValue: number;
+}
+
+export interface ChangeEvent {
+    id: string;
+    changeDateTime: string;
+    changeResourceType: string;
+    changeResourceName: string;
+    clientType: string;
+    userEmail: string;
+    oldResource?: string;
+    newResource?: string;
+    resourceName: string; // The specific entity changed (e.g., campaign name)
+}
+
+export interface ConversionAction {
+    id: string;
+    name: string;
+    type: string;
+    status: string;
+    category: string;
+    ownerCustomer?: string;
+    includeInConversionsMetric: boolean;
+    allConversions: number;
+    viewThroughConversions: number;
+    value: number;
+}
+
+export interface PMaxProductPerformance {
+    id: string;
+    merchantCenterId: number;
+    channel: string;
+    languageCode: string;
+    feedLabel: string;
+    itemId: string;
+    title: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    roas: number | null;
 }
 
 export interface AdWithStrength {
@@ -239,3 +302,6 @@ export interface GeneratedReport {
     settings: ReportSettings;
     accountId?: string;
 }
+
+
+

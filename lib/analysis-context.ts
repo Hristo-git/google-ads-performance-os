@@ -21,6 +21,10 @@ import {
     getAssetGroups,
     getPMaxSearchInsights,
     getAssetGroupAssets,
+    getAssetPerformance,
+    getChangeHistory,
+    getPMaxProductPerformance,
+    getConversionActionDiagnostics,
 } from './google-ads';
 import type {
     AccountDevicePerformance,
@@ -31,6 +35,11 @@ import type {
     LandingPagePerformance,
     ConversionActionBreakdown,
     PMaxSearchInsight,
+
+    AssetPerformance,
+    ChangeEvent,
+    ConversionAction,
+    PMaxProductPerformance,
 } from './google-ads';
 import type { PMaxAsset } from '@/types/google-ads';
 
@@ -44,6 +53,11 @@ export interface AnalysisContext {
     auctionInsights: AuctionInsight[];
     landingPages: LandingPagePerformance[];
     conversionActions: ConversionActionBreakdown[];
+    // New diagnostics
+    assetPerformance: AssetPerformance[];
+    changeEvents: ChangeEvent[];
+    conversionDiagnostics: ConversionAction[];
+    pmaxProducts: PMaxProductPerformance[];
 }
 
 export interface PMaxContext {
@@ -73,7 +87,7 @@ export async function fetchAnalysisContext(
     console.log('[AnalysisContext] Fetching context signals in parallel...');
     const start = Date.now();
 
-    const [device, hourOfDay, dayOfWeek, geo, auctionInsights, landingPages, conversionActions] =
+    const [device, hourOfDay, dayOfWeek, geo, auctionInsights, landingPages, conversionActions, assetPerf, changeHist, convDiag, pmaxProd] =
         await Promise.allSettled([
             getAccountDeviceStats(refreshToken, customerId, dateRange),
             getHourOfDayPerformance(refreshToken, customerId, dateRange),
@@ -82,6 +96,11 @@ export async function fetchAnalysisContext(
             getAuctionInsights(refreshToken, undefined, customerId, dateRange),
             getLandingPagePerformance(refreshToken, customerId, dateRange),
             getConversionActions(refreshToken, customerId, dateRange),
+            // New diagnostic fetches
+            getAssetPerformance(refreshToken, customerId, dateRange),
+            getChangeHistory(refreshToken, customerId, dateRange),
+            getConversionActionDiagnostics(refreshToken, customerId, dateRange),
+            getPMaxProductPerformance(refreshToken, customerId, dateRange),
         ]);
 
     const result: AnalysisContext = {
@@ -92,6 +111,10 @@ export async function fetchAnalysisContext(
         auctionInsights: auctionInsights.status === 'fulfilled' ? auctionInsights.value : [],
         landingPages: landingPages.status === 'fulfilled' ? landingPages.value : [],
         conversionActions: conversionActions.status === 'fulfilled' ? conversionActions.value : [],
+        assetPerformance: assetPerf.status === 'fulfilled' ? assetPerf.value : [],
+        changeEvents: changeHist.status === 'fulfilled' ? changeHist.value : [],
+        conversionDiagnostics: convDiag.status === 'fulfilled' ? convDiag.value : [],
+        pmaxProducts: pmaxProd.status === 'fulfilled' ? pmaxProd.value : [],
     };
 
     const elapsed = Date.now() - start;
@@ -324,7 +347,7 @@ export function formatContextForPrompt(ctx: AnalysisContext, language: 'bg' | 'e
     return `=== ${isEn ? 'CONTEXT SIGNALS' : 'КОНТЕКСТНИ СИГНАЛИ'} ===\n${isEn
         ? 'Use these dimensional breakdowns to enrich your analysis. Flag any significant skews.'
         : 'Използвай тези разбивки по измерения за обогатяване на анализа. Маркирай значителни изкривявания.'
-    }\n\n${sections.join('\n\n')}`;
+        }\n\n${sections.join('\n\n')}`;
 }
 
 export function formatPMaxContextForPrompt(ctx: PMaxContext, language: 'bg' | 'en' = 'bg'): string {
