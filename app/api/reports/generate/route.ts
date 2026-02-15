@@ -381,10 +381,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         }
                     }
 
-                    // Close stream FIRST so the user sees the result immediately
-                    controller.close();
-
-                    // Then persist report (best-effort, Vercel may kill after close)
+                    // Persist to SQL BEFORE closing stream (Vercel may kill after close)
                     try {
                         const templateNames: Record<string, string> = {
                             quality_score_diagnostics: 'QS Diagnostics',
@@ -409,7 +406,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         const reportTitle = `[${modelLabel}] ${contextLabel}${periodLabel}`;
                         const reportId = `${templateId}_${Date.now()}`;
 
-                        // Save to SQL + log activity (fast, ~100ms)
+                        // SQL save + log activity BEFORE close (fast, ~100ms)
                         await Promise.all([
                             session?.user?.id ? logActivity(session.user.id, 'AI_ANALYSIS', {
                                 level: 'report',
@@ -432,7 +429,10 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                             }),
                         ]);
 
-                        // Pinecone upsert (slow, 30-60s embedding) — fire-and-forget
+                        // Close stream — user sees the result
+                        controller.close();
+
+                        // Pinecone upsert (slow, 30-60s) — fire-and-forget after close
                         upsertReport(reportId, analysis, {
                             templateId,
                             audience: settings.audience,
@@ -442,6 +442,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         }).catch(err => console.error("Pinecone upsert failed (non-blocking):", err));
                     } catch (storeError) {
                         console.error("Failed to store report:", storeError);
+                        controller.close();
                     }
                 } catch (err) {
                     const errMsg = err instanceof Error ? err.message : String(err);

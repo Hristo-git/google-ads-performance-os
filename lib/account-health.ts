@@ -8,7 +8,8 @@
  *   import { calculateHealthScore, buildNGrams, formatHealthScoreForPrompt, formatNGramsForPrompt } from '@/lib/account-health';
  */
 
-import type { CampaignPerformance, AdGroupPerformance, KeywordWithQS, AdWithStrength, NegativeKeyword, AuctionInsight, AccountDevicePerformance, AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance } from './google-ads';
+import type { CampaignPerformance, AdGroupPerformance, KeywordWithQS, AdWithStrength, NegativeKeyword, AuctionInsight, AccountDevicePerformance } from './google-ads';
+import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance } from '@/types/google-ads';
 
 // ============================================================
 // TYPES

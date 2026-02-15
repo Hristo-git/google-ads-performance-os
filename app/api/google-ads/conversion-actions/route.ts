@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { getConversionActions, getConversionActionTrends } from "@/lib/google-ads";
+import { getConversionActionsList, getConversionActionTrends } from "@/lib/google-ads";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Missing Refresh Token" }, { status: 500 });
         }
         const [data, trends] = await Promise.all([
-            getConversionActions(refreshToken, customerId, dateRange),
+            getConversionActionsList(refreshToken, customerId, dateRange),
             getConversionActionTrends(refreshToken, customerId, dateRange)
         ]);
 

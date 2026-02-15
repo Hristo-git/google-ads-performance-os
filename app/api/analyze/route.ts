@@ -138,14 +138,27 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
             conversionValue: st.conversionValue || 0,
         }));
 
+        const auctionInsights = data.auctionInsights || [];
+        const deviceStats = data.deviceStats || [];
+        const assetPerformance = data.assetPerformance || [];
+        const changeEvents = data.changeEvents || [];
+        const conversionActions = data.conversionActions || [];
+        const pmaxProducts = data.pmaxProducts || [];
+
         // Run pre-analysis for health score and n-grams
-        const { healthBlock, ngramBlock } = runPreAnalysis(
+        const { healthBlock, ngramBlock, healthScore } = runPreAnalysis(
             campaigns,
             adGroups,
             keywords,
             ads,
             negativeKeywords,
-            searchTermInputs
+            searchTermInputs,
+            auctionInsights,
+            deviceStats,
+            assetPerformance,
+            changeEvents,
+            conversionActions,
+            pmaxProducts
         );
 
         const totalSpend = campaigns.reduce((sum: number, c: any) => sum + (c?.cost || 0), 0);

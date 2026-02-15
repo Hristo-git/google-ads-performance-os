@@ -10,9 +10,10 @@ import {
     getSearchTerms,
     getAuctionInsights,
     getAccountDeviceStats,
-    getAssetPerformance,
+
     getChangeHistory,
-    getConversionActions,
+    getAssetPerformance,
+    getConversionActionsList,
     getPMaxProductPerformance
 } from "@/lib/google-ads";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
@@ -127,9 +128,8 @@ export async function GET(request: Request) {
             }
         } catch (e: any) {
             console.error(`[API/Health] Failed to fetch deviceStats:`, e);
-        } catch (e: any) {
-            console.error(`[API/Health] Failed to fetch deviceStats:`, e);
         }
+
 
         // ── NEW: Diagnostic Data Fetches ──
         let assetPerformance: any[] = [];
@@ -144,7 +144,7 @@ export async function GET(request: Request) {
 
         let conversionActions: any[] = [];
         try {
-            conversionActions = await getConversionActions(refreshToken, customerId, dateRange);
+            conversionActions = await getConversionActionsList(refreshToken, customerId, dateRange);
         } catch (e: any) { console.error(`[API/Health] Failed conversionActions:`, e); }
 
         let pmaxProducts: any[] = [];

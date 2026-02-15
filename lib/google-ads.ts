@@ -1,7 +1,7 @@
 
 import { GoogleAdsApi } from "google-ads-api";
 import {
-    PMaxAsset, AdWithStrength,
+    PMaxAsset,
     AssetPerformance,
     ChangeEvent,
     ConversionAction,
@@ -791,7 +791,7 @@ campaign.status = 'ENABLED'
                 allConversions: Number(row.metrics?.all_conversions) || 0,
                 viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
                 approvalStatus: String(row.ad_group_criterion?.approval_status || 'UNKNOWN'),
-                policySummary: row.ad_group_criterion?.policy_summary?.policy_topic_entries?.map((e: any) => e.topic) || [],
+                policySummary: (row.ad_group_criterion as any)?.policy_summary?.policy_topic_entries?.map((e: any) => e.topic) || [],
             }));
 
             // Deduplicate by criterion_id: keyword_view returns 1 row per day with date ranges.
@@ -2734,7 +2734,7 @@ change_event.change_date_time,
 // PRIORITY 7: Conversion Actions Diagnostics
 // ============================================
 
-export async function getConversionActions(
+export async function getConversionActionsList(
     refreshToken: string,
     customerId?: string,
     dateRange?: DateRange
@@ -2819,7 +2819,7 @@ shopping_product_view.resource_name,
 
         const result = await customer.query(query);
 
-        return result.map((row) => {
+        return result.map((row: any) => {
             const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
             const conversions = Number(row.metrics?.conversions) || 0;
             const conversionValue = Number(row.metrics?.conversions_value) || 0;

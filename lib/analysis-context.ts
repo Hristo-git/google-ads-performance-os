@@ -24,7 +24,7 @@ import {
     getAssetPerformance,
     getChangeHistory,
     getPMaxProductPerformance,
-    getConversionActionDiagnostics,
+    getConversionActionsList,
 } from './google-ads';
 import type {
     AccountDevicePerformance,
@@ -35,13 +35,8 @@ import type {
     LandingPagePerformance,
     ConversionActionBreakdown,
     PMaxSearchInsight,
-
-    AssetPerformance,
-    ChangeEvent,
-    ConversionAction,
-    PMaxProductPerformance,
 } from './google-ads';
-import type { PMaxAsset } from '@/types/google-ads';
+import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance, PMaxAsset } from '@/types/google-ads';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -99,7 +94,7 @@ export async function fetchAnalysisContext(
             // New diagnostic fetches
             getAssetPerformance(refreshToken, customerId, dateRange),
             getChangeHistory(refreshToken, customerId, dateRange),
-            getConversionActionDiagnostics(refreshToken, customerId, dateRange),
+            getConversionActionsList(refreshToken, customerId, dateRange),
             getPMaxProductPerformance(refreshToken, customerId, dateRange),
         ]);
 
