@@ -1054,6 +1054,12 @@ ${c.name} | Category: ${c.category || 'other'}
 `).join('\n')}
 
 === ANALYSIS REQUIREMENTS ===
+CRITICAL DATA ACCURACY RULES:
+- ONLY state "0 conversions" for a campaign if the data explicitly shows conversions = 0. Do NOT round down or generalize.
+- Distinguish between PAUSED campaigns (0 spend, 0 conv — expected) and ACTIVE campaigns with low but non-zero conversions.
+- When comparing campaigns within a category (e.g. Brand), report the EXACT conversion numbers from the data. Example: if Brand Protection has 64.7 conv and Brand+Store has 5.8 conv, say "Brand Protection drives the majority (≈87%) of brand conversions, while other active brand campaigns contribute modestly" — do NOT say "0% conversions in 3 of 4 campaigns".
+- Every claim must be directly verifiable from the data above. If you are uncertain, say so.
+
 In the Technical Analysis:
 
 1. SPEND ALLOCATION TABLE

@@ -248,7 +248,7 @@ export async function POST(request: Request) {
 
                         const pass1Stream = anthropic.messages.stream({
                             model: modelId,
-                            max_tokens: 20000,
+                            max_tokens: 8000,
                             system: languageConstraint,
                             messages: [{ role: "user", content: prompt }],
                         });

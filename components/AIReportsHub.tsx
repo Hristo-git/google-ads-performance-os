@@ -75,7 +75,7 @@ export default function AIReportsHub({
 
     // Settings
     const [settings, setSettings] = useState<ReportSettings>({
-        model: 'opus-4.6',
+        model: 'sonnet-4.5',
         language: language,
         audience: 'internal',
         expertMode: false,
@@ -741,19 +741,26 @@ export default function AIReportsHub({
 
                 <div className="w-px h-5 bg-slate-700" />
 
-                {/* Model */}
-                <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{language === 'en' ? 'Model' : 'Модел'}</span>
-                    <select
-                        value={settings.model}
-                        onChange={(e) => setSettings({ ...settings, model: e.target.value as ReportSettings['model'] })}
-                        className="bg-slate-700/50 border border-slate-600 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:ring-violet-500 focus:border-violet-500"
-                    >
-                        <option value="opus-4.6">Opus 4.6</option>
-                        <option value="sonnet-4.5">Sonnet 4.5</option>
-                        <option value="haiku-4.5">Haiku 4.5</option>
-                    </select>
-                </div>
+                {/* Model — admin only */}
+                {userRole === 'admin' ? (
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{language === 'en' ? 'Model' : 'Модел'}</span>
+                        <select
+                            value={settings.model}
+                            onChange={(e) => setSettings({ ...settings, model: e.target.value as ReportSettings['model'] })}
+                            className="bg-slate-700/50 border border-slate-600 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:ring-violet-500 focus:border-violet-500"
+                        >
+                            <option value="sonnet-4.5">Sonnet 4.5</option>
+                            <option value="opus-4.6">Opus 4.6</option>
+                            <option value="haiku-4.5">Haiku 4.5</option>
+                        </select>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{language === 'en' ? 'Model' : 'Модел'}</span>
+                        <span className="text-xs text-slate-400">Sonnet 4.5</span>
+                    </div>
+                )}
 
                 {/* Spacer */}
                 <div className="flex-1" />
