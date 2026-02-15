@@ -367,7 +367,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         // ── Single pass: stream directly ──
                         const stream = anthropic.messages.stream({
                             model: modelId,
-                            max_tokens: 20000,
+                            max_tokens: 16000,
                             system: languageConstraint,
                             messages: [{ role: "user", content: prompt }],
                         });

@@ -190,6 +190,10 @@ ANALYSIS RULES
 - Always separate what to PROTECT vs what to OPTIMIZE vs what to KILL
 - Assume the business goal is profit + scale, not vanity metrics
 - When data is insufficient for a recommendation, explicitly state what data is needed and how to collect it
+- No dramatic language ("catastrophic", "alarming", "survival mode") — use neutral, professional phrasing
+- Each recommendation MUST have: target metric, specific setting/action, KPI to monitor, guardrail/rollback condition
+- Use the pre-calculated derived metrics from the data input (ROAS, CPA, CTR). Do NOT recalculate them — cite the values as provided
+- Keep Document 2 under 4000 words. Be concise: prioritize depth on top 3-5 insights, not breadth on 10+
 
 N-GRAM / BRANDED CLAIMS CAVEAT (MANDATORY)
 - N-gram analysis is typically at ACCOUNT level, not filtered by campaign category.

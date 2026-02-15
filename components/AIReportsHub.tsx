@@ -75,7 +75,7 @@ export default function AIReportsHub({
 
     // Settings
     const [settings, setSettings] = useState<ReportSettings>({
-        model: 'sonnet-4.5',
+        model: userRole === 'admin' ? 'opus-4.6' : 'sonnet-4.5',
         language: language,
         audience: 'internal',
         expertMode: false,
@@ -750,8 +750,8 @@ export default function AIReportsHub({
                             onChange={(e) => setSettings({ ...settings, model: e.target.value as ReportSettings['model'] })}
                             className="bg-slate-700/50 border border-slate-600 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:ring-violet-500 focus:border-violet-500"
                         >
-                            <option value="sonnet-4.5">Sonnet 4.5</option>
                             <option value="opus-4.6">Opus 4.6</option>
+                            <option value="sonnet-4.5">Sonnet 4.5</option>
                             <option value="haiku-4.5">Haiku 4.5</option>
                         </select>
                     </div>
