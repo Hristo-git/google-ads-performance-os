@@ -1091,6 +1091,14 @@ Present as a table with projected outcomes:
 
 For each scenario, show: source campaign(s), destination campaign(s), € amount, projected conversion change.
 
+6. ACTION PLAN — TACTICAL EXECUTION DETAILS
+For every recommended action, include ALL of the following:
+- Tactical implementation steps — specific Google Ads platform navigation, settings, and values. Example: if recommending a daily budget change, state from what amount to what amount; if recommending negative keywords, provide concrete examples with match type; if recommending bidding strategy migration, describe the exact sequence and timeline.
+- Numeric precision with honest confidence interval — instead of rounded ranges, give a specific projection with the formula used to calculate it, and explicitly state the confidence level and assumptions behind the number. When data is insufficient for a precise forecast, say so, but still provide a best estimate.
+- Negative keyword and exclusion lists — when recommending Search Terms cleanup or brand exclusions, include specific keyword examples for exclusion (branded variations, irrelevant categories, informational queries) with match type and application level (campaign vs account level).
+- Bidding strategy guidance — when a campaign needs to scale or optimize, state the current likely bidding strategy, the recommended one, and the migration path with a concrete timeline (week 1: X, week 3: Y).
+- Preserve diagnostic rigor and the guardrails approach — they are critical. Do not sacrifice analytical honesty for tactical specificity. The goal is for the document to be sufficient for direct execution without additional clarification.
+
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Budget Increase|Budget Decrease|Reallocation|Optimization", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
   },
