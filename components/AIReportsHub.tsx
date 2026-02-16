@@ -383,7 +383,9 @@ export default function AIReportsHub({
 
         // Use reportTitle from Pinecone (includes model + period) with fallback to template name
         const fallbackName = settings.language === 'en' ? (template?.nameEN || 'Report') : (template?.nameBG || 'Анализ');
-        const displayTitle = report.reportTitle || fallbackName;
+        const rawTitle = report.reportTitle || fallbackName;
+        // Strip the [model] prefix for non-admin users
+        const displayTitle = userRole === 'admin' ? rawTitle : rawTitle.replace(/^\[.*?\]\s*/, '');
 
         setCurrentReport({
             id: report.id,
@@ -988,7 +990,10 @@ export default function AIReportsHub({
                                                         <div className="flex items-center gap-2 truncate pr-2">
                                                             <span className="text-lg grayscale group-hover:grayscale-0 transition-all">{getTemplateIcon(report.templateId)}</span>
                                                             <span className="text-[11px] font-bold text-slate-200 group-hover:text-violet-400 transition-colors truncate">
-                                                                {report.reportTitle || report.templateId?.replace(/_/g, ' ')}
+                                                                {userRole === 'admin'
+                                                                    ? (report.reportTitle || report.templateId?.replace(/_/g, ' '))
+                                                                    : (report.reportTitle || report.templateId?.replace(/_/g, ' ')).replace(/^\[.*?\]\s*/, '')
+                                                                }
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center gap-2 shrink-0">
@@ -1012,7 +1017,7 @@ export default function AIReportsHub({
                                                         {report.analysis?.replace(/[#*`]/g, '').slice(0, 100)}...
                                                     </p>
                                                     <div className="mt-3 flex gap-1.5 overflow-hidden">
-                                                        {report.model && (
+                                                        {report.model && userRole === 'admin' && (
                                                             <span className="text-[9px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded border border-slate-800">
                                                                 {report.model}
                                                             </span>
