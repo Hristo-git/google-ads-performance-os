@@ -356,7 +356,7 @@ export default function AIReportsHub({
         console.log(`[AIReportsHub] Searching history for customerId: ${customerId}, query: ${historySearchQuery}`);
         setSearchingHistory(true);
         try {
-            const historyUrl = `/api/reports/history?query=&customerId=${customerId}&limit=20&t=${Date.now()}`;
+            const historyUrl = `/api/reports/history?query=${encodeURIComponent(historySearchQuery)}&customerId=${customerId}&limit=30&t=${Date.now()}`;
             console.log(`[AIReports] Fetching from URL: ${historyUrl}`);
 
             const response = await fetch(historyUrl, {
@@ -365,17 +365,14 @@ export default function AIReportsHub({
                     'Pragma': 'no-cache'
                 }
             });
-            if (!response.ok) throw new Error(`Search failed with status: ${response.status}`);
+            if (!response.ok) throw new Error(`History fetch failed: ${response.status}`);
             const data = await response.json();
-            console.log(`[AIReportsHub] History data received:`, data.reports?.length || 0, 'items');
-            if (data.reports) {
-                console.log(`[AIReportsHub] Report IDs:`, data.reports.map((r: any) => ({ id: r.id, title: r.reportTitle })));
-            }
+            console.log(`[AIReportsHub] History loaded:`, data.reports?.length || 0, 'items');
             setHistoryResults(data.reports || []);
             setHistoryLoaded(true);
         } catch (err: any) {
-            console.error('History search error:', err);
-            setError('Failed to search history');
+            console.error("History fetch error:", err);
+            setError(err.message || 'Failed to load history');
         } finally {
             setSearchingHistory(false);
         }
@@ -448,6 +445,50 @@ export default function AIReportsHub({
         insights: language === 'en' ? 'Strategic Insights' : 'Стратегически прозрения',
         structure: language === 'en' ? 'Structure & Organization' : 'Структура и организация',
     };
+
+    // --- History Grouping Helpers ---
+    const getTemplateIcon = (templateId: string) => {
+        if (templateId?.includes('search_terms')) return '📁';
+        if (templateId?.includes('campaign_structure')) return '🏗️';
+        if (templateId?.includes('change_impact')) return '📉';
+        return '📝';
+    };
+
+    const groupReportsByDate = (reports: any[]) => {
+        const groups: { [key: string]: any[] } = {
+            'Today': [],
+            'Yesterday': [],
+            'Last 7 Days': [],
+            'Older': []
+        };
+
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const lastWeek = new Date(today);
+        lastWeek.setDate(lastWeek.getDate() - 7);
+
+        reports.forEach(report => {
+            const reportDate = new Date(report.timestamp);
+            const dayOnly = new Date(reportDate.getFullYear(), reportDate.getMonth(), reportDate.getDate());
+
+            if (dayOnly.getTime() === today.getTime()) {
+                groups['Today'].push(report);
+            } else if (dayOnly.getTime() === yesterday.getTime()) {
+                groups['Yesterday'].push(report);
+            } else if (dayOnly.getTime() >= lastWeek.getTime()) {
+                groups['Last 7 Days'].push(report);
+            } else {
+                groups['Older'].push(report);
+            }
+        });
+
+        return groups;
+    };
+
+    const groupedHistory = groupReportsByDate(historyResults);
+    const hasAnyHistory = historyResults.length > 0;
 
     // ─── REPORT VIEW (full-width when a report is open) ───
     if (currentReport || error) {
@@ -922,47 +963,84 @@ export default function AIReportsHub({
                         </div>
                     </div>
 
-                    {historyResults.length > 0 ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                            {historyResults.map((report) => (
-                                <div
-                                    key={report.id}
-                                    className="relative text-left p-3.5 rounded-lg bg-slate-900/50 border border-slate-700 hover:border-violet-500/50 hover:bg-slate-700/50 transition-all group cursor-pointer"
-                                    onClick={() => handleViewHistoryReport(report)}
-                                >
-                                    <div className="flex justify-between items-start mb-1.5">
-                                        <span className="text-[10px] bg-violet-500/10 text-violet-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider truncate max-w-[250px]">
-                                            {report.reportTitle || report.templateId?.replace(/_/g, ' ')}
-                                        </span>
-                                        <div className="flex items-center gap-1.5 ml-2">
-                                            <span className="text-[9px] text-slate-500 whitespace-nowrap">
-                                                {new Date(report.timestamp).toLocaleDateString(language === 'en' ? 'en-US' : 'bg-BG')}
-                                            </span>
-                                            {userRole === 'admin' && (
-                                                <button
-                                                    onClick={(e) => handleDeleteReport(report.id, e)}
-                                                    className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all p-0.5 rounded hover:bg-red-500/10"
-                                                    title={language === 'en' ? 'Delete report' : 'Изтрий анализа'}
+                    {hasAnyHistory ? (
+                        <div className="space-y-6">
+                            {Object.entries(groupedHistory).map(([label, reports]) => {
+                                if (reports.length === 0) return null;
+
+                                // Localized label
+                                const displayLabel = language === 'en' ? label :
+                                    label === 'Today' ? 'Днес' :
+                                        label === 'Yesterday' ? 'Вчера' :
+                                            label === 'Last 7 Days' ? 'Последните 7 дни' : 'По-стари';
+
+                                return (
+                                    <div key={label} className="space-y-2.5">
+                                        <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">{displayLabel}</h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                            {reports.map((report) => (
+                                                <div
+                                                    key={report.id}
+                                                    className="relative text-left p-4 rounded-xl bg-slate-950/40 border border-slate-800 hover:border-violet-500/50 hover:bg-slate-800/40 transition-all group cursor-pointer"
+                                                    onClick={() => handleViewHistoryReport(report)}
                                                 >
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
-                                                </button>
-                                            )}
+                                                    <div className="flex justify-between items-start mb-2.5">
+                                                        <div className="flex items-center gap-2 truncate pr-2">
+                                                            <span className="text-lg grayscale group-hover:grayscale-0 transition-all">{getTemplateIcon(report.templateId)}</span>
+                                                            <span className="text-[11px] font-bold text-slate-200 group-hover:text-violet-400 transition-colors truncate">
+                                                                {report.reportTitle || report.templateId?.replace(/_/g, ' ')}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <span className="text-[9px] font-medium text-slate-600 tabular-nums">
+                                                                {new Date(report.timestamp).toLocaleTimeString(language === 'en' ? 'en-US' : 'bg-BG', { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                            {userRole === 'admin' && (
+                                                                <button
+                                                                    onClick={(e) => handleDeleteReport(report.id, e)}
+                                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                                                                    title={language === 'en' ? 'Delete' : 'Изтрий'}
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                    </svg>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed group-hover:text-slate-300 transition-colors">
+                                                        {report.analysis?.replace(/[#*`]/g, '').slice(0, 100)}...
+                                                    </p>
+                                                    <div className="mt-3 flex gap-1.5 overflow-hidden">
+                                                        {report.model && (
+                                                            <span className="text-[9px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded border border-slate-800">
+                                                                {report.model}
+                                                            </span>
+                                                        )}
+                                                        {report.language && (
+                                                            <span className="text-[9px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded border border-slate-800 uppercase">
+                                                                {report.language}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed group-hover:text-white transition-colors">
-                                        {report.analysis?.slice(0, 120).replace(/[#*`]/g, '')}...
-                                    </p>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
-                        <div className="text-center py-6 bg-slate-900/30 rounded-lg border border-slate-800 border-dashed">
-                            <p className="text-xs text-slate-500">
+                        <div className="text-center py-10 bg-slate-900/30 rounded-xl border border-slate-700/50 border-dashed">
+                            <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
                                 {language === 'en'
-                                    ? 'Type a topic and hit enter to search through your past insights semantically.'
-                                    : 'Въведи тема и натисни Enter, за да търсиш семантично в старите си анализи.'}
+                                    ? 'No reports found for this period. Try generating a new analysis above.'
+                                    : 'Няма открити анализи за този период. Пробвай да генерираш нов анализ по-горе.'}
                             </p>
                         </div>
                     )}
