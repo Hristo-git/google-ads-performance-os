@@ -361,7 +361,10 @@ export default function AIReportsHub({
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Search failed with status: ${response.status}`);
             const data = await response.json();
-            console.log(`[AIReportsHub] History data received:`, data);
+            console.log(`[AIReportsHub] History data received:`, data.reports?.length || 0, 'items');
+            if (data.reports) {
+                console.log(`[AIReportsHub] Report IDs:`, data.reports.map((r: any) => ({ id: r.id, title: r.reportTitle })));
+            }
             setHistoryResults(data.reports || []);
             setHistoryLoaded(true);
         } catch (err: any) {
@@ -899,13 +902,14 @@ export default function AIReportsHub({
                             <button
                                 onClick={handleSearchHistory}
                                 disabled={searchingHistory}
+                                title={language === 'en' ? 'Refresh History' : 'Обнови историята'}
                                 className="bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg text-white transition-colors disabled:opacity-50"
                             >
                                 {searchingHistory ? (
                                     <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                                 ) : (
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                     </svg>
                                 )}
                             </button>
