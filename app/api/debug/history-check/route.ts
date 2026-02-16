@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
     try {
         const session = await getServerSession(authOptions);
@@ -14,31 +16,22 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const customerId = searchParams.get("customerId");
 
-        // 1. Check direct Supabase query
-        let query = supabaseAdmin
+        // Query the most recent 20 reports from the whole database
+        const { data: allRecent, error: dbError } = await supabaseAdmin
             .from('gads_reports')
             .select('id, customer_id, title, created_at')
             .order('created_at', { ascending: false })
-            .limit(5);
-
-        if (customerId) {
-            query = query.eq('customer_id', customerId);
-        }
-
-        const { data: directReports, error: directError } = await query;
+            .limit(20);
 
         return NextResponse.json({
-            session: {
-                user: session.user.email,
-                customerId: customerId || 'not provided'
+            debugInfo: {
+                now: new Date().toISOString(),
+                serverTime: Date.now(),
+                requestedCustomerId: customerId
             },
-            supabase: {
-                url: process.env.SUPABASE_URL ? 'PRESENT' : 'MISSING',
-                hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-            },
-            reportsFound: directReports?.length || 0,
-            recentReports: directReports,
-            error: directError
+            totalInResult: allRecent?.length || 0,
+            recentReports: allRecent,
+            error: dbError
         });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
