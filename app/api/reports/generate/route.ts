@@ -417,37 +417,46 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         const reportId = `${templateId}_${Date.now()}`;
 
                         // SQL save + log activity BEFORE close (fast, ~100ms)
-                        await Promise.all([
-                            session?.user?.id ? logActivity(session.user.id, 'AI_ANALYSIS', {
-                                level: 'report',
-                                templateId,
-                                context: contextLabel,
-                                model: modelLabel,
-                                expertMode: settings.expertMode,
-                                responseLength: analysis?.length || 0
-                            }) : Promise.resolve(),
-                            saveReport({
-                                id: reportId,
-                                customer_id: data.customerId || 'unknown',
-                                template_id: templateId,
-                                title: reportTitle,
-                                analysis: analysis,
-                                audience: settings.audience,
-                                language: settings.language,
-                                model: modelLabel,
-                                metadata: { settings, periodLabel }
-                            }).then(res => {
-                                if (res.saved) {
-                                    console.log('[DEBUG] Report saved successfully to DB:', { reportId, customerId: data.customerId });
-                                } else {
-                                    console.error('[DEBUG] Report save FAILED:', res.error);
-                                }
-                                return res;
-                            }),
-                        ]);
+                        let saveStatus = 'PENDING';
+                        try {
+                            const [activityRes, dbRes] = await Promise.all([
+                                session?.user?.id ? logActivity(session.user.id, 'AI_ANALYSIS', {
+                                    level: 'report',
+                                    templateId,
+                                    context: contextLabel,
+                                    model: modelLabel,
+                                    expertMode: settings.expertMode,
+                                    responseLength: analysis?.length || 0
+                                }) : Promise.resolve({ success: true }),
+                                saveReport({
+                                    id: reportId,
+                                    customer_id: data.customerId || 'unknown',
+                                    template_id: templateId,
+                                    title: reportTitle,
+                                    analysis: analysis,
+                                    audience: settings.audience,
+                                    language: settings.language,
+                                    model: modelLabel,
+                                    metadata: { settings, periodLabel }
+                                })
+                            ]);
 
+                            if (dbRes.saved) {
+                                saveStatus = 'SUCCESS';
+                                console.log('[DEBUG] Report saved successfully:', reportId);
+                            } else {
+                                saveStatus = `FAILED: ${dbRes.error}`;
+                                console.error('[DEBUG] Report save failed:', dbRes.error);
+                            }
+                        } catch (pAllError: any) {
+                            saveStatus = `CRASH: ${pAllError.message}`;
+                            console.error('[DEBUG] Save process crashed:', pAllError);
+                        }
 
-                        // Close stream — user sees the result
+                        // Send status message to client as a comment-like block at the end
+                        controller.enqueue(encoder.encode(`\n\n---\n[DEBUG: Save Status ${saveStatus} | ID: ${reportId} | CID: ${data.customerId || 'unknown'}]`));
+
+                        // Close stream
                         controller.close();
 
                         // Pinecone upsert (slow, 30-60s) — fire-and-forget after close
