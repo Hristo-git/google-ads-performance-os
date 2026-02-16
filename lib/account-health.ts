@@ -8,8 +8,8 @@
  *   import { calculateHealthScore, buildNGrams, formatHealthScoreForPrompt, formatNGramsForPrompt } from '@/lib/account-health';
  */
 
-import type { CampaignPerformance, AdGroupPerformance, KeywordWithQS, AdWithStrength, NegativeKeyword, AuctionInsight, AccountDevicePerformance } from './google-ads';
-import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance } from '@/types/google-ads';
+import type { CampaignPerformance, AdGroupPerformance, KeywordWithQS, AdWithStrength, NegativeKeyword, DevicePerformance } from './google-ads';
+import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance, AuctionInsight } from '@/types/google-ads';
 
 // ============================================================
 // TYPES
@@ -87,7 +87,7 @@ export function calculateHealthScore(
     negativeKeywords: NegativeKeyword[],
     searchTerms?: SearchTermInput[],
     auctionInsights?: AuctionInsight[],
-    deviceStats?: AccountDevicePerformance[],
+    deviceStats?: DevicePerformance[],
     assetPerformance?: AssetPerformance[],
     changeEvents?: ChangeEvent[],
     conversionActions?: ConversionAction[],
@@ -1110,7 +1110,7 @@ export function runPreAnalysis(
     negativeKeywords: NegativeKeyword[],
     searchTerms?: SearchTermInput[],
     auctionInsights?: AuctionInsight[],
-    deviceStats?: AccountDevicePerformance[],
+    deviceStats?: DevicePerformance[],
     assetPerformance?: AssetPerformance[],
     changeEvents?: ChangeEvent[],
     conversionActions?: ConversionAction[],

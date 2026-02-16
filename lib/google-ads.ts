@@ -13,6 +13,8 @@ import {
     PMaxSearchInsight
 } from "@/types/google-ads";
 
+export type { AuctionInsight };
+
 let client: GoogleAdsApi | null = null;
 
 // ── In-memory API cache ──────────────────────────────────────────────
