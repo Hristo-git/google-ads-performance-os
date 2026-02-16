@@ -304,6 +304,28 @@ export default function AIReportsHub({
                     settings,
                 });
             }
+
+            // Sync with history state so it appears in the list immediately
+            if (currentReport) {
+                setHistoryResults(prev => {
+                    // Check if already exists (to avoid duplicates if state updated elsewhere)
+                    if (prev.some(r => r.id === currentReport.id)) return prev;
+
+                    const historyItem = {
+                        id: currentReport.id,
+                        customerId: customerId,
+                        templateId: currentReport.templateId,
+                        reportTitle: currentReport.templateName,
+                        analysis: currentReport.analysis,
+                        audience: currentReport.settings.audience,
+                        timestamp: currentReport.timestamp,
+                        language: currentReport.settings.language,
+                        model: currentReport.settings.model,
+                        metadata: { settings: currentReport.settings, periodLabel: periodSuffix }
+                    };
+                    return [historyItem, ...prev];
+                });
+            }
         } catch (err: any) {
             console.error('Report generation error:', err);
             setError(err.message || 'Failed to generate report');

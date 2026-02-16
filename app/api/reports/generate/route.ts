@@ -436,13 +436,16 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                                 language: settings.language,
                                 model: modelLabel,
                                 metadata: { settings, periodLabel }
+                            }).then(res => {
+                                if (res.saved) {
+                                    console.log('[DEBUG] Report saved successfully to DB:', { reportId, customerId: data.customerId });
+                                } else {
+                                    console.error('[DEBUG] Report save FAILED:', res.error);
+                                }
+                                return res;
                             }),
                         ]);
 
-                        console.log('[DEBUG] Report saved successfully:', {
-                            reportId,
-                            customerId: data.customerId
-                        });
 
                         // Close stream — user sees the result
                         controller.close();
