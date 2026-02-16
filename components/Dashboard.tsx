@@ -9,7 +9,7 @@ import { ACCOUNTS, DEFAULT_ACCOUNT_ID } from "../config/accounts";
 import { processNGrams } from "@/lib/n-gram";
 import AIAnalysisModal from "./AIAnalysisModal";
 import StrategicInsights from "./StrategicInsights";
-import { AuctionInsights } from "./dashboard/AuctionInsights";
+
 import AIReportsHub from "./AIReportsHub";
 import AccountHealthWidget from "./AccountHealthWidget";
 import NGramInsights from "./NGramInsights";
@@ -409,6 +409,19 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [healthData, setHealthData] = useState<any>(null);
     const [loadingHealth, setLoadingHealth] = useState(false);
     const [auditSnapshotDate, setAuditSnapshotDate] = useState<string | null>(null);
+
+    // Search Terms implementation state
+    const [searchTermSortBy, setSearchTermSortBy] = useState<string>('cost');
+    const [searchTermSortDirection, setSearchTermSortDirection] = useState<'asc' | 'desc'>('desc');
+
+    const handleSearchTermSort = (column: string) => {
+        if (searchTermSortBy === column) {
+            setSearchTermSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSearchTermSortBy(column);
+            setSearchTermSortDirection('desc');
+        }
+    };
 
     // Sync state with URL parameter (from props) and trigger data refresh
     useEffect(() => {
@@ -1435,20 +1448,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 searchTerms={healthData?.searchTerms || []}
                                 loading={loadingHealth}
                             />
-                            <AuctionInsights
-                                customerId={selectedAccountId || undefined}
-                                dateRange={dateRange}
-                                campaignIds={navigation.level === 'campaign' && navigation.campaignId ? [navigation.campaignId] : undefined}
-                            />
+
                         </div>
-                    </main>
-                ) : navigation.view === 'auction_insights' ? (
-                    <main className="flex-1 overflow-auto p-6">
-                        <AuctionInsights
-                            customerId={selectedAccountId || undefined}
-                            dateRange={dateRange}
-                            campaignIds={navigation.level === 'campaign' && navigation.campaignId ? [navigation.campaignId] : undefined}
-                        />
                     </main>
                 ) : (
                     <main className="flex-1 overflow-auto p-6 space-y-6">
@@ -1579,6 +1580,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <button onClick={() => handleSort('roas')} className="flex items-center gap-1 ml-auto hover:text-white">
                                                                     ROAS
                                                                     {sortBy === 'roas' && (
+                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                    )}
+                                                                </button>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-right font-medium">
+                                                                <button onClick={() => handleSort('searchLostISBudget')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                    Lost (Budget)
+                                                                    {sortBy === 'searchLostISBudget' && (
                                                                         <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
                                                                     )}
                                                                 </button>
@@ -1721,6 +1730,19 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             })()
                                                                         )}
                                                                     </div>
+                                                                </td>
+                                                                <td className="px-4 py-4 text-right">
+                                                                    {item.searchLostISBudget != null && item.searchLostISBudget > 0.15 ? (
+                                                                        <span className="text-red-400 font-medium">
+                                                                            {(item.searchLostISBudget * 100).toFixed(1)}%
+                                                                        </span>
+                                                                    ) : item.searchLostISBudget != null ? (
+                                                                        <span className="text-slate-400">
+                                                                            {(item.searchLostISBudget * 100).toFixed(1)}%
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-500">—</span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="px-4 py-4 text-right">
                                                                     {item.searchLostISRank != null && item.searchLostISRank > 0.15 ? (
@@ -2132,6 +2154,183 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         ) : (
                                                             <p className="text-slate-500 text-sm">No negative keywords configured.</p>
                                                         )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Search Terms for Ad Group */}
+                                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mt-6">
+                                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                        <h2 className="font-semibold text-white">Search Terms</h2>
+                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                            {searchTerms.filter(st => String(st.adGroupId) === String(navigation.adGroupId)).length} terms
+                                                        </span>
+                                                    </div>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full text-sm text-left text-slate-300">
+                                                            <thead className="bg-slate-900/50 text-slate-400 uppercase text-xs">
+                                                                <tr>
+                                                                    <th className="px-6 py-3 font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('searchTerm')}>
+                                                                        <div className="flex items-center gap-1">
+                                                                            Search Term
+                                                                            {searchTermSortBy === 'searchTerm' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('clicks')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            Clicks
+                                                                            {searchTermSortBy === 'clicks' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('impressions')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            Impr.
+                                                                            {searchTermSortBy === 'impressions' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('ctr')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            CTR
+                                                                            {searchTermSortBy === 'ctr' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cost')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            Cost
+                                                                            {searchTermSortBy === 'cost' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversions')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            Conv.
+                                                                            {searchTermSortBy === 'conversions' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cpa')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            CPA
+                                                                            {searchTermSortBy === 'cpa' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('roas')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            ROAS
+                                                                            {searchTermSortBy === 'roas' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-700">
+                                                                {searchTerms
+                                                                    .filter(st => String(st.adGroupId) === String(navigation.adGroupId))
+                                                                    .sort((a, b) => {
+                                                                        let valA: number | string = 0;
+                                                                        let valB: number | string = 0;
+
+                                                                        // Handle calculated fields
+                                                                        if (searchTermSortBy === 'cpa') {
+                                                                            // For CPA, 0 conversions means infinite cost per conversion. 
+                                                                            // We usually want low CPA at the top for ASC, but high CPA (bad) for DESC?
+                                                                            // Let's standardise: 0 conversions = Infinity
+                                                                            valA = a.conversions > 0 ? a.cost / a.conversions : Infinity;
+                                                                            valB = b.conversions > 0 ? b.cost / b.conversions : Infinity;
+                                                                        } else if (searchTermSortBy === 'roas') {
+                                                                            valA = a.cost > 0 ? a.conversionValue / a.cost : 0;
+                                                                            valB = b.cost > 0 ? b.conversionValue / b.cost : 0;
+                                                                        } else if (searchTermSortBy === 'searchTerm') {
+                                                                            valA = (a.searchTerm || '').toLowerCase();
+                                                                            valB = (b.searchTerm || '').toLowerCase();
+                                                                        } else {
+                                                                            // Direct property access
+                                                                            valA = (a as any)[searchTermSortBy];
+                                                                            valB = (b as any)[searchTermSortBy];
+                                                                        }
+
+                                                                        // Sort logic
+                                                                        if (typeof valA === 'string' && typeof valB === 'string') {
+                                                                            return searchTermSortDirection === 'asc'
+                                                                                ? valA.localeCompare(valB)
+                                                                                : valB.localeCompare(valA);
+                                                                        }
+
+                                                                        const numA = Number(valA) || 0;
+                                                                        const numB = Number(valB) || 0;
+
+                                                                        // Handle Infinity for CPA
+                                                                        if (numA === Infinity && numB === Infinity) return 0;
+                                                                        if (numA === Infinity) return searchTermSortDirection === 'asc' ? 1 : -1;
+                                                                        if (numB === Infinity) return searchTermSortDirection === 'asc' ? -1 : 1;
+
+                                                                        return searchTermSortDirection === 'asc' ? numA - numB : numB - numA;
+                                                                    })
+                                                                    .slice(0, 50) // Show top 50 by spend
+                                                                    .map((term, idx) => (
+                                                                        <tr key={idx} className="hover:bg-slate-700/50 transition-colors">
+                                                                            <td className="px-6 py-3">
+                                                                                <div className="font-medium text-white max-w-md truncate" title={term.searchTerm}>
+                                                                                    {term.searchTerm}
+                                                                                </div>
+                                                                                <div className="text-xs text-slate-500 mt-0.5">
+                                                                                    {term.searchTermStatus}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">{term.clicks.toLocaleString()}</td>
+                                                                            <td className="px-4 py-3 text-right">{term.impressions.toLocaleString()}</td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                <span className={term.ctr >= 0.05 ? 'text-emerald-400' : ''}>
+                                                                                    {(term.ctr * 100).toFixed(2)}%
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">€{term.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                {term.conversions > 0 ? (
+                                                                                    <span className="text-white font-medium">{term.conversions.toFixed(1)}</span>
+                                                                                ) : (
+                                                                                    <span className="text-slate-600">0</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                {term.conversions > 0 ? (
+                                                                                    `€${(term.cost / term.conversions).toFixed(2)}`
+                                                                                ) : (
+                                                                                    <span className="text-slate-600">—</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                {term.cost > 0 ? (
+                                                                                    <span className={`font-medium ${term.conversionValue / term.cost >= 4 ? 'text-emerald-400' : term.conversionValue / term.cost < 1 ? 'text-red-400' : 'text-amber-400'}`}>
+                                                                                        {(term.conversionValue / term.cost).toFixed(2)}x
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-slate-600">—</span>
+                                                                                )}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                {searchTerms.filter(st => String(st.adGroupId) === String(navigation.adGroupId)).length === 0 && (
+                                                                    <tr>
+                                                                        <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
+                                                                            No search terms found for this ad group.
+                                                                        </td>
+                                                                    </tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
                                                     </div>
                                                 </div>
                                             </>

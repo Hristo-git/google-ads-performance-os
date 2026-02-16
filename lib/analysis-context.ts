@@ -25,18 +25,18 @@ import {
     getChangeHistory,
     getPMaxProductPerformance,
     getConversionActionsList,
+    getCampaigns,
+    getSearchTerms,
 } from './google-ads';
 import type {
     AccountDevicePerformance,
     HourOfDayPerformance,
     DayOfWeekPerformance,
     RegionalPerformance,
-    AuctionInsight,
     LandingPagePerformance,
     ConversionActionBreakdown,
-    PMaxSearchInsight,
 } from './google-ads';
-import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance, PMaxAsset } from '@/types/google-ads';
+import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance, PMaxAsset, AuctionInsight, PMaxSearchInsight } from '@/types/google-ads';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -53,6 +53,9 @@ export interface AnalysisContext {
     changeEvents: ChangeEvent[];
     conversionDiagnostics: ConversionAction[];
     pmaxProducts: PMaxProductPerformance[];
+    // Core data for synthesis
+    campaigns: any[];
+    searchTerms: any[];
 }
 
 export interface PMaxContext {
@@ -82,34 +85,37 @@ export async function fetchAnalysisContext(
     console.log('[AnalysisContext] Fetching context signals in parallel...');
     const start = Date.now();
 
-    const [device, hourOfDay, dayOfWeek, geo, auctionInsights, landingPages, conversionActions, assetPerf, changeHist, convDiag, pmaxProd] =
-        await Promise.allSettled([
-            getAccountDeviceStats(refreshToken, customerId, dateRange),
-            getHourOfDayPerformance(refreshToken, customerId, dateRange),
-            getDayOfWeekPerformance(refreshToken, customerId, dateRange),
-            getRegionalPerformance(refreshToken, customerId, dateRange),
-            getAuctionInsights(refreshToken, undefined, customerId, dateRange),
-            getLandingPagePerformance(refreshToken, customerId, dateRange),
-            getConversionActions(refreshToken, customerId, dateRange),
-            // New diagnostic fetches
-            getAssetPerformance(refreshToken, customerId, dateRange),
-            getChangeHistory(refreshToken, customerId, dateRange),
-            getConversionActionsList(refreshToken, customerId, dateRange),
-            getPMaxProductPerformance(refreshToken, customerId, dateRange),
-        ]);
+    const results = await Promise.allSettled([
+        getAccountDeviceStats(refreshToken, customerId, dateRange),
+        getHourOfDayPerformance(refreshToken, customerId, dateRange),
+        getDayOfWeekPerformance(refreshToken, customerId, dateRange),
+        getRegionalPerformance(refreshToken, customerId, dateRange),
+        getAuctionInsights(refreshToken, undefined, customerId, dateRange),
+        getLandingPagePerformance(refreshToken, customerId, dateRange),
+        getConversionActions(refreshToken, customerId, dateRange),
+        // New diagnostic fetches
+        getAssetPerformance(refreshToken, customerId, dateRange),
+        getChangeHistory(refreshToken, customerId, dateRange),
+        getConversionActionsList(refreshToken, customerId, dateRange),
+        getPMaxProductPerformance(refreshToken, customerId, dateRange),
+        getCampaigns(refreshToken, customerId, dateRange),
+        getSearchTerms(refreshToken, customerId, dateRange),
+    ]);
 
     const result: AnalysisContext = {
-        device: device.status === 'fulfilled' ? device.value : [],
-        hourOfDay: hourOfDay.status === 'fulfilled' ? hourOfDay.value : [],
-        dayOfWeek: dayOfWeek.status === 'fulfilled' ? dayOfWeek.value : [],
-        geo: geo.status === 'fulfilled' ? geo.value : [],
-        auctionInsights: auctionInsights.status === 'fulfilled' ? auctionInsights.value : [],
-        landingPages: landingPages.status === 'fulfilled' ? landingPages.value : [],
-        conversionActions: conversionActions.status === 'fulfilled' ? conversionActions.value : [],
-        assetPerformance: assetPerf.status === 'fulfilled' ? assetPerf.value : [],
-        changeEvents: changeHist.status === 'fulfilled' ? changeHist.value : [],
-        conversionDiagnostics: convDiag.status === 'fulfilled' ? convDiag.value : [],
-        pmaxProducts: pmaxProd.status === 'fulfilled' ? pmaxProd.value : [],
+        device: results[0].status === 'fulfilled' ? results[0].value : [],
+        hourOfDay: results[1].status === 'fulfilled' ? results[1].value : [],
+        dayOfWeek: results[2].status === 'fulfilled' ? results[2].value : [],
+        geo: results[3].status === 'fulfilled' ? results[3].value : [],
+        auctionInsights: results[4].status === 'fulfilled' ? results[4].value : [],
+        landingPages: results[5].status === 'fulfilled' ? results[5].value : [],
+        conversionActions: results[6].status === 'fulfilled' ? results[6].value : [],
+        assetPerformance: results[7].status === 'fulfilled' ? results[7].value : [],
+        changeEvents: results[8].status === 'fulfilled' ? results[8].value : [],
+        conversionDiagnostics: results[9].status === 'fulfilled' ? results[9].value : [],
+        pmaxProducts: results[10].status === 'fulfilled' ? results[10].value : [],
+        campaigns: results[11].status === 'fulfilled' ? results[11].value : [],
+        searchTerms: results[12].status === 'fulfilled' ? results[12].value : [],
     };
 
     const elapsed = Date.now() - start;
@@ -178,7 +184,77 @@ export function formatContextForPrompt(ctx: AnalysisContext, language: 'bg' | 'e
     const isEn = language === 'en';
     const sections: string[] = [];
 
-    // 1. Device Split
+    // --- STEP 0: RAW DATA EXTRACTION (Mandatory as per Impact Analysis Rules) ---
+    // Rule 0A: Lost IS Breakdown
+    // Rule 0B: Bidding Strategy Decoding
+
+    const extractionLines: string[] = [];
+
+    // 0A. Lost IS Analysis
+    const campaignsWithLostIS = ctx.campaigns.filter(c =>
+        (c.searchLostISRank || 0) > 0.3 || (c.searchLostISBudget || 0) > 0.3
+    );
+
+    if (campaignsWithLostIS.length > 0) {
+        extractionLines.push(`**Rule 0A (Lost IS):** Found ${campaignsWithLostIS.length} campaigns with significant Lost IS.`);
+        campaignsWithLostIS.slice(0, 5).forEach(c => {
+            const rank = ((c.searchLostISRank || 0) * 100).toFixed(1);
+            const budget = ((c.searchLostISBudget || 0) * 100).toFixed(1);
+            const primaryIssue = (c.searchLostISRank || 0) > (c.searchLostISBudget || 0) ? 'RANK' : 'BUDGET';
+            extractionLines.push(`- ${c.name}: Lost IS Rank ${rank}%, Lost IS Budget ${budget}%. Primary issue: ${primaryIssue}.`);
+        });
+    }
+
+    // 0B. Bidding Strategy Decoding
+    const bidStrategies = new Set(ctx.campaigns.map(c => c.biddingStrategyType));
+    const decodedStrategies = Array.from(bidStrategies).map(type => {
+        // Map common types (simplified)
+        const mapping: Record<string, string> = {
+            '2': 'Manual CPC', '3': 'Enhanced CPC', '9': 'Maximize Conversions',
+            '10': 'Maximize Conversion Value', '11': 'Max Value (tROAS)', '12': 'Target CPA', '13': 'Target ROAS'
+        };
+        return `${type} -> ${mapping[String(type)] || 'Unknown'}`;
+    });
+    extractionLines.push(`**Rule 0B (Bidding):** Active strategies: ${decodedStrategies.join(', ')}.`);
+
+    // 0D. Search Terms Availability
+    const hasSearchTerms = ctx.searchTerms.length > 0;
+    extractionLines.push(`**Rule 0D (Search Terms):** ${hasSearchTerms ? 'AVAILABLE' : 'MISSING'}.`);
+    if (!hasSearchTerms) {
+        extractionLines.push('WARNING: Branded leakage status is UNKNOWN. All scaling recommendations must be conditional.');
+    }
+
+    // Branded Leakage Proxy (Heuristic: High ROAS on Generic/DSA)
+    // Simple check: do we have DSA campaigns with super high ROAS?
+    // This is a proxy scan.
+    const dsaCampaigns = ctx.campaigns.filter(c => c.advertisingChannelType === 'SEARCH' && c.name.toLowerCase().includes('dsa'));
+    dsaCampaigns.forEach(c => {
+        const roas = c.cost > 0 ? (c.conversionValue / c.cost) : 0;
+        if (roas > 20) {
+            extractionLines.push(`**Proxy Scan:** DSA Campaign "${c.name}" has ROAS ${roas.toFixed(1)}x. Potential branded leakage.`);
+        }
+    });
+
+    if (extractionLines.length > 0) {
+        sections.push(`## STEP 0: RAW DATA EXTRACTION & VALIDATION\n${extractionLines.join('\n')}`);
+    }
+
+    // --- CONTEXT INVENTORY ---
+    const inventory = [
+        ctx.device.length > 0 ? 'Device Split' : null,
+        ctx.hourOfDay.length > 0 ? 'Hourly Data' : null,
+        ctx.geo.length > 0 ? 'Geo Data' : null,
+        ctx.auctionInsights.length > 0 ? 'Auction Insights' : null,
+        ctx.landingPages.length > 0 ? 'Landing Pages' : null,
+        ctx.searchTerms.length > 0 ? 'Search Terms' : 'MISSING (Critical)',
+    ].filter(Boolean);
+
+    sections.push(`## Context Inventory\nAvailable Data Blocks: ${inventory.join(', ')}`);
+
+
+
+
+    // --- STANDARD SIGNALS ---
     if (ctx.device.length > 0) {
         const totalSpend = ctx.device.reduce((s, d) => s + d.cost, 0);
         const lines = ctx.device
@@ -390,7 +466,7 @@ export function formatPMaxContextForPrompt(ctx: PMaxContext, language: 'bg' | 'e
             .map(si => {
                 const pct = totalClicks > 0 ? ((si.clicks / totalClicks) * 100).toFixed(0) : '0';
                 const cvr = si.clicks > 0 ? ((si.conversions / si.clicks) * 100).toFixed(2) : '0';
-                return `${si.categoryLabel}: ${si.clicks} clicks (${pct}%), ${si.conversions.toFixed(1)} conv, CVR ${cvr}%`;
+                return `${si.categoryName}: ${si.clicks} clicks (${pct}%), ${si.conversions.toFixed(1)} conv, CVR ${cvr}%`;
             });
 
         sections.push(`## ${isEn ? 'PMax Search Categories' : 'PMax търсени категории'}\n${lines.join('\n')}`);

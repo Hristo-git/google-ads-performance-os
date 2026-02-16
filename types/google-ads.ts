@@ -161,6 +161,60 @@ export interface ConversionAction {
     value: number;
 }
 
+export interface AuctionInsight {
+    campaignId: string;
+    competitor: string;
+    impressionShare: number | null;
+    overlapRate: number | null;
+    outrankingShare: number | null;
+    positionAboveRate: number | null;
+    topOfPageRate?: number | null;
+    absTopOfPageRate?: number | null;
+}
+
+export interface AudiencePerformance {
+    campaignId: string;
+    campaignName: string;
+    adGroupId: string;
+    adGroupName: string;
+    criterionId: string;
+    audienceName: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    ctr: number;
+    cpc: number;
+    roas: number | null;
+    cpa: number | null;
+}
+
+export interface PMaxSearchInsight {
+    campaignId: string;
+    campaignName: string;
+    categoryName: string;
+    term: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+}
+
+export interface ConversionActionBreakdown {
+    campaignId: string;
+    campaignName: string;
+    conversionAction: string;
+    conversionCategory: string;
+    conversions: number;
+    conversionValue: number;
+    allConversions: number;
+    allConversionValue: number;
+}
+
+export type CampaignPerformance = Campaign;
+
 export interface PMaxProductPerformance {
     id: string;
     merchantCenterId: number;
@@ -237,7 +291,12 @@ export interface PMaxAsset {
 }
 
 export interface SearchTerm {
+    campaignId?: string;
+    campaignName?: string;
+    adGroupId?: string;
+    adGroupName?: string;
     searchTerm: string;
+    searchTermStatus?: string;
     date: string;
     device: string; // MOBILE, DESKTOP, TABLET, UNKNOWN
     impressions: number;
@@ -305,3 +364,14 @@ export interface GeneratedReport {
 
 
 
+
+export interface NetworkPerformance {
+    campaignId: string;
+    campaignName: string;
+    adNetworkType: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+}

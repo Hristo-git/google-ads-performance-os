@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
-import { ANALYSIS_SYSTEM_PROMPT, getAdGroupAnalysisPrompt } from "@/lib/prompts";
+import { ANALYSIS_SYSTEM_PROMPT_V3, getAdGroupAnalysisPrompt } from "@/lib/prompts-v2";
 import { upsertReport } from "@/lib/pinecone";
 import { saveReport } from "@/lib/supabase";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
 
         const systemPrompt = data.level === 'adgroup'
             ? undefined
-            : `${ANALYSIS_SYSTEM_PROMPT}\nLANGUAGE CONSTRAINT:\n${isEn
+            : `${ANALYSIS_SYSTEM_PROMPT_V3}\nLANGUAGE CONSTRAINT:\n${isEn
                 ? "Your entire response MUST be in English. Campaign names may be in Bulgarian — translate insights."
                 : "Целият ти отговор ТРЯБВА да бъде на български език."
             }`;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
-import { REPORT_TEMPLATES } from "@/lib/prompts";
+import { REPORT_TEMPLATES } from "@/lib/prompts-v2";
 import { saveReport, GadsReport } from "@/lib/supabase";
 import { upsertReport } from "@/lib/pinecone"; // Keep for RAG/Vectors
 import { logActivity } from "@/lib/activity-logger";
@@ -38,6 +38,13 @@ export async function POST(request: Request) {
             data: any;
             customPrompt?: string;
         } = requestData;
+
+        console.log('[DEBUG] Report Generation Request:', {
+            templateId,
+            customerId: data?.customerId,
+            hasData: !!data,
+            settings
+        });
 
         // Validate template ID
         if (!REPORT_TEMPLATES[templateId]) {
@@ -249,6 +256,7 @@ export async function POST(request: Request) {
                         const pass1Stream = anthropic.messages.stream({
                             model: modelId,
                             max_tokens: 8000,
+                            temperature: 0,
                             system: languageConstraint,
                             messages: [{ role: "user", content: prompt }],
                         });
@@ -352,6 +360,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         const pass2Stream = anthropic.messages.stream({
                             model: modelId,
                             max_tokens: 20000,
+                            temperature: 0,
                             system: languageConstraint,
                             messages: [{ role: "user", content: expertPrompt }],
                         });
@@ -368,6 +377,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         const stream = anthropic.messages.stream({
                             model: modelId,
                             max_tokens: 16000,
+                            temperature: 0,
                             system: languageConstraint,
                             messages: [{ role: "user", content: prompt }],
                         });
@@ -429,6 +439,11 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                             }),
                         ]);
 
+                        console.log('[DEBUG] Report saved successfully:', {
+                            reportId,
+                            customerId: data.customerId
+                        });
+
                         // Close stream — user sees the result
                         controller.close();
 
@@ -442,6 +457,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                         }).catch(err => console.error("Pinecone upsert failed (non-blocking):", err));
                     } catch (storeError) {
                         console.error("Failed to store report:", storeError);
+                        console.error("[DEBUG] Save Report Error Details:", JSON.stringify(storeError));
                         controller.close();
                     }
                 } catch (err) {

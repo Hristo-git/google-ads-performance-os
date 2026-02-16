@@ -2,10 +2,19 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
-import { ANALYSIS_SYSTEM_PROMPT, getAdGroupAnalysisPrompt, REPORT_TEMPLATES } from "@/lib/prompts";
+import { ANALYSIS_SYSTEM_PROMPT_V3, getAdGroupAnalysisPrompt, REPORT_TEMPLATES, buildAdvancedAnalysisPrompt } from "@/lib/prompts-v2";
 import { upsertReport, querySimilarReports } from "@/lib/pinecone";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
 import { logActivity } from "@/lib/activity-logger";
+import { prepareSearchTermData } from "@/lib/ai-data-prep";
+import {
+    getAuctionInsights,
+    getConversionActions,
+    getAudiencePerformance,
+    getNetworkPerformance,
+    getPMaxSearchInsights
+} from "@/lib/google-ads";
+// ANALYSIS_SYSTEM_PROMPT_V3 and buildAdvancedAnalysisPrompt already imported above
 
 // Allow up to 300s for 2-pass Claude Opus analysis (requires Vercel Pro)
 export const maxDuration = 300;
@@ -46,27 +55,78 @@ function enrichCampaignData(campaigns: any[]): any[] {
 }
 
 // ============================================
-// BUILD PROMPT (v2 — uses system prompt framework)
+// BUILD PROMPT (v3 — uses new Data Prep + System Prompt V3)
 // ============================================
 function buildPrompt(data: any): string {
     const { level, language = 'bg', analysisType, category } = data;
     const isEn = language === 'en';
 
+    // 1. Prepare Data (Block 1)
+    const rawSearchTerms = data.searchTerms || [];
+    // Aggregate Total Cost for Validation
+    const totalCampaignCost = (data.campaigns || []).reduce((acc: number, c: any) => acc + (c.cost || 0), 0);
+
+    // Calculate days in period
+    const start = new Date(data.dateRange?.startDate || data.dateRange?.start || Date.now());
+    const end = new Date(data.dateRange?.endDate || data.dateRange?.end || Date.now());
+    const daysInPeriod = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+    const periodStart = start.toISOString().split('T')[0];
+    const periodEnd = end.toISOString().split('T')[0];
+
+
+
+    const preparedData = prepareSearchTermData(
+        rawSearchTerms,
+        data.campaigns || [],
+        totalCampaignCost,
+        daysInPeriod,
+        periodStart,
+        periodEnd,
+        data.auctionInsights || [],
+        data.conversionActions || [],
+        data.audiencePerformance || [],
+        data.networkPerformance || [],
+        data.pmaxInsights || [],
+        language
+    );
+
+    // 2. Build Advanced Prompt (Block 2)
+    // For Account Overview, use the new system
+    if (level === 'account' || analysisType === 'account-overview') {
+        const advancedContext = {
+            daysInPeriod,
+            periodStart,
+            periodEnd,
+        };
+        return buildAdvancedAnalysisPrompt(preparedData, advancedContext);
+    }
+
+    // Fallback to V2 logic for other levels if needed, or implement V3 logic for them too.
+    // Ideally, we should unify, but let's stick to the request for "Analysis Upgrade" which implies account/search term focus.
+    // For now, if not account level, we might fall back to original logic or apply similar prep.
+    // The user request was: "Upgrade this analysis... Block 1: Data Preparation... Block 2: Analysis Model".
+    // This seems general but heavily implies Search Terms handling which is most critical at Account/Campaign/AdGroup levels.
+    // Let's apply V3 logic primarily where Search Terms are key.
+
+    // ... (Existing V2 Logic for other levels - simplified for brevity, in real impl we'd use full file) ...
+    // NOTE: To avoid breaking existing functionality for other levels, I'll return the V2 prompt builder logic 
+    // for non-account levels for now, OR I can try to adapt V3.
+    // Given the complexity, I will use V3 for Account level where the request originated (context of "Account Overview").
+
+    // Re-using V2 logic for compatibility if NOT Account Level
+    // (Copied from original file, but omitted here to save context space if I can just reference it? No, I must replace entire file content)
+    // So I will paste the original logic back for non-Account levels.
+
     const languageInstruction = isEn
         ? 'IMPORTANT: Your entire response MUST be in English language.'
         : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
 
-    // ============================================
-    // AD GROUP LEVEL — use dedicated v2 prompt
-    // ============================================
     if (level === 'adgroup') {
         return getAdGroupAnalysisPrompt(data, language);
     }
 
-    // ============================================
-    // CATEGORY-SPECIFIC ANALYSIS
-    // ============================================
     if (analysisType === 'category' && category) {
+        // ... (Original V2 Category Logic) ...
         const campaigns = enrichCampaignData(data.campaigns || []);
         const categoryLabels: Record<string, string> = {
             pmax_aon: 'Performance Max (AON)',
@@ -118,147 +178,8 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
     }
 
-    // ============================================
-    // ACCOUNT LEVEL
-    // ============================================
-    if (level === 'account' || analysisType === 'account-overview') {
-        const campaigns = enrichCampaignData(data.campaigns || []);
-        const adGroups = data.adGroups || [];
-        const keywords = data.keywords || [];
-        const ads = data.ads || [];
-        const negativeKeywords = data.negativeKeywords || [];
-
-        // Convert search terms to the expected format (if available)
-        const searchTermInputs: SearchTermInput[] | undefined = data.searchTerms?.map((st: any) => ({
-            searchTerm: st.searchTerm || st.term || '',
-            impressions: st.impressions || 0,
-            clicks: st.clicks || 0,
-            cost: st.cost || 0,
-            conversions: st.conversions || 0,
-            conversionValue: st.conversionValue || 0,
-        }));
-
-        const auctionInsights = data.auctionInsights || [];
-        const deviceStats = data.deviceStats || [];
-        const assetPerformance = data.assetPerformance || [];
-        const changeEvents = data.changeEvents || [];
-        const conversionActions = data.conversionActions || [];
-        const pmaxProducts = data.pmaxProducts || [];
-
-        // Run pre-analysis for health score and n-grams
-        const { healthBlock, ngramBlock, healthScore } = runPreAnalysis(
-            campaigns,
-            adGroups,
-            keywords,
-            ads,
-            negativeKeywords,
-            searchTermInputs,
-            auctionInsights,
-            deviceStats,
-            assetPerformance,
-            changeEvents,
-            conversionActions,
-            pmaxProducts
-        );
-
-        const totalSpend = campaigns.reduce((sum: number, c: any) => sum + (c?.cost || 0), 0);
-        const totalConversions = campaigns.reduce((sum: number, c: any) => sum + (c?.conversions || 0), 0);
-        const totalConversionValue = campaigns.reduce((sum: number, c: any) => sum + (c?.conversionValue || 0), 0);
-        const totalClicks = campaigns.reduce((sum: number, c: any) => sum + (c?.clicks || 0), 0);
-        const totalImpressions = campaigns.reduce((sum: number, c: any) => sum + (c?.impressions || 0), 0);
-        const avgCTR = totalImpressions > 0 ? (totalClicks / totalImpressions * 100).toFixed(2) : 0;
-        const avgCPA = totalConversions > 0 ? (totalSpend / totalConversions).toFixed(2) : 0;
-        const accountROAS = totalSpend > 0 ? (totalConversionValue / totalSpend).toFixed(2) : 0;
-
-        // Strategic breakdown
-        const breakdown: Record<string, { spend: number; conversions: number; convValue: number; campaigns: number }> = {};
-        campaigns.forEach((c: any) => {
-            const cat = c.category || 'other';
-            if (!breakdown[cat]) breakdown[cat] = { spend: 0, conversions: 0, convValue: 0, campaigns: 0 };
-            breakdown[cat].spend += c.cost || 0;
-            breakdown[cat].conversions += c.conversions || 0;
-            breakdown[cat].convValue += c.conversionValue || 0;
-            breakdown[cat].campaigns += 1;
-        });
-
-        const breakdownStr = Object.entries(breakdown)
-            .filter(([_, d]) => d.spend > 0)
-            .sort(([, a], [, b]) => b.spend - a.spend)
-            .map(([key, d]) => {
-                const pct = totalSpend > 0 ? ((d.spend / totalSpend) * 100).toFixed(1) : 0;
-                const roas = d.spend > 0 ? (d.convValue / d.spend).toFixed(2) : 'N/A';
-                const label = key === 'pmax_sale' ? 'PMax - Sale' :
-                    key === 'pmax_aon' ? 'PMax - AON' :
-                        key === 'search_dsa' ? 'Search - DSA' :
-                            key === 'search_nonbrand' ? 'Search - NonBrand' :
-                                key === 'upper_funnel' ? 'Video/Display' :
-                                    key === 'brand' ? 'Brand' : 'Other';
-                return `- ${label}: €${d.spend.toFixed(0)} (${pct}%) | ${d.campaigns} campaigns | ${d.conversions.toFixed(1)} conv | ROAS ${roas}x`;
-            })
-            .join('\n');
-
-        return `${languageInstruction}
-
-=== ACCOUNT OVERVIEW ANALYSIS MISSION ===
-Produce BOTH an Executive Summary and a Technical Analysis as specified in the output format.
-
-PRE-CALCULATED DATA:
-You will receive two pre-calculated analysis blocks:
-1. ACCOUNT HEALTH SCORE — a weighted 0-100 score with category breakdowns. 
-   USE THIS as the basis for your Diagnosis section. Do NOT recalculate the scores.
-   You SHOULD interpret them, add context, and prioritize actions based on them.
-2. N-GRAM ANALYSIS — word-level spend and conversion patterns from search terms.
-   USE THIS for your negative keyword recommendations and keyword expansion suggestions.
-   The negative candidates list is pre-filtered (€1+ spend, 0 conversions, 2+ terms).
-   Add your expert judgment on which are safe to add as negatives vs. which need review.
-
-${healthBlock}
-
-${ngramBlock}
-
-=== ACCOUNT TOTALS (PRE-CALCULATED — USE THESE EXACT VALUES) ===
-- Total Spend: €${totalSpend.toFixed(2)}
-- Total Conversions: ${totalConversions.toFixed(2)}
-- Total Conversion Value: €${totalConversionValue.toFixed(2)}
-- Account ROAS: ${accountROAS}x
-- Total Clicks: ${totalClicks.toLocaleString()}
-- Total Impressions: ${totalImpressions.toLocaleString()}
-- Average CTR: ${avgCTR}%
-- Average CPA: €${avgCPA}
-- Number of Campaigns: ${campaigns.length}
-${totalConversions < 30 ? 'WARNING: Account-level conversion volume is below 30. Conclusions are DIRECTIONAL.' : ''}
-
-=== STRATEGIC SPEND BREAKDOWN ===
-${breakdownStr || 'No breakdown available'}
-
-=== CAMPAIGNS DATA ===
-${campaigns.map((c: any) => `
-Campaign: ${c.name} | Status: ${c.status}
-- Spend: €${(c.cost || 0).toFixed(2)} | Conv: ${(c.conversions || 0).toFixed(2)} | Conv Value: €${(c.conversionValue || 0).toFixed(2)}
-- ROAS: ${c.cost > 0 ? ((c.conversionValue || 0) / c.cost).toFixed(2) : 0}x | CPA: €${c.conversions > 0 ? (c.cost / c.conversions).toFixed(2) : 'N/A'}
-- Bidding: ${c.biddingStrategyLabel} ${c.targetRoas ? `| tROAS: ${c.targetRoas}x` : ''} ${c.targetCpa ? `| tCPA: €${c.targetCpa}` : ''}
-- IS: ${((c.searchImpressionShare || 0) * 100).toFixed(1)}% | Lost IS Rank: ${((c.searchLostISRank || 0) * 100).toFixed(1)}% | Lost IS Budget: ${((c.searchLostISBudget || 0) * 100).toFixed(1)}%
-- Category: ${c.category || 'other'}
-`).join('\n')}
-
-=== ANALYSIS REQUIREMENTS ===
-1. Use the ACCOUNT HEALTH SCORE to structure your diagnosis — focus on CRITICAL and WARNING items first
-2. Performance health assessment with statistical confidence note
-3. Strategic spend allocation analysis (Brand vs Non-Brand balance, PMax vs Search)
-4. Smart Bidding effectiveness — flag campaigns deviating >20% from targets
-5. Impression share opportunity analysis — rank vs budget separation
-6. Top scaling opportunities with € projections
-7. Risk flags requiring immediate attention
-${ngramBlock ? '8. Use N-GRAM ANALYSIS for negative keyword recommendations and keyword expansion suggestions' : ''}
-
-At the end, provide a JSON block wrapped in \`\`\`json tags:
-{ "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
-    }
-
-    // ============================================
-    // CAMPAIGN LEVEL
-    // ============================================
     if (level === 'campaign') {
+        // ... (Original V2 Campaign Logic) ...
         const isPMax = data.campaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
             data.campaign?.name?.toLowerCase().includes('pmax') ||
             data.campaign?.name?.toLowerCase().includes('performance_max');
@@ -294,7 +215,6 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
         }
 
-        // Search campaign
         const adGroups = data.adGroups || [];
         const totalConversions = adGroups.reduce((sum: number, ag: any) => sum + (ag.conversions || 0), 0);
 
@@ -332,10 +252,8 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
     }
 
-    // ============================================
-    // STRATEGIC CATEGORY
-    // ============================================
     if (level === 'strategic_category') {
+        // ... (Original V2 Strategic Category Logic) ...
         const campaigns = enrichCampaignData(data.campaigns || []);
         const { categoryName = 'Unknown', categoryKey = '', strategicBreakdown = {} } = data;
         const categoryData = strategicBreakdown[categoryKey] || {};
@@ -385,7 +303,7 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
     }
 
-    // Fallback
+    // Default Fallback
     return `Analyze this Google Ads data and provide optimization recommendations. Produce BOTH an Executive Summary and a Technical Analysis.\n${JSON.stringify(data, null, 2)}`;
 }
 
@@ -417,6 +335,63 @@ export async function POST(request: Request) {
                 { error: "No data available to analyze" },
                 { status: 400 }
             );
+        }
+
+        // --- ENRICHMENT: Server-Side Data Fetching ---
+        // Fetch additional context that isn't sent by the client (to reduce payload/latency on client)
+        if (session.refreshToken && (data.level === 'account' || data.analysisType === 'account-overview')) {
+            try {
+                // Construct Date Range (YYYY-MM-DD)
+                const start = new Date(data.dateRange?.startDate || data.dateRange?.start || Date.now()).toISOString().split('T')[0];
+                const end = new Date(data.dateRange?.endDate || data.dateRange?.end || Date.now()).toISOString().split('T')[0];
+                const dateRange = { start, end };
+                const customerId = data.customerId;
+
+                // IDs for filtering
+                const campaignIds = data.campaigns?.map((c: any) => c.id).filter(Boolean);
+
+                console.log(`[AI Analysis] Fetching enriched data for ${customerId}...`);
+
+                const [
+                    auctionInsights,
+                    conversionActions,
+                    audiencePerformance,
+                    networkPerformance
+                ] = await Promise.all([
+                    getAuctionInsights(session.refreshToken, undefined, customerId, dateRange),
+                    getConversionActions(session.refreshToken, customerId, dateRange),
+                    getAudiencePerformance(session.refreshToken, customerId, dateRange, campaignIds),
+                    getNetworkPerformance(session.refreshToken, customerId, dateRange, campaignIds)
+                ]);
+
+                // Attach to data object for buildPrompt
+                data.auctionInsights = auctionInsights;
+                data.conversionActions = conversionActions;
+                data.audiencePerformance = audiencePerformance;
+                data.networkPerformance = networkPerformance;
+
+                // Fetch PMax insights only if we have PMax campaigns
+                const pmaxCampaigns = data.campaigns?.filter((c: any) =>
+                    c.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                    c.name?.toLowerCase().includes('pmax')
+                ) || [];
+
+                if (pmaxCampaigns.length > 0) {
+                    // Fetch for top 3 PMax campaigns to avoid timeouts
+                    const topPMax = pmaxCampaigns.slice(0, 3);
+                    const pmaxInsightsPromises = topPMax.map((c: any) =>
+                        getPMaxSearchInsights(session.refreshToken!, c.id, customerId)
+                    );
+                    const pmaxResults = await Promise.all(pmaxInsightsPromises);
+                    data.pmaxInsights = pmaxResults.flat();
+                }
+
+                console.log(`[AI Analysis] Enriched data fetched: ${auctionInsights.length} auction, ${conversionActions.length} conv actions`);
+
+            } catch (enrichError) {
+                console.error("[AI Analysis] Data enrichment failed, proceeding with partial data:", enrichError);
+                // Swallow error to allow partial analysis
+            }
         }
 
         const promptBuilder = buildPrompt(data);
@@ -453,18 +428,14 @@ export async function POST(request: Request) {
         // Add history to prompt if available
         const finalPrompt = historyContext ? `${promptBuilder}\n${historyContext}` : promptBuilder;
 
-        // For adgroup level, the system prompt is already embedded in getAdGroupAnalysisPrompt
-        // For other levels, we need to add it as the system message
+        // Use V3 System Prompt for ALL levels to ensure enforcement of Data Enrichment & Interpretation Rules
         const systemPrompt = data.level === 'adgroup'
-            ? undefined  // Already included in the prompt via getAdGroupAnalysisPrompt
-            : `${ANALYSIS_SYSTEM_PROMPT}
+            ? undefined // Included in getAdGroupAnalysisPrompt (which uses V3 internal instructions now)
+            : `${ANALYSIS_SYSTEM_PROMPT_V3}
 LANGUAGE CONSTRAINT:
-${isEn
-                ? "Your entire response MUST be in English. Campaign names may be in Bulgarian — translate insights."
-                : "Целият ти отговор ТРЯБВА да бъде на български език."
-            }`;
+${isEn ? "Your entire response MUST be in English." : "Целият ти отговор ТРЯБВА да бъде на български език."}`;
 
-        console.log(`[AI Analysis] Level: ${data.level}, Prompt: ${finalPrompt.length} chars, Language: ${language}`);
+        console.log(`[AI Analysis] Level: ${data.level}, Prompt: ${finalPrompt.length} chars, Language: ${language}, Version: V3 (Enforced)`);
 
         const response = await anthropic.messages.create({
             model: "claude-opus-4-6",

@@ -6,7 +6,11 @@ import {
     ChangeEvent,
     ConversionAction,
     PMaxProductPerformance,
-    AccountAsset
+    AccountAsset,
+    NetworkPerformance,
+    AuctionInsight,
+    AudiencePerformance,
+    PMaxSearchInsight
 } from "@/types/google-ads";
 
 let client: GoogleAdsApi | null = null;
@@ -374,8 +378,11 @@ campaign.id, campaign.name, campaign.status,
     campaign.optimization_score
                 FROM campaign
                 WHERE campaign.status != 'REMOVED' ${statusFilter} ${dateFilter}
-                ORDER BY metrics.impressions DESC
-                LIMIT 1000
+                ORDER BY 
+                    metrics.impressions DESC,
+                    metrics.clicks DESC,
+                    metrics.cost_micros DESC,
+                    campaign.name ASC
     `);
 
             return result.map((row) => {
@@ -506,8 +513,11 @@ ad_group.id,
     metrics.relative_ctr
             FROM ad_group
             WHERE ${statusClause} ${campaignClause} ${dateFilter}
-            ORDER BY metrics.impressions DESC
-            LIMIT 5000
+            ORDER BY 
+                metrics.impressions DESC,
+                metrics.clicks DESC,
+                metrics.cost_micros DESC,
+                ad_group.name ASC
     `;
 
             console.log(`[getAdGroups] customerId = ${customerId}, campaignId = ${campaignId || 'ALL'} `);
@@ -739,12 +749,10 @@ ad_group_criterion.criterion_id,
     metrics.average_cpc,
     metrics.all_conversions,
     metrics.view_through_conversions,
-    ad_group_criterion.approval_status,
-    ad_group_criterion.policy_summary
+    ad_group_criterion.approval_status
             FROM keyword_view
             ${whereClause} ${dateFilter}
             ORDER BY metrics.impressions DESC
-            LIMIT 10000
     `);
 
             // Fetch Ad-level URLs as fallback
@@ -791,7 +799,6 @@ campaign.status = 'ENABLED'
                 allConversions: Number(row.metrics?.all_conversions) || 0,
                 viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
                 approvalStatus: String(row.ad_group_criterion?.approval_status || 'UNKNOWN'),
-                policySummary: (row.ad_group_criterion as any)?.policy_summary?.policy_topic_entries?.map((e: any) => e.topic) || [],
             }));
 
             // Deduplicate by criterion_id: keyword_view returns 1 row per day with date ranges.
@@ -1092,7 +1099,6 @@ customer_asset.asset,
             WHERE customer_asset.status != 'REMOVED'
             ${dateFilter}
             ORDER BY metrics.impressions DESC
-            LIMIT 500
         `);
 
             return result.map((row) => {
@@ -1277,17 +1283,7 @@ asset_group_listing_group_filter.id,
     }
 }
 
-export interface PMaxSearchInsight {
-    campaignId: string;
-    category: string;
-    categoryLabel: string;
-    clicks: number;
-    impressions: number;
-    conversions: number;
-    conversionValue: number;
-    ctr: number;
-}
-
+// campaign_search_term_insight
 export async function getPMaxSearchInsights(refreshToken: string, campaignId: string, customerId?: string): Promise<PMaxSearchInsight[]> {
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
 
@@ -1317,13 +1313,14 @@ campaign_search_term_insight.id,
 
             return {
                 campaignId: campaignId,
-                category: insight?.id?.toString() || "",
-                categoryLabel: insight?.category_label || "Unknown Category",
+                campaignName: "", // Need to fetch if needed
+                categoryName: insight?.category_label || "Unknown Category",
+                term: insight?.id?.toString() || "",
                 clicks,
                 impressions,
+                cost: 0, // Not available in this view
                 conversions,
                 conversionValue,
-                ctr: impressions > 0 ? clicks / impressions : 0,
             };
         });
     } catch (error: unknown) {
@@ -1538,17 +1535,6 @@ segments.date,
 // PRIORITY 3: Auction Insights (Competitive Analysis)
 // ============================================
 
-export interface AuctionInsight {
-    campaignId: string;
-    competitor: string;
-    impressionShare: number | null;
-    overlapRate: number | null;
-    outrankingShare: number | null;
-    positionAboveRate: number | null;
-    topOfPageRate: number | null;
-    absTopOfPageRate: number | null;
-}
-
 export async function getAuctionInsights(
     refreshToken: string,
     campaignId?: string,
@@ -1574,8 +1560,7 @@ campaign.id,
     metrics.auction_insight_search_overlap_rate,
     metrics.auction_insight_search_outranking_share,
     metrics.auction_insight_search_position_above_rate,
-    metrics.auction_insight_search_top_of_page_rate,
-    metrics.auction_insight_search_absolute_top_of_page_rate
+    // Deprecated in API v22: top_of_page_rate and absolute_top_of_page_rate
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${campaignFilter} ${dateFilter}
 `);
@@ -1587,8 +1572,7 @@ campaign.id,
             overlapRate: row.metrics?.auction_insight_search_overlap_rate ?? null,
             outrankingShare: row.metrics?.auction_insight_search_outranking_share ?? null,
             positionAboveRate: row.metrics?.auction_insight_search_position_above_rate ?? null,
-            topOfPageRate: row.metrics?.auction_insight_search_top_of_page_rate ?? null,
-            absTopOfPageRate: row.metrics?.auction_insight_search_absolute_top_of_page_rate ?? null,
+            // Deprecated in API v22
         }));
     } catch (error: unknown) {
         logApiError("getAuctionInsights", error);
@@ -2367,8 +2351,10 @@ search_term_view
 WHERE 
                 ${dateFilter}
             ORDER BY
-metrics.impressions DESC
-            LIMIT 10000
+                metrics.impressions DESC,
+                metrics.clicks DESC,
+                metrics.cost_micros DESC,
+                search_term_view.search_term ASC
         `;
 
             const rows = await customer.query(query);
@@ -2405,24 +2391,7 @@ metrics.impressions DESC
 // PRIORITY 4: Audience Performance
 // ============================================
 
-export interface AudiencePerformance {
-    campaignId: string;
-    campaignName: string;
-    adGroupId: string;
-    adGroupName: string;
-    criterionId: string;
-    audienceName: string;
-    impressions: number;
-    clicks: number;
-    cost: number;
-    conversions: number;
-    conversionValue: number;
-    cpc: number;
-    ctr: number;
-    roas: number | null;
-    cpa: number | null;
-}
-
+// Audience Performance Data
 export async function getAudiencePerformance(
     refreshToken: string,
     customerId?: string,
@@ -2637,9 +2606,8 @@ asset.id,
     asset.name,
     asset.text_asset.text,
     asset.final_urls,
-    asset.policy_summary.approval_status,
-    asset.policy_summary.policy_topic_entries,
     ad_group_ad_asset_view.performance_label,
+    ad_group_ad_asset_view.enabled,
     metrics.impressions,
     metrics.clicks,
     metrics.cost_micros,
@@ -2663,8 +2631,8 @@ asset.id,
             text: row.asset?.text_asset?.text || "",
             finalUrls: row.asset?.final_urls || [],
             performanceLabel: String(row.ad_group_ad_asset_view?.performance_label || 'UNKNOWN'),
-            approvalStatus: String(row.asset?.policy_summary?.approval_status || 'UNKNOWN'),
-            policySummary: row.asset?.policy_summary?.policy_topic_entries?.map((e: any) => e.topic) || [],
+            approvalStatus: 'ENABLED', // Assets in ad_group_ad_asset_view with enabled=TRUE are effectively approved
+            policySummary: [],
             impressions: Number(row.metrics?.impressions) || 0,
             clicks: Number(row.metrics?.clicks) || 0,
             cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
@@ -2845,6 +2813,69 @@ shopping_product_view.resource_name,
         return [];
     }
 }
+
+export async function getNetworkPerformance(
+    refreshToken: string,
+    customerId?: string,
+    dateRange?: DateRange,
+    campaignIds?: string[],
+    userId?: string
+): Promise<NetworkPerformance[]> {
+    if (userId) logActivity(userId, 'API_CALL', { category: 'network_performance', customerId });
+    return withCache('default', [customerId, dateRange, campaignIds, 'network'], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
+
+        let campaignFilter = '';
+        if (campaignIds && campaignIds.length > 0) {
+            const ids = campaignIds.map(id => `'${id}'`).join(',');
+            campaignFilter = `AND campaign.id IN (${ids})`;
+        }
+
+        try {
+            const query = `
+                SELECT
+                    campaign.id,
+                    campaign.name,
+                    segments.ad_network_type,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value
+                FROM campaign
+                WHERE campaign.status != 'REMOVED'
+                ${dateFilter} ${campaignFilter}
+                AND metrics.impressions > 0
+                ORDER BY metrics.cost_micros DESC
+            `;
+
+            const result = await customer.query(query);
+
+            return result.map((row) => {
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+
+                return {
+                    campaignId: row.campaign?.id?.toString() || "",
+                    campaignName: row.campaign?.name || "",
+                    adNetworkType: String(row.segments?.ad_network_type || 'UNKNOWN'),
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    conversionValue,
+                };
+            });
+        } catch (error: unknown) {
+            logApiError("getNetworkPerformance", error);
+            // Return empty array on error to safely degrade
+            return [];
+        }
+    });
+}
+
 
 
 

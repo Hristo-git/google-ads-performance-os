@@ -93,10 +93,23 @@ export function calculateHealthScore(
     conversionActions?: ConversionAction[],
     pmaxProducts?: PMaxProductPerformance[]
 ): HealthScoreReport {
-    const enabledCampaigns = campaigns.filter(c => c.status === 'ENABLED');
+
     const checks: HealthCheckResult[] = [];
 
     // ── CHECK 1: Conversion Tracking Health ──────────────────
+
+    // ── CHECK 1: Conversion Tracking Health ──────────────────
+
+    // Smart Filter: Include Enabled campaigns OR Paused campaigns with data (impressions > 0)
+    const enabledCampaigns = campaigns.filter(c => c.status === 'ENABLED' || c.impressions > 0);
+    const enabledCampaignIds = new Set(enabledCampaigns.map(c => c.id));
+
+    // Smart Filter: Include Enabled Ad Groups OR Paused Ad Groups with data, belonging to valid campaigns
+    const enabledAdGroupIds = new Set(adGroups
+        .filter(ag => (ag.status === 'ENABLED' || ag.impressions > 0) && enabledCampaignIds.has(ag.campaignId))
+        .map(ag => ag.id)
+    );
+
     const totalConversions = enabledCampaigns.reduce((sum, c) => sum + c.conversions, 0);
     const campaignsWithConversions = enabledCampaigns.filter(c => c.conversions > 0).length;
     const convTrackingPct = enabledCampaigns.length > 0
@@ -152,7 +165,13 @@ export function calculateHealthScore(
     });
 
     // ── CHECK 2: Quality Score Distribution ──────────────────
-    const keywordsWithQS = keywords.filter(k => k.qualityScore !== null && k.qualityScore !== undefined);
+    // Filter: QS exists + (Keyword is ENABLED OR has data) + in valid Ad Group
+    const keywordsWithQS = keywords.filter(k =>
+        k.qualityScore !== null &&
+        k.qualityScore !== undefined &&
+        (k.status === 'ENABLED' || k.impressions > 0) &&
+        enabledAdGroupIds.has(k.adGroupId)
+    );
     const totalKWs = keywordsWithQS.length;
 
     if (totalKWs > 0) {
@@ -226,15 +245,12 @@ export function calculateHealthScore(
     // ── CHECK 3: Ad Strength Distribution ────────────────────
     // Filter to only include ads from ENABLED ad groups and Enabled campaigns
     // Note: enabledCampaigns is already filtered above.
-    const enabledCampaignIds = new Set(enabledCampaigns.map(c => c.id));
-    const enabledAdGroupIds = new Set(adGroups
-        .filter(ag => ag.status === 'ENABLED' && enabledCampaignIds.has(ag.campaignId))
-        .map(ag => ag.id)
-    );
+    // Note: enabledAdGroupIds is already calculated at the top.
 
     const adsWithStrength = ads.filter(a =>
         ['POOR', 'AVERAGE', 'GOOD', 'EXCELLENT'].includes(a.adStrength) &&
-        enabledAdGroupIds.has(a.adGroupId)
+        enabledAdGroupIds.has(a.adGroupId) &&
+        a.status === 'ENABLED'
     );
 
     if (adsWithStrength.length > 0) {
@@ -353,8 +369,13 @@ export function calculateHealthScore(
         agPerCampaign.set(ag.campaignId, (agPerCampaign.get(ag.campaignId) || 0) + 1);
     });
 
+    // FIX: Only count ads in enabled ad groups to prevent bloatedAdGroups > totalAdGroups
+    const structureAdGroupIds = new Set(enabledAdGroups.map(ag => ag.id));
+    // FIX: Only count ENABLED ads to avoid flagging paused historical ads
+    const enabledAds = ads.filter(ad => structureAdGroupIds.has(ad.adGroupId) && ad.status === 'ENABLED');
+
     const adsPerAdGroup = new Map<string, number>();
-    ads.forEach(ad => {
+    enabledAds.forEach(ad => {
         adsPerAdGroup.set(ad.adGroupId, (adsPerAdGroup.get(ad.adGroupId) || 0) + 1);
     });
 
@@ -412,7 +433,7 @@ export function calculateHealthScore(
             emptyAdGroups: emptyAdGroups.length,
             overloadedCampaigns: overloadedCampaigns.length,
             avgAdsPerAdGroup: adsPerAdGroup.size > 0
-                ? Number((ads.length / adsPerAdGroup.size).toFixed(1))
+                ? Number((enabledAds.length / adsPerAdGroup.size).toFixed(1))
                 : 0,
         },
     });
@@ -679,7 +700,7 @@ export function calculateHealthScore(
             score: budScore,
             weight: 1.8,
             status: budStatus,
-            finding: `${constrainedCampaigns.length} campaigns limited by budget. Top perfomer '${topConstrained.name}' loses ${lostRate.toFixed(0)}% impressions due to budget.`,
+            finding: `${constrainedCampaigns.length} campaigns limited by budget. Top perfomer '${topConstrained.name}'${topConstrained.status !== 'ENABLED' ? ` (${topConstrained.status})` : ''} loses ${lostRate.toFixed(0)}% impressions due to budget.`,
             recommendation: 'Increase budget or lower tCPA/tROAS targets to capture cheap clicks instead of maxing out early.',
             dataPoints: { lostRate, campaign: topConstrained.name }
         });
@@ -699,7 +720,11 @@ export function calculateHealthScore(
     // ── CHECK 12: Asset Performance ──────────────────────────
     if (assetPerformance && assetPerformance.length > 0) {
         const totalAssets = assetPerformance.length;
-        const disapproved = assetPerformance.filter(a => a.approvalStatus !== 'APPROVED' && a.approvalStatus !== 'APPROVED_LIMITED').length;
+        const disapproved = assetPerformance.filter(a =>
+            a.approvalStatus !== 'APPROVED' &&
+            a.approvalStatus !== 'APPROVED_LIMITED' &&
+            a.approvalStatus !== 'ENABLED' // API v22: enabled assets are effectively approved
+        ).length;
         const poorPerf = assetPerformance.filter(a => a.performanceLabel === 'POOR').length;
         const goodPerf = assetPerformance.filter(a => ['GOOD', 'BEST', 'EXCELLENT'].includes(a.performanceLabel || '')).length;
 

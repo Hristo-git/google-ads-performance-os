@@ -19,7 +19,21 @@ export async function GET(request: Request) {
 
         const reports = await getReports(customerId, limit);
 
-        return NextResponse.json({ reports });
+        // Transform the response to match frontend expectations
+        const transformedReports = reports.map(report => ({
+            id: report.id,
+            customerId: report.customer_id,
+            templateId: report.template_id,
+            reportTitle: report.title,
+            analysis: report.analysis,
+            audience: report.audience,
+            timestamp: report.created_at,
+            language: report.language,
+            model: report.model,
+            metadata: report.metadata,
+        }));
+
+        return NextResponse.json({ reports: transformedReports });
     } catch (error: any) {
         console.error("History search error:", error);
         return NextResponse.json(

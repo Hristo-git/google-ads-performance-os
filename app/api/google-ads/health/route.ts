@@ -72,9 +72,14 @@ export async function GET(request: Request) {
         }
 
         try {
-            console.log(`[API/Health] Fetching keywords...`);
+            console.log(`[API/Health] Fetching keywords with QS...`);
             keywords = await getKeywordsWithQS(refreshToken, undefined, customerId, dateRange);
             console.log(`[API/Health] Got ${keywords.length} keywords`);
+            if (keywords.length > 0) {
+                console.log(`[API/Health] Sample keyword:`, JSON.stringify(keywords[0]));
+                const withQS = keywords.filter(k => k.qualityScore !== null && k.qualityScore !== undefined);
+                console.log(`[API/Health] Keywords with QS data: ${withQS.length}/${keywords.length}`);
+            }
         } catch (e: any) {
             errors.push(`keywords: ${e.message}`);
             console.error(`[API/Health] Failed to fetch keywords:`, e);
@@ -135,6 +140,22 @@ export async function GET(request: Request) {
         let assetPerformance: any[] = [];
         try {
             assetPerformance = await getAssetPerformance(refreshToken, customerId, dateRange);
+            console.log(`[API/Health] Got ${assetPerformance.length} assets`);
+            if (assetPerformance.length > 0) {
+                console.log(`[API/Health] Sample asset:`, JSON.stringify(assetPerformance[0]));
+                const approved = assetPerformance.filter(a =>
+                    a.approvalStatus === 'APPROVED' ||
+                    a.approvalStatus === 'APPROVED_LIMITED' ||
+                    a.approvalStatus === 'ENABLED'  // API v22: enabled = approved
+                );
+                const disapproved = assetPerformance.filter(a =>
+                    a.approvalStatus !== 'APPROVED' &&
+                    a.approvalStatus !== 'APPROVED_LIMITED' &&
+                    a.approvalStatus !== 'ENABLED' &&
+                    a.approvalStatus !== 'UNKNOWN'
+                );
+                console.log(`[API/Health] Asset approval stats: ${approved.length} approved, ${disapproved.length} disapproved, ${assetPerformance.length - approved.length - disapproved.length} unknown/other`);
+            }
         } catch (e: any) { console.error(`[API/Health] Failed assetPerformance:`, e); }
 
         let changeEvents: any[] = [];
