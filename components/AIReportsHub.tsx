@@ -353,12 +353,17 @@ export default function AIReportsHub({
     };
 
     const handleSearchHistory = async () => {
+        console.log(`[AIReportsHub] Searching history for customerId: ${customerId}, query: ${historySearchQuery}`);
         setSearchingHistory(true);
         try {
-            const response = await fetch(`/api/reports/history?query=${encodeURIComponent(historySearchQuery)}&customerId=${customerId || ''}&limit=10`);
-            if (!response.ok) throw new Error('Search failed');
+            const url = `/api/reports/history?query=${encodeURIComponent(historySearchQuery)}&customerId=${customerId || ''}&limit=10`;
+            console.log(`[AIReportsHub] Fetching from URL: ${url}`);
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Search failed with status: ${response.status}`);
             const data = await response.json();
+            console.log(`[AIReportsHub] History data received:`, data);
             setHistoryResults(data.reports || []);
+            setHistoryLoaded(true);
         } catch (err: any) {
             console.error('History search error:', err);
             setError('Failed to search history');

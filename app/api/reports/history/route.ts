@@ -8,16 +8,19 @@ export async function GET(request: Request) {
         const session = await getServerSession(authOptions);
 
         if (!session?.user) {
+            console.log("[History API] Unauthorized access attempt");
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const { searchParams } = new URL(request.url);
         const customerId = searchParams.get("customerId") || undefined;
-        // query param is ignored for now as we are doing chronological history, 
-        // but could be added back with ILIKE search in supabase if needed.
+        const query = searchParams.get("query");
         const limit = parseInt(searchParams.get("limit") || "20");
 
+        console.log(`[History API] Fetching reports for customer: ${customerId}, query: ${query}, limit: ${limit}`);
+
         const reports = await getReports(customerId, limit);
+        console.log(`[History API] Found ${reports.length} reports in database`);
 
         // Transform the response to match frontend expectations
         const transformedReports = reports.map(report => ({
