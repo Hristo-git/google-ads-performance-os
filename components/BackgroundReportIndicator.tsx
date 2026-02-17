@@ -33,6 +33,22 @@ export function BackgroundReportIndicator({ onNavigateToReports, currentView }: 
         clearNotification();
     };
 
+    // Helper to get granular status label
+    const getStatusLabel = () => {
+        if (!activeReport) return 'Processing...';
+
+        const isBG = activeReport.status?.includes('Етап') || activeReport.status?.includes('анализ');
+
+        if (activeReport.status?.includes('1/2')) {
+            return isBG ? 'Писане на резюме...' : 'Writing Executive Summary...';
+        }
+        if (activeReport.status?.includes('2/2')) {
+            return isBG ? 'Технически анализ...' : 'Refining Technical Analysis...';
+        }
+
+        return activeReport.status || (isBG ? 'Обработка...' : 'Processing...');
+    };
+
     return (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 items-end">
             {/* Active Report Progress */}
@@ -44,14 +60,17 @@ export function BackgroundReportIndicator({ onNavigateToReports, currentView }: 
                         </div>
                         <div className="flex-1 min-w-0">
                             <h4 className="text-sm font-semibold text-white truncate">{activeReport.templateName}</h4>
-                            <p className="text-[10px] text-slate-400 uppercase tracking-wider">
-                                {activeReport.phase === 'data' ? 'Analyzing Data' : 'Generating AI Insight'}
+                            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+                                {activeReport.status?.includes('2/2')
+                                    ? (activeReport.status?.includes('анализ') ? 'ТЕХНИЧЕСКИ АНАЛИЗ' : 'TECHNICAL ANALYSIS')
+                                    : (activeReport.status?.includes('анализ') ? 'СТРАТЕГИЧЕСКО РЕЗЮМЕ' : 'STRATEGIC SUMMARY')
+                                }
                             </p>
                         </div>
                     </div>
                     <div className="space-y-1">
                         <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-                            <span className="truncate pr-2">{activeReport.status || 'Processing...'}</span>
+                            <span className="truncate pr-2">{getStatusLabel()}</span>
                         </div>
                         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
                             <div

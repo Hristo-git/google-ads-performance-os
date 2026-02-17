@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { REPORT_TEMPLATE_DEFINITIONS } from '@/lib/report-templates';
 import { useReportStore } from '@/lib/report-store';
 import type { Campaign, AdGroup, SearchTerm, KeywordWithQS, AdWithStrength, ReportTemplateId, ReportSettings, GeneratedReport, ReportTemplate } from '@/types/google-ads';
+import { Loader2 } from 'lucide-react';
 
 // Helper: Split analysis into two documents
 function splitDocuments(markdown: string): { executive: string; technical: string; hasTwo: boolean } {
@@ -768,7 +769,35 @@ export default function AIReportsHub({
                             <div className="p-8">
                                 <div className="max-w-4xl mx-auto space-y-12">
                                     <div className="api-content prose prose-invert prose-slate max-w-none prose-headings:tracking-tight prose-p:leading-relaxed prose-li:leading-relaxed">
-                                        <ReactMarkdown>{hasTwo ? (activeTab === 'executive' ? executive : technical) : executive}</ReactMarkdown>
+                                        {activeTab === 'executive' ? (
+                                            executive ? <ReactMarkdown>{executive}</ReactMarkdown> : (
+                                                <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                                                    <Loader2 className="w-8 h-8 animate-spin mb-4 opacity-20" />
+                                                    <p className="text-sm font-medium animate-pulse">
+                                                        {language === 'en' ? 'Preparing executive summary...' : 'Подготовка на резюмето...'}
+                                                    </p>
+                                                </div>
+                                            )
+                                        ) : (
+                                            technical ? <ReactMarkdown>{technical}</ReactMarkdown> : (
+                                                <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                                                    <div className="relative mb-6">
+                                                        <div className="w-16 h-16 border-2 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
+                                                        <div className="absolute inset-0 flex items-center justify-center grayscale opacity-50">
+                                                            <span className="text-xl">🔧</span>
+                                                        </div>
+                                                    </div>
+                                                    <h4 className="text-white font-bold mb-2">
+                                                        {language === 'en' ? 'Expert Refinement' : 'Експертна рефинация'}
+                                                    </h4>
+                                                    <p className="text-sm text-slate-400 max-w-xs text-center leading-relaxed">
+                                                        {language === 'en'
+                                                            ? 'The AI is currently working on the technical analysis and actionable roadmap items. This takes a few more seconds.'
+                                                            : 'AI в момента изготвя техническия анализ и конкретните препоръки за действие. Това отнема още няколко секунди.'}
+                                                    </p>
+                                                </div>
+                                            )
+                                        )}
                                     </div>
 
                                     {todoList.length > 0 && (
