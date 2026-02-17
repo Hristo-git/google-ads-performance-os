@@ -90,8 +90,10 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
     const { avgCPA, avgCTR } = useMemo(() => {
         const byTerm: Record<string, { cost: number; conversions: number; clicks: number; impressions: number }> = {};
         rawData.forEach(item => {
-            if (item.searchTerm.includes('[PMax Insight]')) return;
-            const key = item.searchTerm.toLowerCase().trim();
+            const rawTerm = item.searchTerm.includes('[PMax Insight]')
+                ? item.searchTerm.replace('[PMax Insight] ', '')
+                : item.searchTerm;
+            const key = rawTerm.toLowerCase().trim();
             if (!byTerm[key]) byTerm[key] = { cost: 0, conversions: 0, clicks: 0, impressions: 0 };
             byTerm[key].cost += item.cost;
             byTerm[key].conversions += item.conversions;
@@ -124,11 +126,13 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
         }> = {};
 
         rawData.forEach(item => {
-            if (item.searchTerm.includes('[PMax Insight]')) return;
-            const key = item.searchTerm.toLowerCase().trim();
+            const rawTerm = item.searchTerm.includes('[PMax Insight]')
+                ? item.searchTerm.replace('[PMax Insight] ', '')
+                : item.searchTerm;
+            const key = rawTerm.toLowerCase().trim();
             if (!byTerm[key]) {
                 byTerm[key] = {
-                    searchTerm: item.searchTerm,
+                    searchTerm: rawTerm, // Use clean term
                     impressions: 0, clicks: 0, cost: 0, conversions: 0,
                     campaigns: new Set(),
                     campaignIds: new Set()
