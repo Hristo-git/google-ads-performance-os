@@ -438,7 +438,7 @@ ${isEn ? "Your entire response MUST be in English." : "Целият ти отг�
         console.log(`[AI Analysis] Level: ${data.level}, Prompt: ${finalPrompt.length} chars, Language: ${language}, Version: V3 (Enforced)`);
 
         const response = await anthropic.messages.create({
-            model: "claude-opus-4-6",
+            model: "claude-sonnet-4-5-20250929",
             max_tokens: 20000,
             ...(systemPrompt ? { system: systemPrompt } : {}),
             messages: [
@@ -503,7 +503,7 @@ ${analysis}
 Изведи подобрения анализ в същата структура и формат, но с по-дълбоки прозрения и по-action-able препоръки.`;
 
             const secondPassResponse = await anthropic.messages.create({
-                model: "claude-opus-4-6",
+                model: "claude-sonnet-4-5-20250929",
                 max_tokens: 20000,
                 ...(systemPrompt ? { system: systemPrompt } : {}),
                 messages: [

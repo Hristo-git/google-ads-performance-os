@@ -351,7 +351,7 @@ export function buildQualityScoreRequest(
             language: config.language,
             audience: config.audience,
             expertMode: true,
-            model: config.model || 'claude-opus-4-6', // Default or config
+            model: config.model || 'claude-sonnet-4-5-20250929', // Default or config
             lowQsThreshold: threshold,
             topKeywordsBySpend: topN,
             impactCapIsRankPp30d: 15,

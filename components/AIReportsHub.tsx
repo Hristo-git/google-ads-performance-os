@@ -71,11 +71,13 @@ export default function AIReportsHub({
     const [activeTab, setActiveTab] = useState<'executive' | 'technical'>('executive');
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [lastDataPayload, setLastDataPayload] = useState<any>(null);
-    const [showDataPayload, setShowDataPayload] = useState(false);
+    const [showDataPayload, setShowDataPayload] = useState<boolean>(false);
+    const [generatingStatus, setGeneratingStatus] = useState<string | null>(null);
+    const [abortController, setAbortController] = useState<AbortController | null>(null);
 
     // Settings
     const [settings, setSettings] = useState<ReportSettings>({
-        model: userRole === 'admin' ? 'opus-4.6' : 'sonnet-4.5',
+        model: userRole === 'admin' ? 'sonnet-4.5' : 'sonnet-4.5',
         language: language,
         audience: 'internal',
         expertMode: false,
@@ -104,11 +106,15 @@ export default function AIReportsHub({
     }, [customerId]);
 
     const handleGenerateReport = async () => {
-        if (!selectedTemplate) return;
+        if (!selectedTemplate || generating) return;
 
+        const controller = new AbortController();
+        setAbortController(controller);
         setGenerating(true);
-        setGeneratingPhase('data');
         setError(null);
+        setGeneratingStatus(language === 'en' ? 'Preparing data for analysis...' : 'Подготовка на данни за анализ...');
+        setCurrentReport(null);
+        setGeneratingPhase('data');
 
         try {
             // Prepare data based on template requirements
@@ -254,6 +260,7 @@ export default function AIReportsHub({
             setLastDataPayload(dataPayload);
             setShowDataPayload(false);
             setGeneratingPhase('ai');
+            setGeneratingStatus(language === 'en' ? 'AI is initializing report generation...' : 'AI започва генерирането на анализа...');
 
             const response = await fetch('/api/reports/generate', {
                 method: 'POST',
@@ -265,6 +272,7 @@ export default function AIReportsHub({
                     settings,
                     data: dataPayload,
                 }),
+                signal: controller.signal,
             });
 
             if (!response.ok) {
@@ -292,7 +300,15 @@ export default function AIReportsHub({
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                analysis += decoder.decode(value, { stream: true });
+                const chunk = decoder.decode(value, { stream: true });
+                analysis += chunk;
+
+                // Detect progress indicators in the stream
+                if (chunk.includes('Pass 1/2') || chunk.includes('Етап 1/2')) {
+                    setGeneratingStatus(language === 'en' ? 'Pass 1/2: Strategic Analysis' : 'Етап 1/2: Стратегически анализ');
+                } else if (chunk.includes('Pass 2/2') || chunk.includes('Етап 2/2')) {
+                    setGeneratingStatus(language === 'en' ? 'Pass 2/2: Technical & Expert Refinement' : 'Етап 2/2: Експертна рефинация');
+                }
 
                 // Update report in real-time as chunks arrive
                 setCurrentReport({
@@ -327,11 +343,17 @@ export default function AIReportsHub({
                 });
             }
         } catch (err: any) {
+            if (err.name === 'AbortError') {
+                console.log('Report generation aborted by user');
+                return;
+            }
             console.error('Report generation error:', err);
             setError(err.message || 'Failed to generate report');
         } finally {
             setGenerating(false);
             setGeneratingPhase(null);
+            setGeneratingStatus(null);
+            setAbortController(null);
         }
     };
 
@@ -492,8 +514,8 @@ export default function AIReportsHub({
     const groupedHistory = groupReportsByDate(historyResults);
     const hasAnyHistory = historyResults.length > 0;
 
-    // ─── REPORT VIEW (full-width when a report is open) ───
-    if (currentReport || error) {
+    // ─── REPORT VIEW (full-width when a report is open or generating) ───
+    if (currentReport || generating || error) {
         return (
             <div className="h-full flex flex-col bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-2xl">
                 {error ? (
@@ -519,6 +541,35 @@ export default function AIReportsHub({
                                 </div>
                             </div>
                         </div>
+                    </div>
+                ) : (generating && !currentReport) ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+                        <div className="relative mb-8">
+                            <div className="w-24 h-24 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-2xl animate-pulse">🤖</span>
+                            </div>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
+                            {language === 'en' ? 'Generating Report' : 'Генериране на анализ'}
+                        </h3>
+                        <p className="text-slate-400 text-sm max-w-sm mx-auto leading-relaxed mb-6">
+                            {generatingStatus || (language === 'en' ? 'Initialing AI models...' : 'Инициализиране на AI модели...')}
+                        </p>
+                        <div className="w-64 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 animate-progress-indefinite" />
+                        </div>
+                        <button
+                            onClick={() => {
+                                if (abortController) abortController.abort();
+                                setGenerating(false);
+                                setGeneratingStatus(null);
+                                setSelectedTemplate(null);
+                            }}
+                            className="mt-12 text-xs font-bold text-slate-500 uppercase tracking-widest hover:text-slate-300 transition-colors"
+                        >
+                            {language === 'en' ? 'Cancel Generation' : 'Отказ'}
+                        </button>
                     </div>
                 ) : currentReport && (
                     <>

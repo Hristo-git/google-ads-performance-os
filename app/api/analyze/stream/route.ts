@@ -188,7 +188,7 @@ export async function POST(request: Request) {
             'haiku-4.5': 'claude-haiku-4-5-20251001',
         };
         const requestedModel = data.model ? ALLOWED_MODELS[data.model] : undefined;
-        const modelId = requestedModel || 'claude-opus-4-6';
+        const modelId = requestedModel || 'claude-sonnet-4-5-20250929';
         const modelLabel = Object.entries(ALLOWED_MODELS).find(([, v]) => v === modelId)?.[0] || 'opus-4.6';
 
         // Stream from Anthropic

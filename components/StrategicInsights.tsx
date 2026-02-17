@@ -54,7 +54,7 @@ export default function StrategicInsights({
 }: StrategicInsightsProps) {
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
-    const [selectedModel, setSelectedModel] = useState<string>('opus-4.6');
+    const [selectedModel, setSelectedModel] = useState<string>('sonnet-4.5');
     const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives' | 'audiences'>('breakdown');
 
     const runAnalysis = async () => {
