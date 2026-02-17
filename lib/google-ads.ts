@@ -2393,6 +2393,26 @@ WHERE
 // PRIORITY 4: Audience Performance
 // ============================================
 
+/**
+ * Helper to resolve audience names from various signal types.
+ */
+function resolveAudienceName(row: any): string {
+    const criterion = row.ad_group_criterion || row.campaign_criterion;
+    if (!criterion) return 'Unknown Audience';
+
+    if (criterion.keyword?.text) return criterion.keyword.text;
+    if (criterion.user_list?.user_list) return `User List: ${criterion.user_list.user_list.split('/').pop()}`;
+    if (criterion.affinity?.affinity) return `Affinity: ${criterion.affinity.affinity.split('/').pop()}`;
+    if (criterion.in_market?.in_market) return `In-Market: ${criterion.in_market.in_market.split('/').pop()}`;
+    if (criterion.custom_audience?.custom_audience) return `Custom: ${criterion.custom_audience.custom_audience.split('/').pop()}`;
+    if (criterion.custom_affinity?.custom_affinity) return `Custom Affinity: ${criterion.custom_affinity.custom_affinity.split('/').pop()}`;
+    if (criterion.custom_intent?.custom_intent) return `Custom Intent: ${criterion.custom_intent.custom_intent.split('/').pop()}`;
+    if (criterion.combined_audience?.combined_audience) return `Combined: ${criterion.combined_audience.combined_audience.split('/').pop()}`;
+    if (criterion.user_interest?.user_interest) return `Interest: ${criterion.user_interest.user_interest.split('/').pop()}`;
+
+    return `Criterion(${criterion.criterion_id || 'unknown'})`;
+}
+
 // Audience Performance Data
 export async function getAudiencePerformance(
     refreshToken: string,
@@ -2408,66 +2428,97 @@ export async function getAudiencePerformance(
         ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
 
     try {
-        const result = await customer.query(`
-SELECT
-campaign.id,
-    campaign.name,
-    ad_group.id,
-    ad_group.name,
-    ad_group_criterion.criterion_id,
-    ad_group_criterion.keyword.text,
-    ad_group_criterion.user_list.user_list,
-    ad_group_criterion.custom_affinity.custom_affinity,
-    ad_group_criterion.custom_intent.custom_intent,
-    ad_group_criterion.type,
-    metrics.impressions,
-    metrics.clicks,
-    metrics.cost_micros,
-    metrics.conversions,
-    metrics.conversions_value,
-    metrics.average_cpc,
-    metrics.ctr
-            FROM ad_group_audience_view
-            WHERE campaign.status != 'REMOVED' 
-            AND ad_group.status != 'REMOVED'
-            ${dateFilter} ${campaignFilter}
-            ORDER BY metrics.cost_micros DESC
-            LIMIT 1000
-        `);
+        // Query both views in parallel
+        const [adGroupResults, campaignResults] = await Promise.all([
+            customer.query(`
+                SELECT
+                    campaign.id,
+                    campaign.name,
+                    ad_group.id,
+                    ad_group.name,
+                    ad_group_criterion.criterion_id,
+                    ad_group_criterion.keyword.text,
+                    ad_group_criterion.user_list.user_list,
+                    ad_group_criterion.affinity.affinity,
+                    ad_group_criterion.in_market.in_market,
+                    ad_group_criterion.custom_audience.custom_audience,
+                    ad_group_criterion.combined_audience.combined_audience,
+                    ad_group_criterion.user_interest.user_interest,
+                    ad_group_criterion.type,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value,
+                    metrics.average_cpc,
+                    metrics.ctr
+                FROM ad_group_audience_view
+                WHERE campaign.status != 'REMOVED' 
+                AND ad_group.status != 'REMOVED'
+                ${dateFilter} ${campaignFilter}
+                LIMIT 1000
+            `),
+            customer.query(`
+                SELECT
+                    campaign.id,
+                    campaign.name,
+                    campaign_criterion.criterion_id,
+                    campaign_criterion.user_list.user_list,
+                    campaign_criterion.affinity.affinity,
+                    campaign_criterion.in_market.in_market,
+                    campaign_criterion.custom_audience.custom_audience,
+                    campaign_criterion.combined_audience.combined_audience,
+                    campaign_criterion.user_interest.user_interest,
+                    campaign_criterion.type,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value,
+                    metrics.average_cpc,
+                    metrics.ctr
+                FROM campaign_audience_view
+                WHERE campaign.status != 'REMOVED'
+                ${dateFilter} ${campaignFilter}
+                LIMIT 1000
+            `)
+        ]);
 
-        return result.map((row) => {
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
-            const clicks = Number(row.metrics?.clicks) || 0;
-            const impressions = Number(row.metrics?.impressions) || 0;
+        const processRows = (rows: any[], isAdGroup: boolean) => {
+            return rows.map((row) => {
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+                const clicks = Number(row.metrics?.clicks) || 0;
+                const impressions = Number(row.metrics?.impressions) || 0;
 
-            // Determine audience name based on type
-            let name = 'Unknown Audience';
-            if (row.ad_group_criterion?.keyword?.text) {
-                name = row.ad_group_criterion.keyword.text;
-            } else if (row.ad_group_criterion?.user_list?.user_list) {
-                name = `User List(${row.ad_group_criterion.criterion_id})`;
-            }
+                return {
+                    campaignId: row.campaign?.id?.toString() || "",
+                    campaignName: row.campaign?.name || "",
+                    adGroupId: isAdGroup ? (row.ad_group?.id?.toString() || "") : "CAMPAIGN_LEVEL",
+                    adGroupName: isAdGroup ? (row.ad_group?.name || "") : "All Ad Groups",
+                    criterionId: (row.ad_group_criterion?.criterion_id || row.campaign_criterion?.criterion_id || "").toString(),
+                    audienceName: resolveAudienceName(row),
+                    impressions,
+                    clicks,
+                    cost,
+                    conversions,
+                    conversionValue,
+                    ctr: Number(row.metrics?.ctr) || 0,
+                    cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null
+                };
+            });
+        };
 
-            return {
-                campaignId: row.campaign?.id?.toString() || "",
-                campaignName: row.campaign?.name || "",
-                adGroupId: row.ad_group?.id?.toString() || "",
-                adGroupName: row.ad_group?.name || "",
-                criterionId: row.ad_group_criterion?.criterion_id?.toString() || "",
-                audienceName: name,
-                impressions,
-                clicks,
-                cost,
-                conversions,
-                conversionValue,
-                ctr: Number(row.metrics?.ctr) || 0,
-                cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
-                roas: cost > 0 ? conversionValue / cost : null,
-                cpa: conversions > 0 ? cost / conversions : null
-            };
-        });
+        const allPerformances = [
+            ...processRows(adGroupResults, true),
+            ...processRows(campaignResults, false)
+        ];
+
+        // Sort by cost descending by default
+        return allPerformances.sort((a, b) => b.cost - a.cost);
 
     } catch (error: unknown) {
         logApiError("getAudiencePerformance", error);
