@@ -77,6 +77,7 @@ export default function AIReportsHub({
         startReport,
         updateProgress,
         completeReport,
+        setCurrentReport,
         failReport,
         clearActiveReport
     } = useReportStore();
@@ -94,7 +95,6 @@ export default function AIReportsHub({
     const setGenerating = (v: boolean) => updateProgress({ generating: v });
     const setGeneratingPhase = (p: 'data' | 'ai' | null) => updateProgress({ phase: p });
     const setGeneratingStatus = (s: string | null) => updateProgress({ status: s });
-    const setCurrentReport = (r: GeneratedReport | null) => updateProgress({ currentReport: r });
     const setAbortController = (c: AbortController | null) => updateProgress({ abortController: c });
 
     // Settings

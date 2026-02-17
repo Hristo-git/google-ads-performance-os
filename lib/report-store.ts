@@ -26,6 +26,7 @@ interface ReportStore {
     startReport: (templateId: ReportTemplateId, templateName: string, controller: AbortController) => void;
     updateProgress: (updates: Partial<ActiveReportState>) => void;
     completeReport: (report: GeneratedReport) => void;
+    setCurrentReport: (report: GeneratedReport | null) => void;
     failReport: (error: string) => void;
     clearActiveReport: () => void;
     clearNotification: () => void;
@@ -62,6 +63,19 @@ export const useReportStore = create<ReportStore>((set) => ({
             isRead: false,
         }
     })),
+
+    setCurrentReport: (report) => set({
+        activeReport: report ? {
+            templateId: report.templateId,
+            templateName: report.templateName,
+            generating: false,
+            phase: null,
+            status: null,
+            currentReport: report,
+            error: null,
+            abortController: null,
+        } : null
+    }),
 
     failReport: (error) => set((state) => ({
         activeReport: state.activeReport ? { ...state.activeReport, error, generating: false, phase: null, status: null } : null
