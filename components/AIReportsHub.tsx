@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { REPORT_TEMPLATE_DEFINITIONS } from '@/lib/report-templates';
+import { useReportStore } from '@/lib/report-store';
 import type { Campaign, AdGroup, SearchTerm, KeywordWithQS, AdWithStrength, ReportTemplateId, ReportSettings, GeneratedReport, ReportTemplate } from '@/types/google-ads';
 
 // Helper: Split analysis into two documents
@@ -60,10 +61,6 @@ export default function AIReportsHub({
     userRole,
 }: AIReportsHubProps) {
     const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
-    const [generating, setGenerating] = useState(false);
-    const [generatingPhase, setGeneratingPhase] = useState<'data' | 'ai' | null>(null);
-    const [currentReport, setCurrentReport] = useState<GeneratedReport | null>(null);
-    const [error, setError] = useState<string | null>(null);
     const [historySearchQuery, setHistorySearchQuery] = useState('');
     const [historyResults, setHistoryResults] = useState<any[]>([]);
     const [searchingHistory, setSearchingHistory] = useState(false);
@@ -72,8 +69,32 @@ export default function AIReportsHub({
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [lastDataPayload, setLastDataPayload] = useState<any>(null);
     const [showDataPayload, setShowDataPayload] = useState<boolean>(false);
-    const [generatingStatus, setGeneratingStatus] = useState<string | null>(null);
-    const [abortController, setAbortController] = useState<AbortController | null>(null);
+
+    // Global Store
+    const {
+        activeReport,
+        startReport,
+        updateProgress,
+        completeReport,
+        failReport,
+        clearActiveReport
+    } = useReportStore();
+
+    // Mapping local states to global store for simpler refactoring
+    const generating = activeReport?.generating || false;
+    const generatingPhase = activeReport?.phase || null;
+    const generatingStatus = activeReport?.status || null;
+    const currentReport = activeReport?.currentReport || null;
+    const error = activeReport?.error || null;
+    const abortController = activeReport?.abortController || null;
+
+    // Local setter wrappers for easier migration
+    const setError = (err: string | null) => failReport(err || "");
+    const setGenerating = (v: boolean) => updateProgress({ generating: v });
+    const setGeneratingPhase = (p: 'data' | 'ai' | null) => updateProgress({ phase: p });
+    const setGeneratingStatus = (s: string | null) => updateProgress({ status: s });
+    const setCurrentReport = (r: GeneratedReport | null) => updateProgress({ currentReport: r });
+    const setAbortController = (c: AbortController | null) => updateProgress({ abortController: c });
 
     // Settings
     const [settings, setSettings] = useState<ReportSettings>({
@@ -109,12 +130,11 @@ export default function AIReportsHub({
         if (!selectedTemplate || generating) return;
 
         const controller = new AbortController();
-        setAbortController(controller);
-        setGenerating(true);
-        setError(null);
-        setGeneratingStatus(language === 'en' ? 'Preparing data for analysis...' : 'Подготовка на данни за анализ...');
-        setCurrentReport(null);
-        setGeneratingPhase('data');
+        const templateName = (settings.language === 'en' ? selectedTemplate.nameEN : selectedTemplate.nameBG);
+        const periodSuffix = dateRange ? ` (${dateRange.start} — ${dateRange.end})` : '';
+
+        // Start global tracking
+        startReport(selectedTemplate.id, templateName + periodSuffix, controller);
 
         try {
             // Prepare data based on template requirements
@@ -321,6 +341,19 @@ export default function AIReportsHub({
                 });
             }
 
+            // Successfully finished - move to completed state in store
+            if (analysis) {
+                const finalReport: GeneratedReport = {
+                    id: `${selectedTemplate.id}_${Date.now()}`,
+                    templateId: selectedTemplate.id,
+                    templateName: (settings.language === 'en' ? selectedTemplate.nameEN : selectedTemplate.nameBG) + periodSuffix,
+                    timestamp: new Date().toISOString(),
+                    analysis,
+                    settings,
+                };
+                completeReport(finalReport);
+            }
+
             // Sync with history state so it appears in the list immediately
             if (currentReport) {
                 setHistoryResults(prev => {
@@ -345,14 +378,12 @@ export default function AIReportsHub({
         } catch (err: any) {
             if (err.name === 'AbortError') {
                 console.log('Report generation aborted by user');
+                clearActiveReport();
                 return;
             }
             console.error('Report generation error:', err);
-            setError(err.message || 'Failed to generate report');
+            failReport(err.message || 'Failed to generate report');
         } finally {
-            setGenerating(false);
-            setGeneratingPhase(null);
-            setGeneratingStatus(null);
             setAbortController(null);
         }
     };

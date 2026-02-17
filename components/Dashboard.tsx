@@ -13,6 +13,7 @@ import StrategicInsights from "./StrategicInsights";
 import AIReportsHub from "./AIReportsHub";
 import AccountHealthWidget from "./AccountHealthWidget";
 import NGramInsights from "./NGramInsights";
+import { BackgroundReportIndicator } from "./BackgroundReportIndicator";
 import Tooltip from "./Tooltip";
 
 const Sparkline = ({ data, color = "#a78bfa" }: { data: number[], color?: string }) => {
@@ -426,8 +427,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     // Sync state with URL parameter (from props) and trigger data refresh
     useEffect(() => {
         if (customerId && customerId !== selectedAccountId) {
-            console.log(`[Dashboard] Account changed from ${selectedAccountId} to ${customerId}`);
-            // Clear existing data to force refresh
+            console.log(`[Dashboard] Account changed from ${selectedAccountId} to ${customerId} (reactive trigger)`);
+            // Explicitly clear all data states to prevent cross-account leakage
             setCampaigns([]);
             setAdGroups([]);
             setAssetGroups([]);
@@ -438,9 +439,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             setPmaxAssets([]);
             setAccount(null);
             setStrategicBreakdown(null);
-            // Update the selected account ID
+            setHealthData(null);
+            setSearchTerms([]);
+            setDeviceBreakdown([]);
+            // Update the selected account ID - this will trigger fetchCoreData via its dependency
             setSelectedAccountId(customerId);
-            // Data will be refetched automatically by the useEffect that watches selectedAccountId
         }
     }, [customerId, selectedAccountId]);
 
@@ -508,6 +511,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         console.log(`[fetchCoreData] Called with:`, { selectedAccountId, dateRange });
         setLoading(true);
         setError(null);
+
+        // Guard: If account switch is in progress, ensure we don't have stale data
+        // This is a safety clear in case the useEffect hasn't fully propagated or a re-fetch is forced
+        if (campaigns.length > 0 && account?.id !== selectedAccountId) {
+            console.log(`[fetchCoreData] Safety clear of stale data for account ${account?.id}`);
+            setCampaigns([]);
+            setAccount(null);
+        }
+
         try {
             const statusParam = hideStopped ? '&status=ENABLED' : '';
             const commonParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
@@ -1215,7 +1227,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                     value={selectedAccountId}
                                     onChange={(e) => {
                                         const newId = e.target.value;
-                                        setSelectedAccountId(newId);
+                                        // DO NOT manually call setSelectedAccountId here.
+                                        // Rely on the URL change to trigger the reactive useEffect,
+                                        // which handles both state clearing and ID updating synchronously.
                                         router.push(`/?customerId=${newId}`);
                                     }}
                                     className="bg-transparent text-xs text-white border-none focus:ring-0 cursor-pointer appearance-none hover:text-blue-400 transition-colors"
@@ -2344,6 +2358,10 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                     </main>
                 )
                 }
+                <BackgroundReportIndicator
+                    onNavigateToReports={() => setNavigation({ level: 'account', view: 'reports' })}
+                    currentView={navigation.view || 'dashboard'}
+                />
             </div >
         </div >
     );
