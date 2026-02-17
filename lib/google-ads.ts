@@ -2398,19 +2398,29 @@ WHERE
  */
 function resolveAudienceName(row: any): string {
     const criterion = row.ad_group_criterion || row.campaign_criterion;
+
+    // If it's a PMax signal, use the audience name from the attributed resource
+    if (row.audience?.name) return row.audience.name;
+
     if (!criterion) return 'Unknown Audience';
 
     if (criterion.keyword?.text) return criterion.keyword.text;
-    if (criterion.user_list?.user_list) return `User List: ${criterion.user_list.user_list.split('/').pop()}`;
-    if (criterion.affinity?.affinity) return `Affinity: ${criterion.affinity.affinity.split('/').pop()}`;
-    if (criterion.in_market?.in_market) return `In-Market: ${criterion.in_market.in_market.split('/').pop()}`;
-    if (criterion.custom_audience?.custom_audience) return `Custom: ${criterion.custom_audience.custom_audience.split('/').pop()}`;
-    if (criterion.custom_affinity?.custom_affinity) return `Custom Affinity: ${criterion.custom_affinity.custom_affinity.split('/').pop()}`;
-    if (criterion.custom_intent?.custom_intent) return `Custom Intent: ${criterion.custom_intent.custom_intent.split('/').pop()}`;
-    if (criterion.combined_audience?.combined_audience) return `Combined: ${criterion.combined_audience.combined_audience.split('/').pop()}`;
-    if (criterion.user_interest?.user_interest) return `Interest: ${criterion.user_interest.user_interest.split('/').pop()}`;
 
-    return `Criterion(${criterion.criterion_id || 'unknown'})`;
+    // Fallback names for various types
+    const type = criterion.type || 'UNKNOWN';
+    const resourceName = criterion.user_list?.user_list ||
+        criterion.affinity?.affinity ||
+        criterion.in_market?.in_market ||
+        criterion.user_interest?.user_interest ||
+        criterion.custom_audience?.custom_audience ||
+        criterion.combined_audience?.combined_audience;
+
+    if (resourceName) {
+        const id = resourceName.split('/').pop();
+        return `${type.charAt(0) + type.slice(1).toLowerCase().replace('_', ' ')}: ${id}`;
+    }
+
+    return `${type} (${criterion.criterion_id || 'unknown'})`;
 }
 
 // Audience Performance Data
@@ -2428,8 +2438,8 @@ export async function getAudiencePerformance(
         ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
 
     try {
-        // Query both views in parallel
-        const [adGroupResults, campaignResults] = await Promise.all([
+        // Query Ad Group, Campaign, and Asset Group (PMax) in parallel
+        const [adGroupResults, campaignResults, pmaxSignals] = await Promise.all([
             customer.query(`
                 SELECT
                     campaign.id,
@@ -2437,14 +2447,9 @@ export async function getAudiencePerformance(
                     ad_group.id,
                     ad_group.name,
                     ad_group_criterion.criterion_id,
+                    ad_group_criterion.type,
                     ad_group_criterion.keyword.text,
                     ad_group_criterion.user_list.user_list,
-                    ad_group_criterion.affinity.affinity,
-                    ad_group_criterion.in_market.in_market,
-                    ad_group_criterion.custom_audience.custom_audience,
-                    ad_group_criterion.combined_audience.combined_audience,
-                    ad_group_criterion.user_interest.user_interest,
-                    ad_group_criterion.type,
                     metrics.impressions,
                     metrics.clicks,
                     metrics.cost_micros,
@@ -2457,19 +2462,14 @@ export async function getAudiencePerformance(
                 AND ad_group.status != 'REMOVED'
                 ${dateFilter} ${campaignFilter}
                 LIMIT 1000
-            `),
+            `).catch(e => { console.error("AdGroup query failed:", e.message); return []; }),
             customer.query(`
                 SELECT
                     campaign.id,
                     campaign.name,
                     campaign_criterion.criterion_id,
-                    campaign_criterion.user_list.user_list,
-                    campaign_criterion.affinity.affinity,
-                    campaign_criterion.in_market.in_market,
-                    campaign_criterion.custom_audience.custom_audience,
-                    campaign_criterion.combined_audience.combined_audience,
-                    campaign_criterion.user_interest.user_interest,
                     campaign_criterion.type,
+                    campaign_criterion.user_list.user_list,
                     metrics.impressions,
                     metrics.clicks,
                     metrics.cost_micros,
@@ -2481,10 +2481,24 @@ export async function getAudiencePerformance(
                 WHERE campaign.status != 'REMOVED'
                 ${dateFilter} ${campaignFilter}
                 LIMIT 1000
-            `)
+            `).catch(e => { console.error("Campaign query failed:", e.message); return []; }),
+            customer.query(`
+                SELECT
+                    campaign.id,
+                    campaign.name,
+                    asset_group.id,
+                    asset_group.name,
+                    asset_group_signal.audience.audience,
+                    audience.id,
+                    audience.name
+                FROM asset_group_signal
+                WHERE campaign.status != 'REMOVED'
+                ${campaignFilter}
+                LIMIT 1000
+            `).catch(e => { console.error("PMax signal query failed:", e.message); return []; })
         ]);
 
-        const processRows = (rows: any[], isAdGroup: boolean) => {
+        const processRows = (rows: any[], level: 'adgroup' | 'campaign' | 'pmax') => {
             return rows.map((row) => {
                 const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
                 const conversions = Number(row.metrics?.conversions) || 0;
@@ -2495,9 +2509,11 @@ export async function getAudiencePerformance(
                 return {
                     campaignId: row.campaign?.id?.toString() || "",
                     campaignName: row.campaign?.name || "",
-                    adGroupId: isAdGroup ? (row.ad_group?.id?.toString() || "") : "CAMPAIGN_LEVEL",
-                    adGroupName: isAdGroup ? (row.ad_group?.name || "") : "All Ad Groups",
-                    criterionId: (row.ad_group_criterion?.criterion_id || row.campaign_criterion?.criterion_id || "").toString(),
+                    adGroupId: level === 'adgroup' ? (row.ad_group?.id?.toString() || "") :
+                        level === 'pmax' ? (row.asset_group?.id?.toString() || "PMAX_ASSET") : "CAMPAIGN_LEVEL",
+                    adGroupName: level === 'adgroup' ? (row.ad_group?.name || "") :
+                        level === 'pmax' ? (row.asset_group?.name || "Asset Group") : "All Ad Groups",
+                    criterionId: (row.ad_group_criterion?.criterion_id || row.campaign_criterion?.criterion_id || row.audience?.id || "").toString(),
                     audienceName: resolveAudienceName(row),
                     impressions,
                     clicks,
@@ -2513,12 +2529,14 @@ export async function getAudiencePerformance(
         };
 
         const allPerformances = [
-            ...processRows(adGroupResults, true),
-            ...processRows(campaignResults, false)
+            ...processRows(adGroupResults, 'adgroup'),
+            ...processRows(campaignResults, 'campaign'),
+            ...processRows(pmaxSignals, 'pmax')
         ];
 
-        // Sort by cost descending by default
-        return allPerformances.sort((a, b) => b.cost - a.cost);
+        // Unique audiences by name and ID to avoid duplicates from different levels if they exist
+        // But usually, they are distinct. Let's just sort.
+        return allPerformances.sort((a, b) => b.cost - a.cost || b.impressions - a.impressions);
 
     } catch (error: unknown) {
         logApiError("getAudiencePerformance", error);
