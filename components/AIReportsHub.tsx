@@ -16,6 +16,11 @@ function splitDocuments(markdown: string): { executive: string; technical: strin
         /##\s*ДОКУМЕНТ\s*2[:\s]/i,
         /---\s*\n###?\s*ТЕХНИЧЕСКИ АНАЛИЗ/i,
         /---\s*\n###?\s*TECHNICAL ANALYSIS/i,
+        /###?\s*ТЕХНИЧЕСКИ АНАЛИЗ/i,
+        /###?\s*TECHNICAL ANALYSIS/i,
+        /\n##\s*2\.\s*ТЕХНИЧЕСКИ АНАЛИЗ/i,
+        /\n##\s*2\.\s*TECHNICAL ANALYSIS/i,
+        /\n---\s*\n/i, // Fallback to horizontal rule if seen after some content
     ];
 
     for (const pattern of splitPatterns) {
@@ -609,8 +614,12 @@ export default function AIReportsHub({
                         <div className="px-6 py-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
                             <div className="flex items-center gap-4">
                                 <button
-                                    onClick={() => { setCurrentReport(null); setSelectedTemplate(null); }}
-                                    className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm font-medium"
+                                    onClick={() => {
+                                        setCurrentReport(null);
+                                        setSelectedTemplate(null);
+                                        clearActiveReport();
+                                    }}
+                                    className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm font-medium pr-4"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
