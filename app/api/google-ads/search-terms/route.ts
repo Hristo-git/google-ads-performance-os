@@ -104,28 +104,58 @@ export async function GET(request: Request) {
         console.log(`[SearchTermsAPI] Standard Query result count: ${searchTerms.length}`);
 
         // 2. Fetch PMax Search Insights
-        // Simplified PMax query for category labels
-        const pmaxQuery = `
-            SELECT 
-                campaign_search_term_insight.category_label,
-                metrics.impressions,
-                metrics.clicks,
-                metrics.conversions,
-                metrics.conversions_value
-            FROM 
-                campaign_search_term_insight
-            WHERE 
-                segments.date BETWEEN '${startDate}' AND '${endDate}'
-        `;
-
+        // pmaxInsight requires a single campaign ID in the WHERE clause
         let pmaxInsights: any[] = [];
         try {
-            console.log(`[SearchTermsAPI] Fetching PMax insights for ${customerId}...`);
-            pmaxInsights = await customer.query(pmaxQuery);
-            console.log(`[SearchTermsAPI] PMax Insight Query result count: ${pmaxInsights.length}`);
+            console.log(`[SearchTermsAPI] Fetching PMax campaigns for ${customerId}...`);
+            const pmaxCampaigns = await customer.query(`
+                SELECT campaign.id, campaign.name 
+                FROM campaign 
+                WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX' 
+                AND campaign.status != 'REMOVED'
+            `);
+
+            console.log(`[SearchTermsAPI] Found ${pmaxCampaigns.length} PMax campaigns.`);
+
+            if (pmaxCampaigns.length > 0) {
+                // Fetch insights for each PMax campaign in parallel
+                const insightPromises = pmaxCampaigns.map(async (camp: any) => {
+                    const campId = camp.campaign.id;
+                    const campName = camp.campaign.name;
+
+                    try {
+                        const results = await customer.query(`
+                            SELECT 
+                                campaign_search_term_insight.category_label,
+                                metrics.impressions,
+                                metrics.clicks,
+                                metrics.conversions,
+                                metrics.conversions_value
+                            FROM 
+                                campaign_search_term_insight
+                            WHERE 
+                                segments.date BETWEEN '${startDate}' AND '${endDate}'
+                                AND campaign_search_term_insight.campaign_id = '${campId}'
+                        `);
+
+                        // Map results to include campaign context
+                        return results.map((r: any) => ({
+                            ...r,
+                            _campaignId: campId,
+                            _campaignName: campName
+                        }));
+                    } catch (err: any) {
+                        console.error(`[SearchTermsAPI] PMax query failed for campaign ${campId}:`, err.message);
+                        return [];
+                    }
+                });
+
+                const allPmaxResults = await Promise.all(insightPromises);
+                pmaxInsights = allPmaxResults.flat();
+                console.log(`[SearchTermsAPI] Total PMax Insight rows collected: ${pmaxInsights.length}`);
+            }
         } catch (e: any) {
-            const errorMsg = e.errors ? e.errors.map((err: any) => err.message).join(', ') : e.message;
-            console.error('[SearchTermsAPI] PMax insights query failed:', errorMsg || e);
+            console.error('[SearchTermsAPI] PMax campaign discovery failed:', e.message);
         }
 
         const formattedSearchTerms = [
@@ -148,8 +178,8 @@ export async function GET(request: Request) {
                 conversionRate: Number(row.metrics?.clicks) > 0 ? Number(row.metrics?.conversions) / Number(row.metrics?.clicks) : 0,
             })),
             ...pmaxInsights.map((row: any) => ({
-                campaignId: '',
-                campaignName: 'PMax Insight',
+                campaignId: row._campaignId?.toString() || '',
+                campaignName: row._campaignName || 'PMax Insight',
                 adGroupId: '',
                 adGroupName: '',
                 searchTerm: `[PMax Insight] ${row.campaign_search_term_insight.category_label}`,
