@@ -1697,8 +1697,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                                                         if (isPMax) return (
                                                             <>
+                                                                <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
+                                                                <th className="px-4 py-3 text-right font-medium">ROAS</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Ad Strength</th>
-                                                                <th className="px-4 py-3 text-right font-medium"></th>
                                                             </>
                                                         );
                                                         if (isShopping) return (
@@ -1888,6 +1891,32 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                                                             if (isPMax) return (
                                                                 <>
+                                                                    <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
+                                                                        {((item as any).impressions ?? 0).toLocaleString()}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
+                                                                        {((item as any).clicks ?? 0).toLocaleString()}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {(item as any).conversionValue > 0 ? (
+                                                                            <span className="text-emerald-400 font-mono text-xs font-semibold">
+                                                                                €{((item as any).conversionValue as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500 text-xs">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {(item as any).roas != null ? (
+                                                                            <span className={`font-mono text-xs font-semibold ${(item as any).roas >= 3 ? 'text-emerald-400' :
+                                                                                    (item as any).roas >= 1 ? 'text-amber-400' : 'text-red-400'
+                                                                                }`}>
+                                                                                {((item as any).roas as number).toFixed(2)}x
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500 text-xs">—</span>
+                                                                        )}
+                                                                    </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {(() => {
                                                                             const s = (item as any).strength || (item as any).adStrength || 'UNSPECIFIED';
@@ -1899,7 +1928,6 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             );
                                                                         })()}
                                                                     </td>
-                                                                    <td className="px-4 py-4 text-right"></td>
                                                                 </>
                                                             );
 
