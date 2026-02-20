@@ -61,19 +61,27 @@ export async function GET(request: Request) {
 
             console.log(`Fetching ad groups for customerId: ${customerId}, campaignId: ${campaignId}, onlyEnabled: ${onlyEnabled}`);
 
+            const campaignTypeParam = searchParams.get('campaignType') || '';
+
             let adGroups: AdGroupPerformance[] = [];
 
             if (campaignId) {
-                // Check campaign type
-                // getCampaigns signature: (refreshToken, customerId, dateRange, onlyEnabled, userId)
-                // It fetches all campaigns, so we find the one we need.
-                const campaigns = await getCampaigns(refreshToken, customerId, dateRange, false, session.user.id);
-                const campaign = campaigns.find(c => c.id === campaignId);
+                // Determine campaign type — prefer the param passed by the frontend
+                // to avoid an extra getCampaigns() API call.
+                let channelType = campaignTypeParam;
 
-                if (campaign?.advertisingChannelType === 'PERFORMANCE_MAX') {
+                if (!channelType) {
+                    // Fallback: fetch campaigns to detect the type
+                    const campaigns = await getCampaigns(refreshToken, customerId, dateRange, false, session.user.id);
+                    const campaign = campaigns.find(c => c.id === campaignId);
+                    channelType = campaign?.advertisingChannelType || '';
+                }
+
+                if (channelType === 'PERFORMANCE_MAX') {
                     console.log(`[AdGroups] Detected PMax campaign ${campaignId}. Fetching Asset Groups.`);
                     adGroups = await getAssetGroups(refreshToken, campaignId, customerId, dateRange, onlyEnabled, session.user.id);
                 } else {
+                    // Shopping, Search, Display, Video, Demand Gen — all use standard ad_group GAQL
                     adGroups = await getAdGroups(refreshToken, campaignId, customerId, dateRange, onlyEnabled, session.user.id);
                 }
             } else {

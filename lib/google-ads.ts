@@ -29,6 +29,7 @@ const CACHE_TTL = {
     assets: 5 * 60 * 1000,
     keywords: 5 * 60 * 1000,
     assetGroups: 5 * 60 * 1000,
+    listingGroups: 5 * 60 * 1000,
     ads: 5 * 60 * 1000,
     device: 5 * 60 * 1000,
     search: 5 * 60 * 1000,
@@ -1110,6 +1111,128 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
         }
     });
 }
+
+// ─── Shopping: Listing Groups (Product Groups) ───────────────────────────────
+
+export interface ListingGroupItem {
+    id: string;
+    adGroupId: string;
+    adGroupName: string;
+    campaignId: string;
+    campaignName: string;
+    dimension: string;  // e.g., "All products", product type, brand, custom label
+    caseValue: string;  // The specific value (e.g., product type value)
+    type: string;       // SUBDIVISION | UNIT
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    ctr: number;
+    cpc: number;
+    roas: number | null;
+    cpa: number | null;
+}
+
+export async function getListingGroups(
+    refreshToken: string,
+    adGroupId: string,
+    customerId?: string,
+    dateRange?: DateRange
+): Promise<ListingGroupItem[]> {
+    return withCache('listingGroups', [adGroupId, customerId, dateRange], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
+
+        try {
+            const query = `
+                SELECT
+                    ad_group_criterion.criterion_id,
+                    ad_group_criterion.listing_group.type,
+                    ad_group_criterion.listing_group.case_value.product_type.level,
+                    ad_group_criterion.listing_group.case_value.product_type.value,
+                    ad_group_criterion.listing_group.case_value.product_brand.value,
+                    ad_group_criterion.listing_group.case_value.product_custom_attribute.index,
+                    ad_group_criterion.listing_group.case_value.product_custom_attribute.value,
+                    ad_group_criterion.listing_group.case_value.product_item_id.value,
+                    ad_group.id,
+                    ad_group.name,
+                    campaign.id,
+                    campaign.name,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value,
+                    metrics.ctr,
+                    metrics.average_cpc
+                FROM listing_group_view
+                WHERE ad_group.id = ${adGroupId}
+                    AND ad_group_criterion.status != 'REMOVED'
+                    ${dateFilter}
+                ORDER BY metrics.cost_micros DESC
+                LIMIT 500
+            `;
+
+            console.log(`[getListingGroups] adGroupId=${adGroupId}, customerId=${customerId}`);
+            const rows = await customer.query(query);
+            console.log(`[getListingGroups] Found ${rows.length} listing groups`);
+
+            return rows.map((row): ListingGroupItem => {
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+                const caseVal = row.ad_group_criterion?.listing_group?.case_value;
+
+                // Determine human-readable dimension label
+                let dimension = 'All Products';
+                let caseValue = '';
+                if (caseVal?.product_type?.value) {
+                    dimension = `Product Type (L${caseVal.product_type.level || 1})`;
+                    caseValue = caseVal.product_type.value;
+                } else if (caseVal?.product_brand?.value) {
+                    dimension = 'Brand';
+                    caseValue = caseVal.product_brand.value;
+                } else if (caseVal?.product_custom_attribute?.value) {
+                    dimension = `Custom Label ${caseVal.product_custom_attribute.index ?? ''}`.trim();
+                    caseValue = caseVal.product_custom_attribute.value;
+                } else if (caseVal?.product_item_id?.value) {
+                    dimension = 'Item ID';
+                    caseValue = caseVal.product_item_id.value;
+                }
+
+                const lgType = typeof row.ad_group_criterion?.listing_group?.type === 'string'
+                    ? row.ad_group_criterion.listing_group.type
+                    : String(row.ad_group_criterion?.listing_group?.type || 'UNIT');
+
+                return {
+                    id: row.ad_group_criterion?.criterion_id?.toString() || '',
+                    adGroupId: row.ad_group?.id?.toString() || '',
+                    adGroupName: row.ad_group?.name || '',
+                    campaignId: row.campaign?.id?.toString() || '',
+                    campaignName: row.campaign?.name || '',
+                    dimension,
+                    caseValue,
+                    type: lgType,
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    conversionValue,
+                    ctr: Number(row.metrics?.ctr) || 0,
+                    cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null,
+                };
+            });
+        } catch (error: unknown) {
+            logApiError('getListingGroups', error);
+            throw error;
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function getAssetGroupAssets(refreshToken: string, assetGroupId: string, customerId?: string): Promise<PMaxAsset[]> {
     return withCache('assets', ['assetGroup', assetGroupId, customerId], async () => {
