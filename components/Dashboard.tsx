@@ -1045,7 +1045,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         'AVERAGE': 'Average',
         'POOR': 'Poor',
         'PENDING': 'Pending',
-        'UNRATED': 'Няма достатъчно трафик за оценка',
+        'UNRATED': 'Unrated',
         'UNSPECIFIED': '—',
         'UNKNOWN': '—',
     };
@@ -1909,7 +1909,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <td className="px-4 py-4 text-right">
                                                                         {(item as any).roas != null ? (
                                                                             <span className={`font-mono text-xs font-semibold ${(item as any).roas >= 3 ? 'text-emerald-400' :
-                                                                                    (item as any).roas >= 1 ? 'text-amber-400' : 'text-red-400'
+                                                                                (item as any).roas >= 1 ? 'text-amber-400' : 'text-red-400'
                                                                                 }`}>
                                                                                 {((item as any).roas as number).toFixed(2)}x
                                                                             </span>
@@ -1921,11 +1921,17 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         {(() => {
                                                                             const s = (item as any).strength || (item as any).adStrength || 'UNSPECIFIED';
                                                                             const label = AD_STRENGTH_LABEL[s] ?? s;
-                                                                            return (
-                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor(s)}`} title={s}>
+                                                                            const tooltip = s === 'UNRATED'
+                                                                                ? 'Няма достатъчно данни за оценка на Ad Strength'
+                                                                                : undefined;
+                                                                            const badge = (
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor(s)}`} title={tooltip ?? s}>
                                                                                     {label}
                                                                                 </span>
                                                                             );
+                                                                            return tooltip
+                                                                                ? <Tooltip text={tooltip}>{badge}</Tooltip>
+                                                                                : badge;
                                                                         })()}
                                                                     </td>
                                                                 </>
