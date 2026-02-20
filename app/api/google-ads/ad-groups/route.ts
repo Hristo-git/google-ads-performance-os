@@ -65,6 +65,26 @@ export async function GET(request: Request) {
 
             let adGroups: AdGroupPerformance[] = [];
 
+            // Helper: normalize channelType to string name — the Google Ads API sometimes
+            // returns the proto enum NUMBER (e.g. "10" for PERFORMANCE_MAX) via String()
+            const CHANNEL_TYPE_MAP: Record<string, string> = {
+                '10': 'PERFORMANCE_MAX',
+                '3': 'DISPLAY',
+                '4': 'SHOPPING',
+                '5': 'HOTEL',
+                '6': 'VIDEO',
+                '7': 'MULTI_CHANNEL', // also PMax in some contexts
+                '9': 'SMART',
+                '14': 'DEMAND_GEN',
+            };
+            const normalizeChannelType = (ct: string) =>
+                CHANNEL_TYPE_MAP[ct] ?? ct.toUpperCase();
+
+            const isPMax = (ct: string) => {
+                const n = normalizeChannelType(ct);
+                return n === 'PERFORMANCE_MAX' || n === 'MULTI_CHANNEL';
+            };
+
             if (campaignId) {
                 // Determine campaign type — prefer the param passed by the frontend
                 // to avoid an extra getCampaigns() API call.
@@ -77,8 +97,8 @@ export async function GET(request: Request) {
                     channelType = campaign?.advertisingChannelType || '';
                 }
 
-                if (channelType === 'PERFORMANCE_MAX') {
-                    console.log(`[AdGroups] Detected PMax campaign ${campaignId}. Fetching Asset Groups.`);
+                if (isPMax(channelType)) {
+                    console.log(`[AdGroups] Detected PMax campaign ${campaignId} (channelType=${channelType}). Fetching Asset Groups.`);
                     adGroups = await getAssetGroups(refreshToken, campaignId, customerId, dateRange, onlyEnabled, session.user.id);
                 } else {
                     // Shopping, Search, Display, Video, Demand Gen — all use standard ad_group GAQL

@@ -662,7 +662,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             const agRes = await fetch(`/api/google-ads/ad-groups?${adGroupParams}`);
             const agData = await agRes.json();
             if (agData.error) throw new Error(`Ad Groups Error: ${agData.error}`);
-            if (agData.adGroups) setAdGroups(agData.adGroups);
+            // Backend returns `adGroups` for Search/Display/Shopping and `assetGroups` for PMax
+            const groups = agData.adGroups ?? agData.assetGroups;
+            if (groups) setAdGroups(groups);
 
         } catch (err: any) {
             console.error("Failed to fetch ad group data:", err);
@@ -687,6 +689,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             fetchAdGroupData();
         }
     }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
+    // campaigns.length is in deps so we fire once campaigns resolve (initial load guard).
+    // fetchAdGroupData itself guards against campaigns.length === 0.
 
     // Fetch ALL ad groups when entering Strategic Insights (for Quality Audit)
     useEffect(() => {
@@ -697,7 +701,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                     const params = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
                     const res = await fetch(`/api/google-ads/ad-groups?${params}`);
                     const data = await res.json();
-                    if (data.adGroups) setAdGroups(data.adGroups);
+                    if (data.adGroups ?? data.assetGroups) setAdGroups(data.adGroups ?? data.assetGroups);
                     setAuditSnapshotDate(data.snapshotDate || null);
                 } catch (err) {
                     console.error("Failed to fetch ad groups for audit:", err);
