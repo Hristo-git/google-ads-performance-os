@@ -234,8 +234,19 @@ const BIDDING_STRATEGY_LABELS: Record<string, string> = {
     '11': 'Target Imp Share'
 };
 
+// SearchTermTargetingStatus proto enum → human label
+const SEARCH_TERM_STATUS_MAP: Record<string, { label: string; color: string }> = {
+    '2': { label: 'ADDED', color: 'text-emerald-400 bg-emerald-500/10' },
+    'ADDED': { label: 'ADDED', color: 'text-emerald-400 bg-emerald-500/10' },
+    '3': { label: 'EXCLUDED', color: 'text-red-400    bg-red-500/10' },
+    'EXCLUDED': { label: 'EXCLUDED', color: 'text-red-400    bg-red-500/10' },
+    '4': { label: 'ADDED & EXCL.', color: 'text-amber-400 bg-amber-500/10' },
+    'ADDED_EXCLUDED': { label: 'ADDED & EXCL.', color: 'text-amber-400 bg-amber-500/10' },
+    '5': { label: 'NONE', color: 'text-slate-400  bg-slate-700' },
+    'NONE': { label: 'NONE', color: 'text-slate-400  bg-slate-700' },
+};
 
-// Asset Field Type Labels
+
 const ASSET_FIELD_TYPE_LABELS: Record<string, string> = {
     'HEADLINE': 'Headline',
     'DESCRIPTION': 'Description',
@@ -2181,73 +2192,76 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                     </div>
                                                 </div>
 
-                                                {/* Ads with Strength */}
-                                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
-                                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                                        <h2 className="font-semibold text-white">Ads & Ad Strength</h2>
-                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                            {ads.length} ads
-                                                        </span>
-                                                    </div>
-                                                    <div className="p-4 space-y-4">
-                                                        {ads.map((ad) => (
-                                                            <div key={ad.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
-                                                                <div className="flex items-center justify-between mb-3">
-                                                                    {(ad.adStrength === 'POOR' || ad.adStrength === 'AVERAGE') ? (
-                                                                        <Tooltip text={getAdStrengthTip(ad.adStrength, ad.headlinesCount, ad.descriptionsCount, ad.type)}>
-                                                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border-b border-dashed ${ad.adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor(ad.adStrength)}`}>
+                                                {/* Ads with Strength — only shown when ads are available */}
+                                                {ads.length > 0 && (
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                            <h2 className="font-semibold text-white">Ads & Ad Strength</h2>
+                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                                {ads.length} ads
+                                                            </span>
+                                                        </div>
+                                                        <div className="p-4 space-y-4">
+                                                            {ads.map((ad) => (
+                                                                <div key={ad.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
+                                                                    <div className="flex items-center justify-between mb-3">
+                                                                        {(ad.adStrength === 'POOR' || ad.adStrength === 'AVERAGE') ? (
+                                                                            <Tooltip text={getAdStrengthTip(ad.adStrength, ad.headlinesCount, ad.descriptionsCount, ad.type)}>
+                                                                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border-b border-dashed ${ad.adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor(ad.adStrength)}`}>
+                                                                                    {ad.adStrength}
+                                                                                </span>
+                                                                            </Tooltip>
+                                                                        ) : (
+                                                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
                                                                                 {ad.adStrength}
                                                                             </span>
-                                                                        </Tooltip>
-                                                                    ) : (
-                                                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
-                                                                            {ad.adStrength}
-                                                                        </span>
-                                                                    )}
-                                                                    <div className="flex items-center gap-4 text-sm">
-                                                                        {ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) ? (
-                                                                            <Tooltip text={`Add more headlines (currently ${ad.headlinesCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 15}). Aim for at least ${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10} unique headlines with diverse messaging and keywords.`}>
-                                                                                <span className="text-amber-400 border-b border-dashed border-amber-400/40">
+                                                                        )}
+                                                                        <div className="flex items-center gap-4 text-sm">
+                                                                            {ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) ? (
+                                                                                <Tooltip text={`Add more headlines (currently ${ad.headlinesCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 15}). Aim for at least ${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10} unique headlines with diverse messaging and keywords.`}>
+                                                                                    <span className="text-amber-400 border-b border-dashed border-amber-400/40">
+                                                                                        Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
+                                                                                    </span>
+                                                                                </Tooltip>
+                                                                            ) : (
+                                                                                <span className="text-slate-400">
                                                                                     Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
                                                                                 </span>
-                                                                            </Tooltip>
-                                                                        ) : (
-                                                                            <span className="text-slate-400">
-                                                                                Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
-                                                                            </span>
-                                                                        )}
-                                                                        {ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) ? (
-                                                                            <Tooltip text={`Add more descriptions (currently ${ad.descriptionsCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 4}). Each description should highlight a unique benefit or call-to-action.`}>
-                                                                                <span className="text-amber-400 border-b border-dashed border-amber-400/40">
+                                                                            )}
+                                                                            {ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) ? (
+                                                                                <Tooltip text={`Add more descriptions (currently ${ad.descriptionsCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 4}). Each description should highlight a unique benefit or call-to-action.`}>
+                                                                                    <span className="text-amber-400 border-b border-dashed border-amber-400/40">
+                                                                                        Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
+                                                                                    </span>
+                                                                                </Tooltip>
+                                                                            ) : (
+                                                                                <span className="text-slate-400">
                                                                                     Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
                                                                                 </span>
-                                                                            </Tooltip>
-                                                                        ) : (
-                                                                            <span className="text-slate-400">
-                                                                                Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {ad.headlines.slice(0, 6).map((headline, idx) => (
+                                                                            <span key={idx} className="text-xs bg-slate-600/50 text-slate-300 px-2 py-1 rounded">
+                                                                                {headline}
+                                                                            </span>
+                                                                        ))}
+                                                                        {ad.headlines.length > 6 && (
+                                                                            <span className="text-xs text-slate-500">
+                                                                                +{ad.headlines.length - 6} more
                                                                             </span>
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {ad.headlines.slice(0, 6).map((headline, idx) => (
-                                                                        <span key={idx} className="text-xs bg-slate-600/50 text-slate-300 px-2 py-1 rounded">
-                                                                            {headline}
-                                                                        </span>
-                                                                    ))}
-                                                                    {ad.headlines.length > 6 && (
-                                                                        <span className="text-xs text-slate-500">
-                                                                            +{ad.headlines.length - 6} more
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                        {ads.length === 0 && (
-                                                            <p className="text-slate-500 text-sm text-center py-4">No ads found.</p>
-                                                        )}
+                                                            ))}
+                                                            {ads.length === 0 && (
+                                                                <p className="text-slate-500 text-sm text-center py-4">No ads found.</p>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
+                                                {/* /Ads with Strength */}
 
                                                 {/* Negative Keywords */}
                                                 <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
@@ -2404,9 +2418,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 <div className="font-medium text-white max-w-md truncate" title={term.searchTerm}>
                                                                                     {term.searchTerm}
                                                                                 </div>
-                                                                                <div className="text-xs text-slate-500 mt-0.5">
-                                                                                    {term.searchTermStatus}
-                                                                                </div>
+                                                                                {(() => {
+                                                                                    const s = SEARCH_TERM_STATUS_MAP[String(term.searchTermStatus)] ||
+                                                                                        { label: String(term.searchTermStatus) || '—', color: 'text-slate-500 bg-slate-700' };
+                                                                                    return s.label !== 'NONE' && s.label !== '—' ? (
+                                                                                        <span className={`inline-flex mt-1 px-1.5 py-0.5 rounded text-xs font-medium ${s.color}`}>
+                                                                                            {s.label}
+                                                                                        </span>
+                                                                                    ) : null;
+                                                                                })()}
                                                                             </td>
                                                                             <td className="px-4 py-3 text-right">{term.clicks.toLocaleString()}</td>
                                                                             <td className="px-4 py-3 text-right">{term.impressions.toLocaleString()}</td>
