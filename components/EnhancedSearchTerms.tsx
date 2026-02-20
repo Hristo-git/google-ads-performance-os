@@ -48,7 +48,7 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
 
     // 1. Filter by Device
     let processedData = deviceFilter
-        ? data.filter(item => item.device === deviceFilter)
+        ? data.filter(item => (item.device ?? '') === deviceFilter)
         : data;
 
     // 2. Filter by Brand
@@ -83,7 +83,7 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                 existing.conversionRate = existing.clicks > 0 ? existing.conversions / existing.clicks : 0;
 
                 // Keep device only if same, else mark mixed
-                if (existing.device !== item.device) existing.device = 'MIXED';
+                if ((existing.device ?? '') !== (item.device ?? '')) existing.device = 'MIXED';
             }
         });
         processedData = Array.from(aggregatedMap.values());
@@ -171,10 +171,10 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                                 {devices.map(device => (
                                     <button
                                         key={device}
-                                        onClick={() => setDeviceFilter(device)}
+                                        onClick={() => setDeviceFilter(device ?? null)}
                                         className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${deviceFilter === device ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
                                     >
-                                        {getDeviceIcon(device)}
+                                        {getDeviceIcon(device ?? '')}
                                     </button>
                                 ))}
                             </div>
@@ -369,7 +369,7 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                                 {!groupByTerm && (
                                     <td className="py-2.5 px-2 text-center">
                                         <span className="text-lg opacity-80 group-hover:opacity-100 transition-opacity" title={item.device}>
-                                            {getDeviceIcon(item.device)}
+                                            {getDeviceIcon(item.device ?? '')}
                                         </span>
                                     </td>
                                 )}

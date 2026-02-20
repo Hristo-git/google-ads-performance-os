@@ -88,8 +88,6 @@ export async function GET(request: Request) {
                 ad_group.name,
                 search_term_view.search_term,
                 search_term_view.status,
-                segments.date,
-                segments.device,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
@@ -104,7 +102,7 @@ export async function GET(request: Request) {
                 AND metrics.impressions > 0
             ORDER BY
                 metrics.cost_micros DESC
-            LIMIT 2000
+            LIMIT 5000
             `;
 
         const searchTerms = await customer.query(query);
@@ -173,8 +171,6 @@ export async function GET(request: Request) {
                 adGroupName: row.ad_group?.name || '',
                 searchTerm: row.search_term_view.search_term,
                 searchTermStatus: String(row.search_term_view?.status) || 'NONE',
-                date: row.segments?.date || '',
-                device: row.segments?.device ? getDeviceName(row.segments.device) : 'ALL',
                 impressions: Number(row.metrics?.impressions) || 0,
                 clicks: Number(row.metrics?.clicks) || 0,
                 cost: Number(row.metrics?.cost_micros) / 1000000 || 0,

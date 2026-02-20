@@ -297,8 +297,8 @@ export interface SearchTerm {
     adGroupName?: string;
     searchTerm: string;
     searchTermStatus?: string;
-    date: string;
-    device: string; // MOBILE, DESKTOP, TABLET, UNKNOWN
+    date?: string;
+    device?: string; // MOBILE, DESKTOP, TABLET, UNKNOWN — optional (not segmented in adgroup view)
     impressions: number;
     clicks: number;
     cost: number;
