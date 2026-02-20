@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import StrategicBreakdown from "./StrategicBreakdown";
 import DeviceBreakdown from "./DeviceBreakdown";
 import EnhancedSearchTerms from "./EnhancedSearchTerms";
@@ -56,6 +57,45 @@ export default function StrategicInsights({
     const [analyzing, setAnalyzing] = useState(false);
     const [selectedModel, setSelectedModel] = useState<string>('sonnet-4.5');
     const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives' | 'audiences'>('breakdown');
+
+    // --- Tab Persistence Logic ---
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const pathname = usePathname();
+
+    // 1. Initialize tab from URL on mount
+    useEffect(() => {
+        const tabParam = searchParams.get('tab');
+        if (tabParam && ['breakdown', 'audit', 'ai', 'device', 'search', 'heatmap', 'landing', 'conversions', 'geographic', 'negatives', 'audiences'].includes(tabParam)) {
+            if (activeTab !== tabParam) {
+                setActiveTab(tabParam as any);
+            }
+        }
+    }, [searchParams]);
+
+    // 2. Sync state changes to URL
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        let changed = false;
+
+        if (activeTab && activeTab !== 'breakdown') {
+            if (params.get('tab') !== activeTab) {
+                params.set('tab', activeTab);
+                changed = true;
+            }
+        } else {
+            if (params.has('tab')) {
+                params.delete('tab');
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            const newSearch = params.toString();
+            router.replace(`${pathname}?${newSearch}`, { scroll: false });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, pathname, router]);
 
     const runAnalysis = async () => {
         setAnalyzing(true);

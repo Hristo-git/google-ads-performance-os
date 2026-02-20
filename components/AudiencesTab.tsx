@@ -151,53 +151,79 @@ export default function AudiencesTab({
                     <table className="w-full text-xs">
                         <thead>
                             <tr className="text-slate-500 border-b border-slate-700">
-                                <th
-                                    className="text-left py-2 font-medium cursor-pointer hover:text-slate-300 transition-colors pl-2"
-                                    onClick={() => handleSort('audienceName')}
-                                >
-                                    <div className="flex items-center gap-1">
+                                <th className="text-left py-2 font-medium pl-2">
+                                    <button
+                                        className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full text-left"
+                                        onClick={() => handleSort('audienceName')}
+                                        type="button"
+                                    >
                                         {language === 'en' ? 'Audience' : 'Аудитория'}
                                         {sortBy === 'audienceName' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
-                                    </div>
+                                    </button>
                                 </th>
-                                <th
-                                    className="text-left py-2 font-medium cursor-pointer hover:text-slate-300 transition-colors hidden md:table-cell"
-                                    onClick={() => handleSort('campaignName')}
-                                >
-                                    <div className="flex items-center gap-1">
+                                <th className="text-left py-2 font-medium hidden md:table-cell">
+                                    <button
+                                        className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full text-left"
+                                        onClick={() => handleSort('campaignName')}
+                                        type="button"
+                                    >
                                         {language === 'en' ? 'Campaign' : 'Кампания'}
                                         {sortBy === 'campaignName' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
-                                    </div>
+                                    </button>
                                 </th>
-                                <th className="text-right py-2 font-medium cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('impressions')}>
-                                    <div className="flex items-center justify-end gap-1">
+                                <th className="text-right py-2 font-medium">
+                                    <button
+                                        className="flex items-center justify-end gap-1 hover:text-slate-300 transition-colors w-full"
+                                        onClick={() => handleSort('impressions')}
+                                        type="button"
+                                    >
                                         Impr. {sortBy === 'impressions' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                                    </div>
+                                    </button>
                                 </th>
-                                <th className="text-right py-2 font-medium cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('clicks')}>
-                                    <div className="flex items-center justify-end gap-1">
+                                <th className="text-right py-2 font-medium">
+                                    <button
+                                        className="flex items-center justify-end gap-1 hover:text-slate-300 transition-colors w-full"
+                                        onClick={() => handleSort('clicks')}
+                                        type="button"
+                                    >
                                         Clicks {sortBy === 'clicks' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                                    </div>
+                                    </button>
                                 </th>
-                                <th className="text-right py-2 font-medium cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('cost')}>
-                                    <div className="flex items-center justify-end gap-1">
+                                <th className="text-right py-2 font-medium">
+                                    <button
+                                        className="flex items-center justify-end gap-1 hover:text-slate-300 transition-colors w-full"
+                                        onClick={() => handleSort('cost')}
+                                        type="button"
+                                    >
                                         {language === 'en' ? 'Cost' : 'Разход'} {sortBy === 'cost' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                                    </div>
+                                    </button>
                                 </th>
-                                <th className="text-right py-2 font-medium cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('conversions')}>
-                                    <div className="flex items-center justify-end gap-1">
+                                <th className="text-right py-2 font-medium">
+                                    <button
+                                        className="flex items-center justify-end gap-1 hover:text-slate-300 transition-colors w-full"
+                                        onClick={() => handleSort('conversions')}
+                                        type="button"
+                                    >
                                         {language === 'en' ? 'Conv.' : 'Конв.'} {sortBy === 'conversions' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                                    </div>
+                                    </button>
                                 </th>
-                                <th className="text-right py-2 font-medium cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('roas')}>
-                                    <div className="flex items-center justify-end gap-1">
+                                <th className="text-right py-2 font-medium">
+                                    <button
+                                        className="flex items-center justify-end gap-1 hover:text-slate-300 transition-colors w-full"
+                                        onClick={() => handleSort('roas')}
+                                        type="button"
+                                    >
                                         ROAS {sortBy === 'roas' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                                    </div>
+                                    </button>
                                 </th>
-                                <th className="text-right py-2 font-medium cursor-pointer hover:text-slate-300 transition-colors pr-2" onClick={() => handleSort('cpa')}>
-                                    <div className="flex items-center justify-end gap-1">
+                                <th className="text-right py-2 font-medium pr-2">
+                                    <button
+                                        className="flex items-center justify-end gap-1 hover:text-slate-300 transition-colors w-full"
+                                        onClick={() => handleSort('cpa')}
+                                        type="button"
+                                    >
                                         CPA {sortBy === 'cpa' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                                    </div>
+                                    </button>
                                 </th>
                             </tr>
                         </thead>

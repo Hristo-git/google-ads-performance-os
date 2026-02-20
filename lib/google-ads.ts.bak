@@ -1,8 +1,6 @@
-import { GoogleAdsApi } from "google-ads-api";
-import { logActivity } from "./activity-logger";
-export type { AuctionInsight };
-import {
 
+import { GoogleAdsApi } from "google-ads-api";
+import {
     PMaxAsset,
     AssetPerformance,
     ChangeEvent,
@@ -15,6 +13,7 @@ import {
     PMaxSearchInsight
 } from "@/types/google-ads";
 
+export type { AuctionInsight };
 
 let client: GoogleAdsApi | null = null;
 
@@ -353,6 +352,7 @@ export function mapBiddingStrategyType(type: any): string {
     return MAP[type] || MAP[Number(type)] || 'UNKNOWN';
 }
 
+import { logActivity } from "./activity-logger";
 
 export async function getCampaigns(refreshToken: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false, userId?: string): Promise<CampaignPerformance[]> {
     if (userId) logActivity(userId, 'API_CALL', { category: 'campaigns', customerId });
@@ -433,12 +433,11 @@ campaign.id, campaign.name, campaign.status,
 
 // List all accessible customer accounts under the MCC
 export async function getAccessibleCustomers(refreshToken: string): Promise<{ id: string, name: string, isManager: boolean }[]> {
-    return withCache('account', ['accessible_customers'], async () => {
-        const customer = getGoogleAdsCustomer(refreshToken);
+    const customer = getGoogleAdsCustomer(refreshToken);
 
-        try {
-            // Query customer_client to get all accessible accounts under the MCC
-            const result = await customer.query(`
+    try {
+        // Query customer_client to get all accessible accounts under the MCC
+        const result = await customer.query(`
 SELECT
 customer_client.id,
     customer_client.descriptive_name,
@@ -448,41 +447,15 @@ customer_client.id,
             WHERE customer_client.status = 'ENABLED'
     `);
 
-            return result.map((row) => ({
-                id: row.customer_client?.id?.toString() || "",
-                name: row.customer_client?.descriptive_name || "",
-                isManager: row.customer_client?.manager === true,
-            }));
-        } catch (error: unknown) {
-            logApiError("getAccessibleCustomers", error);
-            throw error;
-        }
-    });
-}
-
-export async function resolveCustomerAccountId(refreshToken: string, requestedId?: string): Promise<string> {
-    // If a specific ID is requested, use it
-    if (requestedId) return requestedId;
-
-    // Otherwise, find the first valid client account
-    const customers = await getAccessibleCustomers(refreshToken);
-    const clientAccount = customers.find(c => !c.isManager);
-
-    if (clientAccount) {
-        console.log(`[GoogleAds] Auto-resolved client account: ${clientAccount.name} (${clientAccount.id})`);
-        return clientAccount.id;
+        return result.map((row) => ({
+            id: row.customer_client?.id?.toString() || "",
+            name: row.customer_client?.descriptive_name || "",
+            isManager: row.customer_client?.manager === true,
+        }));
+    } catch (error: unknown) {
+        logApiError("getAccessibleCustomers", error);
+        throw error;
     }
-
-    // If no client account found, we might be in an edge case. 
-    // Fallback to the env var if it's NOT the MCC (unlikely if we are here), or throw helpful error.
-    const envId = process.env.GOOGLE_ADS_CUSTOMER_ID;
-    if (envId) {
-        // Check if envId is actually one of the accessible client accounts
-        const isClient = customers.some(c => c.id === envId.replace(/-/g, '') && !c.isManager);
-        if (isClient) return envId;
-    }
-
-    throw new Error("No valid client account found. The default account is a Manager Account, and no accessible client accounts were detected.");
 }
 
 export async function getAccountInfo(refreshToken: string, customerId?: string) {
@@ -2549,7 +2522,7 @@ export async function getAudiencePerformance(
                 AND metrics.impressions > 0
                 ${campaignFilter}
                 LIMIT 1000
-            `).catch(e => { console.error("AdGroup query failed:", e); return []; }),
+            `).catch(e => { console.error("AdGroup query failed:", e.message); return []; }),
             customer.query(`
                 SELECT
                     campaign.id,
@@ -2571,7 +2544,7 @@ export async function getAudiencePerformance(
                 AND metrics.impressions > 0
                 ${campaignFilter}
                 LIMIT 1000
-            `).catch(e => { console.error("Campaign query failed:", e); return []; })
+            `).catch(e => { console.error("Campaign query failed:", e.message); return []; })
         ]);
 
         // Process rows for standard campaigns

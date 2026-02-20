@@ -1,6 +1,5 @@
-
 import { NextResponse } from 'next/server';
-import { getGoogleAdsCustomer, getAudiencePerformance } from "@/lib/google-ads";
+import { getGoogleAdsCustomer, getAudiencePerformance, resolveCustomerAccountId } from "@/lib/google-ads";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth-options";
 
@@ -11,11 +10,11 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const customerId = searchParams.get('customerId');
+    let customerId = searchParams.get('customerId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    if (!customerId || !startDate || !endDate) {
+    if (!startDate || !endDate) {
         return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -23,6 +22,13 @@ export async function GET(request: Request) {
         const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
         if (!refreshToken) {
             return NextResponse.json({ error: 'Configuration Error - Missing Refresh Token' }, { status: 500 });
+        }
+
+        // Resolve to a valid client account (not MCC) if not already set
+        try {
+            customerId = await resolveCustomerAccountId(refreshToken, customerId || undefined);
+        } catch (e: any) {
+            return NextResponse.json({ error: e.message }, { status: 400 });
         }
 
         // Access Control

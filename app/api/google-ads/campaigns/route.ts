@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { getCampaigns, getCampaignTrends, extractApiErrorInfo } from "@/lib/google-ads";
+import { getCampaigns, getCampaignTrends, extractApiErrorInfo, resolveCustomerAccountId } from "@/lib/google-ads";
 
 
 // Mock data for demonstration when API is not available
@@ -136,6 +136,14 @@ export async function GET(request: Request) {
                     );
                 }
             }
+
+            // Resolve to a valid client account (not MCC) if not already set
+            try {
+                customerId = await resolveCustomerAccountId(refreshToken, customerId);
+            } catch (e: any) {
+                return NextResponse.json({ error: e.message }, { status: 400 });
+            }
+
             const compareStartDate = searchParams.get('compareStartDate');
             const compareEndDate = searchParams.get('compareEndDate');
             const includeTrends = searchParams.get('includeTrends') === 'true';

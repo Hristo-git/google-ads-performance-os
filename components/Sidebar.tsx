@@ -6,7 +6,6 @@ import { useState } from "react";
 interface SidebarProps {
     campaigns: Campaign[];
     adGroups: AdGroup[];
-    assetGroups: any[];
     navigation: NavigationState;
     onNavigate: (nav: NavigationState) => void;
     accountName: string;
@@ -15,7 +14,6 @@ interface SidebarProps {
 export default function Sidebar({
     campaigns,
     adGroups,
-    assetGroups,
     navigation,
     onNavigate,
     accountName,
@@ -33,9 +31,7 @@ export default function Sidebar({
     };
 
     const getAdGroupsForCampaign = (campaign: Campaign) => {
-        if (campaign.advertisingChannelType === 'PERFORMANCE_MAX' || campaign.name.toLowerCase().includes('pmax')) {
-            return assetGroups.filter(ag => ag.campaignId === campaign.id);
-        }
+        // Unified adGroups now contains both standard ad groups and PMax asset groups
         return adGroups.filter(ag => ag.campaignId === campaign.id);
     };
 

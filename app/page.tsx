@@ -40,8 +40,17 @@ export default async function Home({
 
   // If no customerId, check if we need to show selector or auto-redirect
   if (!isAdmin && allowedIds.length === 1) {
-    // If only 1 account, auto-redirect (though we can't redirect easily in server component without losing loop context if not careful, but here it's fine)
-    redirect(`/?customerId=${allowedIds[0]}`);
+    // If only 1 account, auto-redirect while preserving other params
+    const params = new URLSearchParams();
+    Object.entries(resolvedSearchParams || {}).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach(v => params.append(key, v));
+      } else if (value) {
+        params.append(key, value);
+      }
+    });
+    params.set('customerId', allowedIds[0]);
+    redirect(`/?${params.toString()}`);
   }
 
   // Show Selector

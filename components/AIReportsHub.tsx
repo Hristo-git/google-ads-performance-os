@@ -750,18 +750,20 @@ export default function AIReportsHub({
 
                         {/* Report Content */}
                         <div className="flex-1 overflow-y-auto custom-scrollbar bg-[radial-gradient(circle_at_top_right,_rgba(124,58,237,0.03),_transparent)]">
-                            {hasTwo && (
-                                <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-8 py-3 z-10">
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setActiveTab('executive')}
-                                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'executive'
-                                                ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/30'
-                                                : 'text-slate-400 hover:text-white hover:bg-slate-700'
-                                                }`}
-                                        >
-                                            {language === 'en' ? '📊 Executive Summary' : '📊 Резюме'}
-                                        </button>
+                            {/* Tab bar: always visible so "Executive Summary" serves as a section label */}
+                            <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-8 py-3 z-10">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setActiveTab('executive')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'executive'
+                                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/30'
+                                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                                            }`}
+                                    >
+                                        {language === 'en' ? '📊 Executive Summary' : '📊 Резюме'}
+                                    </button>
+                                    {/* Only show Technical Analysis tab when the report actually contains that section */}
+                                    {hasTwo && (
                                         <button
                                             onClick={() => setActiveTab('technical')}
                                             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'technical'
@@ -771,9 +773,9 @@ export default function AIReportsHub({
                                         >
                                             {language === 'en' ? '🔧 Technical Analysis' : '🔧 Технически анализ'}
                                         </button>
-                                    </div>
+                                    )}
                                 </div>
-                            )}
+                            </div>
 
                             <div className="p-8">
                                 <div className="max-w-4xl mx-auto space-y-12">

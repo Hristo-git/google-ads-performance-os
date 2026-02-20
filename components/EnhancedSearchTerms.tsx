@@ -2,6 +2,7 @@
 
 import { SearchTerm } from "@/types/google-ads";
 import { useState } from "react";
+import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 
 interface EnhancedSearchTermsProps {
     data: SearchTerm[];
@@ -12,8 +13,10 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
     const [brandKeywords, setBrandKeywords] = useState('');
     const [brandFilter, setBrandFilter] = useState<'all' | 'branded' | 'non-branded'>('all');
 
-    // Restore missing state
-    const [sortBy, setSortBy] = useState<'cost' | 'conversions' | 'clicks'>('cost');
+    // Sorting State
+    const [sortBy, setSortBy] = useState<keyof SearchTerm>('cost');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
     const [deviceFilter, setDeviceFilter] = useState<string | null>(null);
     const [showTop, setShowTop] = useState(20);
 
@@ -25,6 +28,15 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
             </div>
         );
     }
+
+    const handleSort = (key: keyof SearchTerm) => {
+        if (sortBy === key) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(key);
+            setSortOrder('desc');
+        }
+    };
 
     // Helper to check if term is branded
     const isBranded = (term: string) => {
@@ -78,7 +90,23 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
     }
 
     // 4. Sort
-    const sortedData = [...processedData].sort((a, b) => b[sortBy] - a[sortBy]);
+    const sortedData = [...processedData].sort((a, b) => {
+        let valA: any = a[sortBy];
+        let valB: any = b[sortBy];
+
+        // Handle string comparison for searchTerm
+        if (typeof valA === 'string' && typeof valB === 'string') {
+            return sortOrder === 'asc'
+                ? valA.localeCompare(valB)
+                : valB.localeCompare(valA);
+        }
+
+        // Handle numeric comparison
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+    });
+
     const displayData = sortedData.slice(0, showTop);
 
     // Get unique devices for filter
@@ -93,6 +121,19 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
             default: return '📊';
         }
     };
+
+    // Calculate Totals
+    const totals = processedData.reduce((acc, item) => ({
+        impressions: acc.impressions + item.impressions,
+        clicks: acc.clicks + item.clicks,
+        cost: acc.cost + item.cost,
+        conversions: acc.conversions + item.conversions,
+        conversionValue: acc.conversionValue + item.conversionValue,
+    }), { impressions: 0, clicks: 0, cost: 0, conversions: 0, conversionValue: 0 });
+
+    const totalCtr = totals.impressions > 0 ? totals.clicks / totals.impressions : 0;
+    const totalAvgCpc = totals.clicks > 0 ? totals.cost / totals.clicks : 0;
+    const totalConvRate = totals.clicks > 0 ? totals.conversions / totals.clicks : 0;
 
     return (
         <div className="rounded-xl bg-slate-800 border border-slate-700 p-6">
@@ -174,18 +215,8 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                         </div>
                     </div>
 
-                    {/* Right Controls: Sort & Limit */}
+                    {/* Right Controls: Limit only (Sort moved to headers) */}
                     <div className="flex gap-3">
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value as any)}
-                            className="bg-slate-700 border border-slate-600 text-white px-3 py-1.5 rounded text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                            <option value="cost">Sort by Cost</option>
-                            <option value="conversions">Sort by Conversions</option>
-                            <option value="clicks">Sort by Clicks</option>
-                        </select>
-
                         <select
                             value={showTop}
                             onChange={(e) => setShowTop(Number(e.target.value))}
@@ -204,16 +235,112 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="bg-slate-700/50 border-b border-slate-700">
-                            <th className="text-left py-3 px-3 text-slate-400 font-semibold w-1/3">Search Term</th>
+                            <th className="text-left py-3 px-3 text-slate-400 font-semibold w-1/3">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full text-left"
+                                    onClick={() => handleSort('searchTerm')}
+                                    type="button"
+                                >
+                                    Search Term
+                                    {sortBy === 'searchTerm' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
                             {!groupByTerm && <th className="text-center py-3 px-2 text-slate-400 font-semibold">Device</th>}
-                            <th className="text-right py-3 px-2 text-slate-400 font-semibold">Impr.</th>
-                            <th className="text-right py-3 px-2 text-slate-400 font-semibold">Clicks</th>
-                            <th className="text-right py-3 px-2 text-slate-400 font-semibold">CTR</th>
-                            <th className="text-right py-3 px-2 text-slate-400 font-semibold">Avg CPC</th>
-                            <th className="text-right py-3 px-2 text-slate-400 font-semibold">Cost</th>
-                            <th className="text-right py-3 px-2 text-slate-400 font-semibold">Conv.</th>
-                            <th className="text-right py-3 px-2 text-slate-400 font-semibold">Conv Rate</th>
-                            <th className="text-right py-3 px-2 text-slate-400 font-semibold">Conv Value</th>
+                            <th className="text-right p-0">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
+                                    onClick={() => handleSort('impressions')}
+                                    type="button"
+                                >
+                                    Impr.
+                                    {sortBy === 'impressions' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
+                            <th className="text-right p-0">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
+                                    onClick={() => handleSort('clicks')}
+                                    type="button"
+                                >
+                                    Clicks
+                                    {sortBy === 'clicks' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
+                            <th className="text-right p-0">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
+                                    onClick={() => handleSort('ctr')}
+                                    type="button"
+                                >
+                                    CTR
+                                    {sortBy === 'ctr' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
+                            <th className="text-right p-0">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
+                                    onClick={() => handleSort('averageCpc')}
+                                    type="button"
+                                >
+                                    Avg CPC
+                                    {sortBy === 'averageCpc' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
+                            <th className="text-right p-0">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
+                                    onClick={() => handleSort('cost')}
+                                    type="button"
+                                >
+                                    Cost
+                                    {sortBy === 'cost' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
+                            <th className="text-right p-0">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
+                                    onClick={() => handleSort('conversions')}
+                                    type="button"
+                                >
+                                    Conv.
+                                    {sortBy === 'conversions' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
+                            <th className="text-right p-0">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
+                                    onClick={() => handleSort('conversionRate')}
+                                    type="button"
+                                >
+                                    Conv Rate
+                                    {sortBy === 'conversionRate' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
+                            <th className="text-right p-0">
+                                <button
+                                    className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
+                                    onClick={() => handleSort('conversionValue')}
+                                    type="button"
+                                >
+                                    Conv Value
+                                    {sortBy === 'conversionValue' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                                </button>
+                            </th>
+                        </tr>
+                        {/* Totals Row */}
+                        <tr className="bg-slate-700/80 font-bold border-b border-slate-600 text-white">
+                            <td className="py-3 px-3 text-left pl-4">
+                                Total ({processedData.length})
+                            </td>
+                            {!groupByTerm && <td className="py-3 px-2 text-center">-</td>}
+                            <td className="py-3 px-2 text-right font-mono text-xs">{totals.impressions.toLocaleString()}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{totals.clicks.toLocaleString()}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{(totalCtr * 100).toFixed(2)}%</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">€{totalAvgCpc.toFixed(2)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">€{totals.cost.toFixed(2)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs text-green-400">{totals.conversions.toFixed(1)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{(totalConvRate * 100).toFixed(2)}%</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs text-emerald-400">€{totals.conversionValue.toFixed(2)}</td>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/50">
@@ -281,14 +408,6 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                 <div>
                     Showing {displayData.length} of {processedData.length} terms
                     {groupByTerm && <span className="ml-1 text-slate-500">(aggregated from {preAggregationCount} rows)</span>}
-                </div>
-                <div className="flex gap-4">
-                    <span>
-                        Total Cost: <span className="text-slate-200">€{processedData.reduce((sum, item) => sum + item.cost, 0).toFixed(2)}</span>
-                    </span>
-                    <span>
-                        Total Conv. Value: <span className="text-emerald-400">€{processedData.reduce((sum, item) => sum + item.conversionValue, 0).toFixed(2)}</span>
-                    </span>
                 </div>
             </div>
         </div>

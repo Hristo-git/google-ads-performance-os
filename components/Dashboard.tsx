@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import { Campaign, AdGroup, AssetGroup, NegativeKeyword, KeywordWithQS, AdWithStrength, Account, AccountAsset, NavigationState, PMaxAsset, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
 import { ACCOUNTS, DEFAULT_ACCOUNT_ID } from "../config/accounts";
@@ -371,7 +371,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const router = useRouter();
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [adGroups, setAdGroups] = useState<AdGroup[]>([]);
-    const [assetGroups, setAssetGroups] = useState<AssetGroup[]>([]);
+
     const [negativeKeywords, setNegativeKeywords] = useState<NegativeKeyword[]>([]);
     const [keywords, setKeywords] = useState<KeywordWithQS[]>([]);
     const [ads, setAds] = useState<AdWithStrength[]>([]);
@@ -399,10 +399,53 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         setDateRangeRaw(range);
         try { localStorage.setItem(STORAGE_KEY_DATE_RANGE, JSON.stringify(range)); } catch { }
     };
+
     const setDateRangeSelection = (val: string) => {
         setDateRangeSelectionRaw(val);
         try { localStorage.setItem(STORAGE_KEY_DATE_SELECTION, val); } catch { }
     };
+
+    // --- Tab Persistence Logic ---
+    const searchParams = useSearchParams();
+    const pathname = usePathname();
+
+    // 1. Initialize view from URL on mount & track external URL changes
+    useEffect(() => {
+        const viewParam = searchParams.get('view');
+        if (viewParam && ['dashboard', 'insights', 'reports', 'diagnostics', 'auction_insights'].includes(viewParam)) {
+            if (navigation.view !== viewParam) {
+                setNavigation(prev => ({ ...prev, view: viewParam as any }));
+            }
+        } else if (!viewParam && navigation.view !== 'dashboard') {
+            setNavigation(prev => ({ ...prev, view: 'dashboard' }));
+        }
+    }, [searchParams]);
+
+    // 2. Sync state changes to URL
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        let changed = false;
+
+        if (navigation.view && navigation.view !== 'dashboard') {
+            if (params.get('view') !== navigation.view) {
+                params.set('view', navigation.view);
+                changed = true;
+            }
+        } else {
+            if (params.has('view')) {
+                params.delete('view');
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            const newSearch = params.toString();
+            // Prevents immediate re-renders from stale URL searchParams tracking
+            router.replace(`${pathname}?${newSearch}`, { scroll: false });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [navigation.view, pathname, router]); // Exclude searchParams to prevent race condition bounce
+
     const [language, setLanguage] = useState<'bg' | 'en'>('bg');
     const [deviceBreakdown, setDeviceBreakdown] = useState<DeviceBreakdownType[]>([]);
     const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([]);
@@ -431,7 +474,6 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             // Explicitly clear all data states to prevent cross-account leakage
             setCampaigns([]);
             setAdGroups([]);
-            setAssetGroups([]);
             setKeywords([]);
             setAds([]);
             setNegativeKeywords([]);
@@ -469,12 +511,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 console.warn(`[Dashboard] Selected account ${selectedAccountId} is not allowed. Switching to ${filteredAccounts[0].id}`);
                 const newId = filteredAccounts[0].id;
                 setSelectedAccountId(newId);
-                // Update URL without causing a full page re-render
-                window.history.replaceState(null, '', `/?customerId=${newId}`);
+                // Update URL preserving current parameters using router
+                const currentParams = new URLSearchParams(searchParams.toString());
+                currentParams.set('customerId', newId);
+                router.replace(`${pathname}?${currentParams.toString()}`, { scroll: false });
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status, selectedAccountId]);
+    }, [status, selectedAccountId]); // keeping deps same to avoid refactor side effects
 
     const displayAccountName = useMemo(() => {
         const mappedAccount = ACCOUNTS.find(acc => acc.id === selectedAccountId);
@@ -602,16 +646,6 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             if (agData.error) throw new Error(`Ad Groups Error: ${agData.error}`);
             if (agData.adGroups) setAdGroups(agData.adGroups);
 
-            // Fetch PMax assets if applicable
-            if (navigation.campaignId) {
-                const campaign = campaigns.find(c => String(c.id) === String(navigation.campaignId));
-                const isPMax = campaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
-                    campaign?.name?.toLowerCase().includes('pmax');
-
-                if (isPMax) {
-                    fetchAssetGroups(navigation.campaignId);
-                }
-            }
         } catch (err: any) {
             console.error("Failed to fetch ad group data:", err);
             // Only show error to user when they're actually viewing ad groups
@@ -661,24 +695,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         }
     }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
 
-    const fetchAssetGroups = async (campaignId: string) => {
-        try {
-            const statusParam = hideStopped ? '&status=ENABLED' : '';
-            const queryParams = `?campaignId=${campaignId}&customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
-            const res = await fetch(`/api/google-ads/pmax-detailed${queryParams}`);
-            const data = await res.json();
-            if (data.assetGroups) {
-                setAssetGroups(data.assetGroups);
-                // Store extra PMax data for analysis
-                (window as any).__pmaxEnrichedData = {
-                    searchInsights: data.searchInsights || [],
-                    assetGroupDetails: data.assetGroups || []
-                };
-            }
-        } catch (error) {
-            console.error("Failed to fetch asset groups:", error);
-        }
-    };
+
 
     const fetchAdGroupDetails = async (adGroupId: string) => {
         if (campaigns.length === 0) return; // Wait for campaigns to load context
@@ -926,11 +943,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                 const campaignAdGroups = adGroups.filter(ag => ag.campaignId === navigation.campaignId);
                 // If we have asset groups (PMax), return them with enriched data
-                if (assetGroups.length > 0 && isPMax) {
+                if (isPMax && campaignAdGroups.length > 0) {
                     const pmaxData = (window as any).__pmaxEnrichedData || {};
                     return {
                         campaign: enrichWithSmartBidding(campaign ? [campaign] : [])[0],
-                        assetGroups,
+                        adGroups: campaignAdGroups,
                         pmaxSearchInsights: pmaxData.searchInsights || [],
                         pmaxAssetGroupDetails: pmaxData.assetGroupDetails || [],
                         level: 'campaign'
@@ -1034,24 +1051,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             case 'account':
                 return campaigns;
             case 'campaign':
-                const currentCampaign = campaigns.find(c => String(c.id) === String(navigation.campaignId));
-                const isPMaxCampaignForCurrentLevel = currentCampaign?.advertisingChannelType === 'PERFORMANCE_MAX' ||
-                    currentCampaign?.name?.toLowerCase().includes('pmax') ||
-                    assetGroups.length > 0;
-
-                if (isPMaxCampaignForCurrentLevel && assetGroups.length > 0) {
-                    return assetGroups;
-                }
-
                 return adGroups.filter(ag => String(ag.campaignId) === String(navigation.campaignId));
             case 'adgroup':
-                const campaignForAdGroup = campaigns.find(c => c.id === navigation.campaignId);
-                const isPMaxCampForAdGroup = campaignForAdGroup?.advertisingChannelType === 'PERFORMANCE_MAX' ||
-                    campaignForAdGroup?.name?.toLowerCase().includes('pmax');
-
-                if (isPMaxCampForAdGroup) {
-                    return [assetGroups.find(ag => ag.id === navigation.adGroupId)].filter(Boolean);
-                }
                 return [adGroups.find(ag => ag.id === navigation.adGroupId)].filter(Boolean);
             default:
                 return [];
@@ -1126,8 +1127,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
     // Current selected ad group for detail view
     const currentAdGroup = navigation.level === 'adgroup'
-        ? (adGroups.find(ag => String(ag.id) === String(navigation.adGroupId)) ||
-            assetGroups.find(ag => String(ag.id) === String(navigation.adGroupId)))
+        ? adGroups.find(ag => String(ag.id) === String(navigation.adGroupId))
         : null;
 
     return (
@@ -1135,7 +1135,6 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             <Sidebar
                 campaigns={campaigns}
                 adGroups={adGroups}
-                assetGroups={assetGroups}
                 onNavigate={setNavigation}
                 navigation={navigation}
                 accountName={displayAccountName}
@@ -1227,10 +1226,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                     value={selectedAccountId}
                                     onChange={(e) => {
                                         const newId = e.target.value;
+                                        const currentParams = new URLSearchParams(searchParams.toString());
+                                        currentParams.set('customerId', newId);
                                         // DO NOT manually call setSelectedAccountId here.
                                         // Rely on the URL change to trigger the reactive useEffect,
                                         // which handles both state clearing and ID updating synchronously.
-                                        router.push(`/?customerId=${newId}`);
+                                        router.push(`/?${currentParams.toString()}`);
                                     }}
                                     className="bg-transparent text-xs text-white border-none focus:ring-0 cursor-pointer appearance-none hover:text-blue-400 transition-colors"
                                 >
@@ -1532,7 +1533,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                         <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
                                             {sortedData.length} {
                                                 navigation.level === 'account' ? 'campaigns' :
-                                                    (navigation.level === 'campaign' && assetGroups.length > 0) ? 'asset groups' : 'ad groups'
+                                                    (navigation.level === 'campaign' && campaigns.find(c => c.id === navigation.campaignId)?.advertisingChannelType === 'PERFORMANCE_MAX') ? 'asset groups' : 'ad groups'
                                             }
                                         </span>
                                     </div>

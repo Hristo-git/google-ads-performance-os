@@ -37,6 +37,8 @@ type ScopeFilter = 'all' | 'account' | 'campaign';
 type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
 type SortKey = 'cost' | 'clicks' | 'impressions' | 'monthlyCost' | 'cpc' | 'ctr' | 'conversions';
 
+const BRAND_TERMS = ['videnov', 'vellea', 'videhov', 'виденов'];
+
 export default function NegativeKeywordMiner({ customerId, dateRange }: NegativeKeywordMinerProps) {
     const [rawData, setRawData] = useState<SearchTermRow[]>([]);
     const [loading, setLoading] = useState(false);
@@ -147,7 +149,12 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
         });
 
         return Object.values(byTerm)
-            .filter(t => t.conversions === 0 && t.cost >= minCost && t.clicks >= minClicks)
+            .filter(t => {
+                // exclude brand terms for safety
+                if (BRAND_TERMS.some(brand => t.searchTerm.includes(brand))) return false;
+
+                return t.conversions === 0 && t.cost >= minCost && t.clicks >= minClicks;
+            })
             .map(t => {
                 const cpc = t.clicks > 0 ? t.cost / t.clicks : 0;
                 const ctr = t.impressions > 0 ? t.clicks / t.impressions : 0;
@@ -380,6 +387,8 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                 <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span> High</span> = spent 2x+ CPA (&euro;{(avgCPA * 2).toFixed(0)}+) with 0 conversions and below-average CTR.{' '}
                 <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span> Medium</span> = spent 1x CPA or 5+ clicks with normal CTR.{' '}
                 <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span> Low / Review</span> = few clicks, high CTR (likely relevant), or short period — review before adding.
+                <br className="mt-1" />
+                <span className="text-emerald-400 font-medium">Safety:</span> Brand terms ({BRAND_TERMS.join(', ')}) are automatically excluded.
             </div>
 
             {/* Selection Actions Bar */}
