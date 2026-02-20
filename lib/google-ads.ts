@@ -1077,16 +1077,45 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
                 const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
                 const conversions = Number(row.metrics?.conversions) || 0;
                 const conversionValue = Number(row.metrics?.conversions_value) || 0;
-                const type = typeof row.asset_group?.status === 'string'
-                    ? row.asset_group.status
-                    : String(row.asset_group?.status || 'UNKNOWN');
+
+                // Normalize status: Google Ads API may return proto enum number
+                const ASSET_GROUP_STATUS_MAP: Record<string, string> = {
+                    '2': 'ENABLED',
+                    '3': 'PAUSED',
+                    '4': 'REMOVED',
+                    'ENABLED': 'ENABLED',
+                    'PAUSED': 'PAUSED',
+                    'REMOVED': 'REMOVED',
+                };
+                const rawStatus = String(row.asset_group?.status ?? 'UNKNOWN');
+                const normalizedStatus = ASSET_GROUP_STATUS_MAP[rawStatus] ?? rawStatus;
+
+                // Normalize ad_strength: proto enum number → readable string
+                const ASSET_AD_STRENGTH_MAP: Record<string, string> = {
+                    '0': 'UNSPECIFIED',
+                    '1': 'UNKNOWN',
+                    '2': 'POOR',
+                    '3': 'AVERAGE',
+                    '4': 'GOOD',
+                    '5': 'EXCELLENT',
+                    '6': 'PENDING',
+                    '7': 'UNRATED',  // Too little traffic to evaluate
+                    'POOR': 'POOR',
+                    'AVERAGE': 'AVERAGE',
+                    'GOOD': 'GOOD',
+                    'EXCELLENT': 'EXCELLENT',
+                    'PENDING': 'PENDING',
+                    'UNRATED': 'UNRATED',
+                };
+                const rawStrength = String(row.asset_group?.ad_strength ?? 'UNKNOWN');
+                const normalizedStrength = ASSET_AD_STRENGTH_MAP[rawStrength] ?? rawStrength;
 
                 return {
                     id: row.asset_group?.id?.toString() || "",
                     campaignId: row.campaign?.id?.toString() || "",
                     campaignName: row.campaign?.name || "",
                     name: row.asset_group?.name || "",
-                    status: type,
+                    status: normalizedStatus,
                     impressions: Number(row.metrics?.impressions) || 0,
                     clicks: Number(row.metrics?.clicks) || 0,
                     cost,
@@ -1097,7 +1126,7 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
                     keywordsWithLowQS: 0,
                     adsCount: 0, // Asset Groups don't have "ads" in the standard sense
                     poorAdsCount: 0,
-                    adStrength: String(row.asset_group?.ad_strength || 'UNKNOWN'),
+                    adStrength: normalizedStrength,
                     conversionValue,
                     roas: cost > 0 ? conversionValue / cost : null,
                     cpa: conversions > 0 ? cost / conversions : null,

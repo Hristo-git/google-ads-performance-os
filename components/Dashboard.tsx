@@ -1032,8 +1032,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             case 'GOOD': return 'bg-blue-500/20 text-blue-400';
             case 'AVERAGE': return 'bg-amber-500/20 text-amber-400';
             case 'POOR': return 'bg-red-500/20 text-red-400';
+            case 'PENDING': return 'bg-purple-500/20 text-purple-400';
+            case 'UNRATED': return 'bg-slate-600/50 text-slate-400';
             default: return 'bg-slate-600/50 text-slate-400';
         }
+    };
+
+    // Human-readable labels for Ad Strength (supports BG context)
+    const AD_STRENGTH_LABEL: Record<string, string> = {
+        'EXCELLENT': 'Excellent',
+        'GOOD': 'Good',
+        'AVERAGE': 'Average',
+        'POOR': 'Poor',
+        'PENDING': 'Pending',
+        'UNRATED': 'Няма достатъчно трафик за оценка',
+        'UNSPECIFIED': '—',
+        'UNKNOWN': '—',
     };
 
     const getISColor = (is: number | null) => {
@@ -1875,9 +1889,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                             if (isPMax) return (
                                                                 <>
                                                                     <td className="px-4 py-4 text-right">
-                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor((item as any).strength || (item as any).adStrength || 'UNSPECIFIED')}`}>
-                                                                            {(item as any).strength || (item as any).adStrength || 'UNSPECIFIED'}
-                                                                        </span>
+                                                                        {(() => {
+                                                                            const s = (item as any).strength || (item as any).adStrength || 'UNSPECIFIED';
+                                                                            const label = AD_STRENGTH_LABEL[s] ?? s;
+                                                                            return (
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor(s)}`} title={s}>
+                                                                                    {label}
+                                                                                </span>
+                                                                            );
+                                                                        })()}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right"></td>
                                                                 </>
