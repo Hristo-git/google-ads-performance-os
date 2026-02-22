@@ -279,19 +279,20 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
 
 
 
+// Format date as YYYY-MM-DD using LOCAL time (avoids UTC offset shifting the day)
+const fmtDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
 // Helper to get default "Last Month" date range
 const getLastMonthRange = () => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const end = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of last month
-
-    // Format YYYY-MM-DD
-    const formatDate = (date: Date) => date.toISOString().split('T')[0];
-
-    return {
-        start: formatDate(start),
-        end: formatDate(end)
-    };
+    return { start: fmtDate(start), end: fmtDate(end) };
 };
 
 // Helper to get "Last 7 Days" date range
@@ -299,11 +300,7 @@ const getLast7DaysRange = () => {
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - 7);
-
-    return {
-        start: start.toISOString().split('T')[0],
-        end: end.toISOString().split('T')[0]
-    };
+    return { start: fmtDate(start), end: fmtDate(end) };
 };
 
 const STORAGE_KEY_DATE_RANGE = 'gads_dateRange';
@@ -813,8 +810,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         prevStartDate.setDate(prevStartDate.getDate() - (diffDays - 1));
 
         return {
-            start: prevStartDate.toISOString().split('T')[0],
-            end: prevEndDate.toISOString().split('T')[0]
+            start: fmtDate(prevStartDate),
+            end: fmtDate(prevEndDate)
         };
     };
 
@@ -2408,10 +2405,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                             if (val === 'last-month') {
                                                 setDateRange(getLastMonthRange());
                                             } else if (val === 'last-30') {
-                                                setDateRange({
-                                                    start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
-                                                    end: new Date().toISOString().split('T')[0]
-                                                });
+                                                const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 30);
+                                                setDateRange({ start: fmtDate(s), end: fmtDate(e) });
                                             } else if (val === 'last-7') {
                                                 setDateRange(getLast7DaysRange());
                                             }
