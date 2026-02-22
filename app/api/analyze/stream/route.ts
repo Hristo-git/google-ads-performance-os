@@ -7,35 +7,11 @@ import { saveReport } from "@/lib/supabase";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
 import { logActivity } from "@/lib/activity-logger";
 import { calculateDerivedMetrics, buildEnhancedDataInventory } from "@/lib/derived-metrics";
+import { getBiddingLabel, enrichCampaignData } from "@/lib/bidding-labels";
+import { rateLimitAI } from "@/lib/rate-limit";
 
 // Streaming bypasses Vercel's time-to-first-byte timeout
 export const maxDuration = 300;
-
-// ============================================
-// HELPERS (duplicated from parent route to keep self-contained)
-// ============================================
-const BIDDING_LABELS: Record<number | string, string> = {
-    0: 'Unspecified', 1: 'Unknown', 2: 'Manual CPC', 3: 'Manual CPM',
-    4: 'Manual CPV', 5: 'Maximize Conversions', 6: 'Maximize Conversion Value',
-    7: 'Target CPA', 8: 'Target ROAS', 9: 'Target Impression Share',
-    10: 'Manual CPC (Enhanced)', 11: 'Maximize Conversions',
-    12: 'Maximize Conversion Value', 13: 'Target Spend',
-};
-
-function getBiddingLabel(code: number | string | undefined): string {
-    if (code === undefined || code === null) return 'N/A';
-    // If already a readable string (not a pure number), return as-is
-    if (typeof code === 'string' && isNaN(Number(code))) return code;
-    return BIDDING_LABELS[code] || BIDDING_LABELS[Number(code)] || 'Unknown Bidding Strategy';
-}
-
-function enrichCampaignData(campaigns: any[]): any[] {
-    return campaigns.map(c => {
-        const label = getBiddingLabel(c.biddingStrategyType);
-        const { biddingStrategyType: _raw, ...rest } = c;
-        return { ...rest, biddingStrategyLabel: label };
-    });
-}
 
 // ============================================
 // BUILD PROMPT (imported logic from parent route)
@@ -152,6 +128,14 @@ export async function POST(request: Request) {
             });
         }
 
+        // Rate limit: 5 AI analyses per minute per user
+        const rl = rateLimitAI(session.user.id);
+        if (!rl.success) {
+            return new Response(JSON.stringify({ error: "Too many requests. Please wait before running another analysis." }), {
+                status: 429, headers: { 'Content-Type': 'application/json', ...rl.headers }
+            });
+        }
+
         const data = await request.json();
 
         const hasData =
@@ -182,20 +166,34 @@ export async function POST(request: Request) {
             }`;
 
         // Model selection (allow override for A/B testing)
+        // Using latest Claude model IDs — update here when new versions release
         const ALLOWED_MODELS: Record<string, string> = {
             'opus-4.6': 'claude-opus-4-6',
-            'sonnet-4.5': 'claude-sonnet-4-5-20250929',
+            'sonnet-4.6': 'claude-sonnet-4-6',   // default — latest Sonnet
             'haiku-4.5': 'claude-haiku-4-5-20251001',
+            // Keep legacy aliases for backwards compatibility
+            'sonnet-4.5': 'claude-sonnet-4-6',   // redirect old alias to current
         };
         const requestedModel = data.model ? ALLOWED_MODELS[data.model] : undefined;
-        const modelId = requestedModel || 'claude-sonnet-4-5-20250929';
-        const modelLabel = Object.entries(ALLOWED_MODELS).find(([, v]) => v === modelId)?.[0] || 'opus-4.6';
+        const modelId = requestedModel || 'claude-sonnet-4-6';
+        const modelLabel = Object.entries(ALLOWED_MODELS).find(([, v]) => v === modelId)?.[0] || 'sonnet-4.6';
 
-        // Stream from Anthropic
+        // Stream from Anthropic with prompt caching on the system prompt.
+        // The system prompt (ANALYSIS_SYSTEM_PROMPT_V3) is ~470 lines / ~6K tokens.
+        // Caching it saves ~90% of input token cost on repeat calls (5-min cache window).
+        // Cache write = 1.25x normal price; cache read = 0.1x normal price.
         const stream = anthropic.messages.stream({
             model: modelId,
-            max_tokens: 20000,
-            ...(systemPrompt ? { system: systemPrompt } : {}),
+            max_tokens: 16000,
+            ...(systemPrompt ? {
+                system: [
+                    {
+                        type: "text",
+                        text: systemPrompt,
+                        cache_control: { type: "ephemeral" },
+                    }
+                ]
+            } : {}),
             messages: [{ role: "user", content: finalPrompt }],
         });
 

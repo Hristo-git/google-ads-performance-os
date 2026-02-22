@@ -1,31 +1,26 @@
+/**
+ * config/users.ts — LEGACY FILE, NOT USED BY AUTH
+ *
+ * Authentication is handled by Supabase (lib/supabase.ts + lib/auth-options.ts).
+ * User records live in the `gads_users` table with bcrypt-hashed passwords
+ * verified via the `verify_password` Supabase RPC function.
+ *
+ * This file is retained only as a type reference. Do NOT add credentials here.
+ * To create users, use the Admin panel (/admin) or the Supabase dashboard.
+ */
+
 export interface User {
     id: string;
     name: string;
     username: string;
-    password: string; // Plain text for MVP as requested, commonly hashed in production
     role: 'admin' | 'viewer';
-    allowedCustomerIds: string[]; // '*' for all, or specific IDs
+    allowedCustomerIds: string[]; // '*' for all, or specific account IDs
 }
 
-export const users: User[] = [
-    {
-        id: "1",
-        name: "Admin User",
-        username: "admin",
-        password: "password123",
-        role: "admin",
-        allowedCustomerIds: ["*"]
-    },
-    {
-        id: "2",
-        name: "Client Demo",
-        username: "client",
-        password: "clientpassword",
-        role: "viewer",
-        allowedCustomerIds: ["5334827744"] // Bulgaria (Videnov.BG)
-    }
-];
+// No hardcoded users. Manage users via the Admin panel or Supabase dashboard.
+export const users: User[] = [];
 
-export function getUser(username: string): User | undefined {
-    return users.find(u => u.username === username);
+/** @deprecated Use Supabase auth — this function is no longer called by the auth flow */
+export function getUser(_username: string): User | undefined {
+    return undefined;
 }

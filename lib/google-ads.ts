@@ -22,8 +22,20 @@ import {
 let client: GoogleAdsApi | null = null;
 
 // ── In-memory API cache ──────────────────────────────────────────────
+// IMPORTANT: In Vercel serverless, each function invocation may get a fresh
+// module instance (cold start), so this cache only works within a single
+// warm invocation or across hot-reloads in development.
+// For production cross-request caching, migrate to Vercel KV / Redis.
+// The global pattern below keeps the cache alive across requests on the SAME
+// warm instance, which is the best we can do without an external store.
 interface CacheEntry { data: unknown; expiresAt: number; }
-const apiCache = new Map<string, CacheEntry>();
+
+// Attach to globalThis so Next.js hot-reload doesn't recreate the Map
+const g = globalThis as typeof globalThis & { __gadsApiCache?: Map<string, CacheEntry> };
+if (!g.__gadsApiCache) {
+    g.__gadsApiCache = new Map<string, CacheEntry>();
+}
+const apiCache = g.__gadsApiCache;
 
 const CACHE_TTL = {
     account: 30 * 60 * 1000,  // 30 min - account info rarely changes

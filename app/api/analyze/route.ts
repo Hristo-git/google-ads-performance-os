@@ -14,45 +14,11 @@ import {
     getNetworkPerformance,
     getPMaxSearchInsights
 } from "@/lib/google-ads";
-// ANALYSIS_SYSTEM_PROMPT_V3 and buildAdvancedAnalysisPrompt already imported above
+import { getBiddingLabel, enrichCampaignData } from "@/lib/bidding-labels";
+import { rateLimitAI } from "@/lib/rate-limit";
 
 // Allow up to 300s for 2-pass Claude Opus analysis (requires Vercel Pro)
 export const maxDuration = 300;
-
-// ============================================
-// HELPER: Human-readable bidding strategy labels
-// ============================================
-const BIDDING_LABELS: Record<number | string, string> = {
-    0: 'Unspecified',
-    1: 'Unknown',
-    2: 'Manual CPC',
-    3: 'Manual CPM',
-    4: 'Manual CPV',
-    5: 'Maximize Conversions',
-    6: 'Maximize Conversion Value',
-    7: 'Target CPA',
-    8: 'Target ROAS',
-    9: 'Target Impression Share',
-    10: 'Manual CPC (Enhanced)',
-    11: 'Maximize Conversions',
-    12: 'Maximize Conversion Value',
-    13: 'Target Spend',
-};
-
-function getBiddingLabel(code: number | string | undefined): string {
-    if (code === undefined || code === null) return 'N/A';
-    return BIDDING_LABELS[code] || `Strategy ${code}`;
-}
-
-// ============================================
-// HELPER: Enrich campaign data with readable labels
-// ============================================
-function enrichCampaignData(campaigns: any[]): any[] {
-    return campaigns.map(c => ({
-        ...c,
-        biddingStrategyLabel: getBiddingLabel(c.biddingStrategyType),
-    }));
-}
 
 // ============================================
 // BUILD PROMPT (v3 — uses new Data Prep + System Prompt V3)
@@ -320,6 +286,15 @@ export async function POST(request: Request) {
             );
         }
 
+        // Rate limit: 5 AI analyses per minute per user
+        const rl = rateLimitAI(session.user.id);
+        if (!rl.success) {
+            return NextResponse.json(
+                { error: "Too many requests. Please wait before running another analysis." },
+                { status: 429, headers: rl.headers }
+            );
+        }
+
         const data = await request.json();
 
         // Validate data
@@ -437,10 +412,20 @@ ${isEn ? "Your entire response MUST be in English." : "Целият ти отг�
 
         console.log(`[AI Analysis] Level: ${data.level}, Prompt: ${finalPrompt.length} chars, Language: ${language}, Version: V3 (Enforced)`);
 
+        // Prompt caching on the system prompt reduces cost by ~90% on cache hits.
+        // Cache window is 5 minutes — ideal for interactive back-to-back analyses.
         const response = await anthropic.messages.create({
-            model: "claude-sonnet-4-5-20250929",
-            max_tokens: 20000,
-            ...(systemPrompt ? { system: systemPrompt } : {}),
+            model: "claude-sonnet-4-6",
+            max_tokens: 16000,
+            ...(systemPrompt ? {
+                system: [
+                    {
+                        type: "text",
+                        text: systemPrompt,
+                        cache_control: { type: "ephemeral" },
+                    }
+                ]
+            } : {}),
             messages: [
                 {
                     role: "user",
@@ -502,10 +487,19 @@ ${analysis}
 
 Изведи подобрения анализ в същата структура и формат, но с по-дълбоки прозрения и по-action-able препоръки.`;
 
+            // Second pass also benefits from cached system prompt
             const secondPassResponse = await anthropic.messages.create({
-                model: "claude-sonnet-4-5-20250929",
-                max_tokens: 20000,
-                ...(systemPrompt ? { system: systemPrompt } : {}),
+                model: "claude-sonnet-4-6",
+                max_tokens: 16000,
+                ...(systemPrompt ? {
+                    system: [
+                        {
+                            type: "text",
+                            text: systemPrompt,
+                            cache_control: { type: "ephemeral" },
+                        }
+                    ]
+                } : {}),
                 messages: [
                     {
                         role: "user",
