@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const adGroupId = searchParams.get('adGroupId') || undefined;
+    const campaignIds = searchParams.get('campaignIds')?.split(',').filter(Boolean) || undefined;
 
     if (!startDate || !endDate) {
         return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
             refreshToken,
             customerId,
             dateRange,
-            undefined,
+            campaignIds,
             session.user.id,
             adGroupId
         );
