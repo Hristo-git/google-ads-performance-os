@@ -1646,7 +1646,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         const val = getMetricValue(d);
                         const percentage = (val / maxValue) * 100;
                         const spendPercent = totalSpend > 0 ? (d.cost / totalSpend) * 100 : 0;
-                        const roas = d.cost > 0 ? (d.conversions * 50) / d.cost : 0; // Simulated ROAS if conv value isn't available
+                        const roas = d.cost > 0 && d.conversionValue > 0 ? d.conversionValue / d.cost : 0;
 
                         return (
                             <div key={i} className="group flex items-center gap-4">
@@ -1778,7 +1778,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                     {/* Footer Metrics */}
                     <div className="mt-6 pt-4 border-t border-slate-700/30 px-6 flex items-center gap-8">
                         {sortedItems.filter(d => d.dimension.toLowerCase() !== 'unknown' && d.dimension.toLowerCase() !== 'undetermined').slice(0, 2).map((d, i) => {
-                            const roas = d.cost > 0 ? (d.conversions * 50) / d.cost : 0;
+                            const roas = d.cost > 0 && d.conversionValue > 0 ? d.conversionValue / d.cost : 0;
                             const cvr = d.clicks > 0 ? (d.conversions / d.clicks) * 100 : 0;
                             return (
                                 <div key={i} className="flex flex-col gap-0.5">
