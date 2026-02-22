@@ -306,7 +306,7 @@ export interface Account {
 }
 
 export type NavigationLevel = 'account' | 'campaign' | 'adgroup';
-export type ViewMode = 'dashboard' | 'insights' | 'reports' | 'diagnostics' | 'auction_insights';
+export type ViewMode = 'dashboard' | 'insights' | 'reports' | 'diagnostics' | 'ngrams' | 'auction_insights';
 
 export interface NavigationState {
     level: NavigationLevel;

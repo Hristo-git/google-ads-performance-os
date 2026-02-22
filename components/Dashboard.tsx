@@ -654,7 +654,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     // 1. Initialize view from URL on mount & track external URL changes
     useEffect(() => {
         const viewParam = searchParams.get('view');
-        if (viewParam && ['dashboard', 'insights', 'reports', 'diagnostics', 'auction_insights'].includes(viewParam)) {
+        if (viewParam && ['dashboard', 'insights', 'reports', 'diagnostics', 'ngrams', 'auction_insights'].includes(viewParam)) {
             if (navigation.view !== viewParam) {
                 setNavigation(prev => ({ ...prev, view: viewParam as any }));
             }
@@ -1130,7 +1130,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     // -----------------------------------------------------------------
     useEffect(() => {
         const fetchHealthData = async () => {
-            if (navigation.view !== 'diagnostics' || !selectedAccountId) return;
+            if ((navigation.view !== 'diagnostics' && navigation.view !== 'ngrams') || !selectedAccountId) return;
 
             console.log(`[fetchHealthData] Fetching for customer: ${selectedAccountId}`, dateRange);
             setLoadingHealth(true);
@@ -2348,7 +2348,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             <h1 className="text-xl font-bold text-white mt-1">
                                 {navigation.view === 'insights' ? 'Strategic Insights' :
                                     navigation.view === 'reports' ? 'AI Reports' :
-                                        navigation.view === 'diagnostics' ? 'Diagnostics & N-Grams' :
+                                        navigation.view === 'diagnostics' ? 'Diagnostics' :
+                                        navigation.view === 'ngrams' ? 'N-Grams' :
                                             navigation.level === 'campaign' ? (
                                                 (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
                                                     campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
@@ -2605,11 +2606,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 data={healthData || { overallScore: 0, overallGrade: 'N/A', checks: [], summary: '' }}
                                 loading={loadingHealth}
                             />
+                        </div>
+                    </main>
+                ) : navigation.view === 'ngrams' ? (
+                    <main className="flex-1 overflow-auto p-6 space-y-6">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                             <NGramInsights
                                 searchTerms={healthData?.searchTerms || []}
                                 loading={loadingHealth}
                             />
-
                         </div>
                     </main>
                 ) : (
