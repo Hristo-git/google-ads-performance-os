@@ -144,6 +144,7 @@ export interface AssetPerformance {
     policySummary?: string[];
     performance?: string;
     assetType?: string;
+    fieldType?: string;
     content?: string;
     url?: string;
     imageUrl?: string;

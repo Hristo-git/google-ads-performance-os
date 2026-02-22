@@ -3032,11 +3032,14 @@ export async function getAssetPerformance(
         // For simplicity, we'll focus on ad_group_ad_asset_view first as it covers extensions
         const query = `
 SELECT
+    asset.id,
     asset.name,
+    asset.type,
     asset.image_asset.full_size,
     asset.youtube_video_asset.youtube_video_id,
     asset.text_asset.text,
     asset.final_urls,
+    ad_group_ad_asset_view.field_type,
     ad_group_ad_asset_view.performance_label,
     ad_group_ad_asset_view.enabled,
     metrics.impressions,
@@ -3058,6 +3061,8 @@ SELECT
         return result.map((row) => ({
             id: row.asset?.id?.toString() || "",
             type: String(row.asset?.type || 'UNKNOWN'),
+            assetType: String(row.asset?.type || 'UNKNOWN'),
+            fieldType: String(row.ad_group_ad_asset_view?.field_type || ''),
             name: row.asset?.name || "",
             imageUrl: (row.asset?.image_asset?.full_size as any)?.url || "",
             youtubeVideoId: row.asset?.youtube_video_asset?.youtube_video_id || "",
@@ -3379,7 +3384,7 @@ export async function getDemographicsPerformance(
     if (adGroupId) filter += ` AND ad_group.id = ${adGroupId}`;
 
     try {
-        const [ageRows, genderRows] = await Promise.all([
+        const [ageRows, genderRows, parentalRows, incomeRows] = await Promise.all([
             customer.query(`
                 SELECT age_range_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
                 FROM age_range_view WHERE metrics.impressions > 0 ${filter}
@@ -3387,25 +3392,50 @@ export async function getDemographicsPerformance(
             customer.query(`
                 SELECT gender_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
                 FROM gender_view WHERE metrics.impressions > 0 ${filter}
+            `),
+            customer.query(`
+                SELECT parental_status_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
+                FROM parental_status_view WHERE metrics.impressions > 0 ${filter}
+            `),
+            customer.query(`
+                SELECT income_range_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
+                FROM income_range_view WHERE metrics.impressions > 0 ${filter}
             `)
         ]);
 
-        const processRow = (row: any, type: 'AGE' | 'GENDER'): DemographicPerformance => {
-            const resourceName = row.age_range_view?.resource_name || row.gender_view?.resource_name || "";
+        const processRow = (row: any, type: 'AGE' | 'GENDER' | 'PARENTAL_STATUS' | 'INCOME'): DemographicPerformance => {
+            const resourceName =
+                row.age_range_view?.resource_name ||
+                row.gender_view?.resource_name ||
+                row.parental_status_view?.resource_name ||
+                row.income_range_view?.resource_name || "";
             const rawId = resourceName.split('~').pop() || "";
 
             let dimension = "Unknown";
             if (type === 'AGE') {
                 const AGE_MAP: Record<string, string> = {
                     "503001": "18-24", "503002": "25-34", "503003": "35-44",
-                    "503004": "45-54", "503005": "55-64", "503006": "65+", "503000": "Unknown"
+                    "503004": "45-54", "503005": "55-64", "503006": "65+", "503000": "Unknown",
+                    "503999": "Undetermined"
                 };
                 dimension = AGE_MAP[rawId] || rawId;
-            } else {
+            } else if (type === 'GENDER') {
                 const GENDER_MAP: Record<string, string> = {
                     "10": "Male", "11": "Female", "20": "Unknown"
                 };
                 dimension = GENDER_MAP[rawId] || rawId;
+            } else if (type === 'PARENTAL_STATUS') {
+                const PARENTAL_MAP: Record<string, string> = {
+                    "300": "Parent", "301": "Not a parent", "302": "Unknown"
+                };
+                dimension = PARENTAL_MAP[rawId] || rawId;
+            } else if (type === 'INCOME') {
+                const INCOME_MAP: Record<string, string> = {
+                    "510001": "Top 10%", "510002": "11-20%", "510003": "21-30%",
+                    "510004": "31-40%", "510005": "41-50%", "510006": "Lower 50%",
+                    "510000": "Unknown"
+                };
+                dimension = INCOME_MAP[rawId] || rawId;
             }
 
             return {
@@ -3422,7 +3452,9 @@ export async function getDemographicsPerformance(
 
         return [
             ...ageRows.map(r => processRow(r, 'AGE')),
-            ...genderRows.map(r => processRow(r, 'GENDER'))
+            ...genderRows.map(r => processRow(r, 'GENDER')),
+            ...parentalRows.map(r => processRow(r, 'PARENTAL_STATUS')),
+            ...incomeRows.map(r => processRow(r, 'INCOME'))
         ].sort((a, b) => b.cost - a.cost);
     } catch (error) {
         logApiError("getDemographicsPerformance", error);
