@@ -1,242 +1,447 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import {
-    Search,
-    TrendingUp,
-    TrendingDown,
-    MinusCircle,
-    PlusCircle,
-    Layers,
-    ArrowUpDown
-} from 'lucide-react';
-import { buildNGrams, findNegativeCandidates, findExpansionCandidates, type NGram } from '@/lib/account-health';
+import { Layers, TrendingUp, TrendingDown, MinusCircle, Check, BarChart2, Circle } from 'lucide-react';
+import { buildNGrams, type NGram } from '@/lib/account-health';
 
 interface NGramInsightsProps {
     searchTerms: any[];
     loading?: boolean;
 }
 
-export default function NGramInsights({ searchTerms, loading }: NGramInsightsProps) {
-    const [activeTab, setActiveTab] = useState<'winning' | 'wasteful' | 'negatives' | 'expansion'>('winning');
-    const [nSize, setNSize] = useState<number>(0); // 0 for all, 1, 2, 3
+// ---------- Brand / Dimension classification ----------
+const BRAND_WORDS = ['виденов', 'videnov', 'vellea', 'вилеа', 'videhov'];
+function classifyGram(gram: string): 'Brand' | 'Non-brand' | 'Dimension' {
+    const lower = gram.toLowerCase();
+    if (BRAND_WORDS.some(b => lower.includes(b))) return 'Brand';
+    if (/^\d[\d\s,.*x×]*$/.test(gram.trim())) return 'Dimension';
+    return 'Non-brand';
+}
 
+// ---------- ROAS color ----------
+function roasClass(roas: number | null): string {
+    if (!roas) return 'text-slate-500 bg-slate-700/30';
+    if (roas >= 15) return 'text-emerald-400 bg-emerald-400/10';
+    if (roas >= 8)  return 'text-cyan-400   bg-cyan-400/10';
+    if (roas >= 3)  return 'text-amber-400  bg-amber-400/10';
+    return 'text-red-400 bg-red-400/10';
+}
+
+function roasText(roas: number | null) {
+    if (!roas) return '—';
+    return `${roas.toFixed(1)}x`;
+}
+
+type TabType     = 'winning' | 'wasteful';
+type SizeFilter  = 0 | 1 | 2 | 3;
+type TypeFilter  = 'all' | 'Brand' | 'Non-brand' | 'Dimension';
+type SortKey     = 'conversions' | 'roas' | 'cost' | 'cpa' | 'termCount';
+type ViewDisplay = 'table' | 'bubble';
+
+// ---------- Bubble chart ----------
+function BubbleChart({ data, typeFilter }: { data: (NGram & { gramType: string })[]; typeFilter: TypeFilter }) {
+    const [hovered, setHovered] = useState<string | null>(null);
+    const W = 700, H = 300, PAD = 40;
+
+    const visible = data.filter(g => g.cost > 0 || g.conversions > 0).slice(0, 40);
+    if (!visible.length) return <div className="p-8 text-center text-slate-500 italic">Няма данни за bubble chart.</div>;
+
+    const maxConv  = Math.max(...visible.map(g => g.conversions), 1);
+    const maxRoas  = Math.max(...visible.map(g => g.roas ?? 0), 1);
+    const maxCost  = Math.max(...visible.map(g => g.cost), 1);
+    const MIN_R = 6, MAX_R = 28;
+
+    const typeColor: Record<string, string> = {
+        'Brand':     '#8b5cf6',
+        'Non-brand': '#10b981',
+        'Dimension': '#f59e0b',
+    };
+
+    const x  = (g: NGram) => PAD + ((g.conversions / maxConv) ** 0.6) * (W - 2 * PAD);
+    const y  = (g: NGram) => H - PAD - (((g.roas ?? 0) / maxRoas) ** 0.7) * (H - 2 * PAD);
+    const r  = (g: NGram) => MIN_R + ((g.cost / maxCost) ** 0.5) * (MAX_R - MIN_R);
+
+    return (
+        <div className="relative w-full overflow-x-auto px-4 pb-2 pt-2">
+            {/* Legend */}
+            <div className="flex items-center gap-4 mb-2 text-[10px] text-slate-400">
+                {Object.entries(typeColor).map(([t, c]) => (
+                    <span key={t} className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: c }} />
+                        {t}
+                    </span>
+                ))}
+                <span className="ml-auto opacity-50">Размер = Spend · X = Conv · Y = ROAS</span>
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 400, height: 260 }}>
+                {/* Grid */}
+                {[0.25, 0.5, 0.75, 1].map(t => (
+                    <g key={t}>
+                        <line x1={PAD} y1={H - PAD - t * (H - 2 * PAD)} x2={W - PAD} y2={H - PAD - t * (H - 2 * PAD)}
+                            stroke="#1e293b" strokeWidth="1" />
+                        <text x={PAD - 4} y={H - PAD - t * (H - 2 * PAD) + 3} fill="#475569" fontSize="8" textAnchor="end">
+                            {(maxRoas * t).toFixed(0)}x
+                        </text>
+                    </g>
+                ))}
+                <text x={W / 2} y={H - 6} fill="#475569" fontSize="8" textAnchor="middle">Conversions →</text>
+                <text x={8} y={H / 2} fill="#475569" fontSize="8" textAnchor="middle" transform={`rotate(-90,8,${H / 2})`}>ROAS →</text>
+
+                {/* Bubbles */}
+                {visible.map((g) => {
+                    const gAny = g as any;
+                    const color = typeColor[gAny.gramType] ?? '#64748b';
+                    const isH = hovered === g.gram;
+                    return (
+                        <g key={g.gram} onMouseEnter={() => setHovered(g.gram)} onMouseLeave={() => setHovered(null)}
+                            style={{ cursor: 'pointer' }}>
+                            <circle
+                                cx={x(g)} cy={y(g)} r={r(g)}
+                                fill={color} fillOpacity={isH ? 0.9 : 0.45}
+                                stroke={color} strokeWidth={isH ? 2 : 0.5} strokeOpacity={0.8}
+                            />
+                            {(r(g) > 14 || isH) && (
+                                <text cx={x(g)} cy={y(g)} x={x(g)} y={y(g) + 3}
+                                    fill="white" fontSize={isH ? 9 : 7} textAnchor="middle" fontWeight="bold"
+                                    style={{ pointerEvents: 'none' }}>
+                                    {g.gram.length > 8 ? g.gram.slice(0, 7) + '…' : g.gram}
+                                </text>
+                            )}
+                            {isH && (
+                                <g>
+                                    <rect x={x(g) + r(g) + 4} y={y(g) - 28} width={110} height={54} rx="4"
+                                        fill="#0f172a" stroke={color} strokeWidth="0.5" strokeOpacity={0.6} />
+                                    <text x={x(g) + r(g) + 9} y={y(g) - 16} fill="white" fontSize="8.5" fontWeight="bold">{g.gram}</text>
+                                    <text x={x(g) + r(g) + 9} y={y(g) - 5} fill="#94a3b8" fontSize="7.5">Conv: {g.conversions} · ROAS: {roasText(g.roas)}</text>
+                                    <text x={x(g) + r(g) + 9} y={y(g) + 6} fill="#94a3b8" fontSize="7.5">Spend: €{g.cost.toFixed(0)} · {g.termCount} terms</text>
+                                    <text x={x(g) + r(g) + 9} y={y(g) + 17} fill={color} fontSize="7.5" fontWeight="bold">{gAny.gramType}</text>
+                                </g>
+                            )}
+                        </g>
+                    );
+                })}
+            </svg>
+        </div>
+    );
+}
+
+// ---------- Main component ----------
+export default function NGramInsights({ searchTerms, loading }: NGramInsightsProps) {
+    const [activeTab, setActiveTab] = useState<TabType>('winning');
+    const [nSize,     setNSize]     = useState<SizeFilter>(0);
+    const [typeFilter,setTypeFilter]= useState<TypeFilter>('all');
+    const [sortKey,   setSortKey]   = useState<SortKey>('conversions');
+    const [viewMode,  setViewMode]  = useState<ViewDisplay>('table');
+    const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+
+    // ---- Build + classify all n-grams ----
     const allNGrams = useMemo(() => {
-        if (!searchTerms || searchTerms.length === 0) return [];
-        return buildNGrams(searchTerms, 3, 2);
+        if (!searchTerms?.length) return [];
+        return buildNGrams(searchTerms, 3, 2).map(g => ({
+            ...g,
+            gramType: classifyGram(g.gram),
+        }));
     }, [searchTerms]);
 
-    const filteredNGrams = useMemo(() => {
-        let grams = allNGrams;
-        if (nSize > 0) grams = grams.filter(g => g.n === nSize);
-        return grams;
-    }, [allNGrams, nSize]);
+    // ---- KPI values ----
+    const kpi = useMemo(() => {
+        if (!allNGrams.length) return null;
+        const winning = allNGrams.filter(g => g.conversions > 0);
+        const top     = [...winning].sort((a, b) => b.conversions - a.conversions)[0];
 
-    const winningGrams = useMemo(() =>
-        filteredNGrams.filter(g => g.conversions > 0).sort((a, b) => b.conversions - a.conversions).slice(0, 30),
-        [filteredNGrams]);
+        const brandSpend    = allNGrams.filter(g => (g as any).gramType === 'Brand').reduce((s, g) => s + g.cost, 0);
+        const nonBrandSpend = allNGrams.filter(g => (g as any).gramType === 'Non-brand').reduce((s, g) => s + g.cost, 0);
+        const totalSpend    = brandSpend + nonBrandSpend || 1;
+        const brandPct      = Math.round((brandSpend / totalSpend) * 100);
 
-    const wastefulGrams = useMemo(() =>
-        filteredNGrams.filter(g => g.conversions === 0 && g.cost > 2).sort((a, b) => b.cost - a.cost).slice(0, 30),
-        [filteredNGrams]);
+        const roasGrams     = winning.filter(g => g.roas);
+        const avgRoas       = roasGrams.length
+            ? roasGrams.reduce((s, g) => s + (g.roas ?? 0), 0) / roasGrams.length
+            : 0;
 
-    const negativeCandidates = useMemo(() =>
-        findNegativeCandidates(allNGrams, 1.0, 2).slice(0, 30),
-        [allNGrams]);
+        // Opportunity: best 2-gram non-brand by roas
+        const opp = [...winning]
+            .filter(g => (g as any).gramType !== 'Dimension' && g.n >= 2)
+            .sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))[0];
 
-    const expansionCandidates = useMemo(() =>
-        findExpansionCandidates(allNGrams).slice(0, 30),
-        [allNGrams]);
+        return { top, brandPct, brandSpend, nonBrandSpend, avgRoas, roasCount: roasGrams.length, opp };
+    }, [allNGrams]);
 
-    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+    // ---- Filtered + sorted table data ----
+    const tableData = useMemo(() => {
+        let data = allNGrams
+            .filter(g => nSize === 0 || g.n === nSize)
+            .filter(g => typeFilter === 'all' || (g as any).gramType === typeFilter);
 
-    const handleSort = (key: string) => {
-        let direction: 'asc' | 'desc' = 'desc';
-        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'desc') {
-            direction = 'asc';
+        if (activeTab === 'winning') {
+            data = data.filter(g => g.conversions > 0);
+        } else {
+            data = data.filter(g => g.conversions === 0 && g.cost > 2);
         }
-        setSortConfig({ key, direction });
-    };
-
-    const sortData = (data: NGram[]) => {
-        if (!sortConfig) return data;
 
         return [...data].sort((a, b) => {
-            let aValue = a[sortConfig.key as keyof NGram] ?? 0;
-            let bValue = b[sortConfig.key as keyof NGram] ?? 0;
-
-            // Handle calculated fields if needed, or ensure type safety
-            if (sortConfig.key === 'cpa') {
-                aValue = a.conversions > 0 ? a.cost / a.conversions : Infinity;
-                bValue = b.conversions > 0 ? b.cost / b.conversions : Infinity;
+            if (sortKey === 'cpa') {
+                const ca = a.conversions > 0 ? a.cost / a.conversions : Infinity;
+                const cb = b.conversions > 0 ? b.cost / b.conversions : Infinity;
+                return ca - cb;
             }
+            if (sortKey === 'roas') return (b.roas ?? 0) - (a.roas ?? 0);
+            return (b[sortKey] as number) - (a[sortKey] as number);
+        }).slice(0, 50);
+    }, [allNGrams, activeTab, nSize, typeFilter, sortKey]);
 
-            if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-            if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
+    // ---- Spend share ----
+    const maxSpend = useMemo(() => Math.max(...tableData.map(g => g.cost), 1), [tableData]);
+
+    // ---- Insight text ----
+    const insightText = useMemo(() => {
+        if (!kpi) return null;
+        if (activeTab === 'winning') {
+            const topConv = kpi.top?.conversions ?? 0;
+            const totalConv = allNGrams.reduce((s, g) => s + g.conversions, 0) / 3; // approx unique
+            const pct = totalConv > 0 ? Math.round((topConv / totalConv) * 100) : 0;
+            return `Top pattern "${kpi.top?.gram}" drives ${topConv} conversions. Brand terms represent ${kpi.brandPct}% of spend (€${kpi.brandSpend.toFixed(0)}) vs Non-brand €${kpi.nonBrandSpend.toFixed(0)}.`;
+        } else {
+            const wasted = tableData.reduce((s, g) => s + g.cost, 0);
+            return `${tableData.length} patterns wasted €${wasted.toFixed(0)} with 0 conversions. Add the highest-spend ones as negatives to recover budget.`;
+        }
+    }, [activeTab, kpi, tableData, allNGrams]);
+
+    // ---- TYPE badge ----
+    const typeBadge = (t: string) => {
+        if (t === 'Brand')     return <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 font-bold tracking-wide">BRAND</span>;
+        if (t === 'Dimension') return <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20  text-amber-300  font-bold tracking-wide">DIMENSION</span>;
+        return                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-600/60   text-slate-400  font-bold tracking-wide">NON-BRAND</span>;
     };
 
-    if (loading) {
-        return <div className="animate-pulse bg-slate-900/50 border border-slate-800 rounded-xl h-96"></div>;
-    }
+    // ---- N badge ----
+    const nBadge = (n: number) => {
+        const cls = n === 1 ? 'bg-blue-500/15 text-blue-400' : n === 2 ? 'bg-violet-500/15 text-violet-400' : 'bg-emerald-500/15 text-emerald-400';
+        return <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${cls}`}>{n}W</span>;
+    };
 
-    if (!searchTerms || searchTerms.length === 0) {
+    // ---- Loading / empty ----
+    if (loading) return <div className="animate-pulse bg-slate-900/50 border border-slate-800 rounded-xl h-96" />;
+    if (!searchTerms?.length) {
         return (
             <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center">
-                <Search className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-                <h3 className="text-white font-bold">Няма данни за търсени термини</h3>
-                <p className="text-slate-400 text-sm mt-1">Необходими са поне няколко търсени термина с импресии за N-gram анализ.</p>
-                <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg inline-block">
-                    <p className="text-[11px] text-blue-400">💡 <b>Съвет:</b> Опитайте да изберете по-дълъг период от време (напр. "Last 30 Days"), за да съберете повече статистически данни.</p>
-                </div>
-            </div>
-        );
-    }
-
-    const SortIcon = ({ columnKey }: { columnKey: string }) => {
-        if (sortConfig?.key !== columnKey) return <ArrowUpDown className="w-3 h-3 text-slate-600 opacity-50" />;
-        return sortConfig.direction === 'asc'
-            ? <TrendingUp className="w-3 h-3 text-violet-400" /> // Using TrendingUp/Down as arrows for style matching or ArrowUp/Down
-            : <TrendingDown className="w-3 h-3 text-violet-400" />;
-    };
-
-    const SortableHeader = ({ label, columnKey, tooltip }: { label: string, columnKey: string, tooltip?: string }) => (
-        <th
-            className="px-4 py-3 cursor-pointer hover:text-slate-300 transition-colors group"
-            onClick={() => handleSort(columnKey)}
-            title={tooltip}
-        >
-            <div className="flex items-center gap-1">
-                {label}
-                <SortIcon columnKey={columnKey} />
-            </div>
-        </th>
-    );
-
-    const Table = ({ data, type }: { data: NGram[], type: string }) => {
-        const sortedData = useMemo(() => sortData(data), [data, sortConfig]);
-
-        return (
-            <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                    <thead>
-                        <tr className="border-b border-slate-800 text-slate-500 font-medium">
-                            <th className="px-4 py-3">Pattern / Phrase</th>
-                            <SortableHeader label="Terms" columnKey="termCount" />
-                            <SortableHeader label="Spend" columnKey="cost" />
-                            <SortableHeader label="Conv" columnKey="conversions" />
-                            <SortableHeader label="ROAS" columnKey="roas" tooltip="Return On Ad Spend (Conversion Value / Cost). Shows '-' if conversion value is 0." />
-                            <SortableHeader label="CPA" columnKey="cpa" />
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/50">
-                        {sortedData.map((g, idx) => (
-                            <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
-                                <td className="px-4 py-3 font-medium text-slate-200">
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] mr-2 ${g.n === 1 ? 'bg-blue-500/10 text-blue-400' : g.n === 2 ? 'bg-violet-500/10 text-violet-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                                        {g.n}W
-                                    </span>
-                                    {g.gram}
-                                </td>
-                                <td className="px-4 py-3 text-slate-400">{g.termCount}</td>
-                                <td className="px-4 py-3 text-slate-300">€{g.cost.toFixed(2)}</td>
-                                <td className="px-4 py-3">
-                                    <span className={g.conversions > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                                        {g.conversions}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3">
-                                    {g.roas ? (
-                                        <span className={`font-bold ${g.roas >= 3 ? 'text-emerald-400' : g.roas >= 1 ? 'text-blue-400' : 'text-amber-400'}`}>
-                                            {g.roas.toFixed(1)}x
-                                        </span>
-                                    ) : <span className="text-slate-600" title="No conversion value data">-</span>}
-                                </td>
-                                <td className="px-4 py-3 text-slate-400">
-                                    {g.conversions > 0 ? `€${(g.cost / g.conversions).toFixed(1)}` : '-'}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {data.length === 0 && (
-                    <div className="p-8 text-center text-slate-500 italic">Няма намерени съвпадения за този филтър.</div>
-                )}
+                <Layers className="w-10 h-10 text-slate-700 mx-auto mb-3" />
+                <p className="text-white font-bold">Няма данни за търсени термини</p>
+                <p className="text-slate-400 text-sm mt-1">Изберете по-дълъг период (Last 30 Days) за повече данни.</p>
             </div>
         );
     }
 
     return (
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
-            {/* Header & Tabs */}
-            <div className="p-4 border-b border-slate-800 bg-slate-900/60 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+
+            {/* ── Header ───────────────────────────────────── */}
+            <div className="px-5 py-4 border-b border-slate-800 bg-slate-900/60 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-violet-500/10 text-violet-400 rounded-lg">
                         <Layers className="w-5 h-5" />
                     </div>
                     <div>
-                        <h3 className="text-white font-bold leading-none">N-Gram Insights</h3>
-                        <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">Search Term Pattern Analysis</p>
+                        <h3 className="text-white font-black leading-none tracking-tight">N-Gram Insights</h3>
+                        <p className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-widest">Search Term Pattern Analysis</p>
                     </div>
                 </div>
-
-                <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700/50">
-                    <button
-                        onClick={() => { setActiveTab('winning'); setSortConfig(null); }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'winning' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                        <TrendingUp className="w-3 h-3" /> Печеливши
+                {/* Table / Bubble toggle */}
+                <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700/50 gap-1">
+                    <button onClick={() => setViewMode('table')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'table' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
+                        <BarChart2 className="w-3.5 h-3.5" /> Table
                     </button>
-                    <button
-                        onClick={() => { setActiveTab('wasteful'); setSortConfig(null); }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'wasteful' ? 'bg-red-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                        <TrendingDown className="w-3 h-3" /> Губещи
-                    </button>
-                    <button
-                        onClick={() => { setActiveTab('negatives'); setSortConfig(null); }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'negatives' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                        <MinusCircle className="w-3 h-3" /> Negatives
-                    </button>
-                    <button
-                        onClick={() => { setActiveTab('expansion'); setSortConfig(null); }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'expansion' ? 'bg-violet-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                        <PlusCircle className="w-3 h-3" /> Expand
+                    <button onClick={() => setViewMode('bubble')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'bubble' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
+                        <Circle className="w-3.5 h-3.5" /> Bubble
                     </button>
                 </div>
             </div>
 
-            {/* Filter Bar (for Winning/Wasteful) */}
-            {(activeTab === 'winning' || activeTab === 'wasteful') && (
-                <div className="px-4 py-2 border-b border-slate-800/50 bg-slate-900/20 flex gap-4">
-                    <span className="text-[10px] text-slate-500 flex items-center">Размер (Words):</span>
-                    {[0, 1, 2, 3].map(size => (
-                        <button
-                            key={size}
-                            onClick={() => setNSize(size)}
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors ${nSize === size ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-                        >
-                            {size === 0 ? 'ALL' : `${size}W`}
-                        </button>
-                    ))}
+            {/* ── KPI Cards ────────────────────────────────── */}
+            {kpi && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-800/50 border-b border-slate-800">
+                    {/* Top Pattern */}
+                    <div className="bg-slate-900/70 px-4 py-3">
+                        <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Top Pattern</p>
+                        <p className="text-lg font-black text-white mt-1 tracking-tight">{kpi.top?.gram ?? '—'}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                            {kpi.top?.conversions} conv · {roasText(kpi.top?.roas ?? null)} ROAS
+                        </p>
+                    </div>
+                    {/* Brand vs Non-brand */}
+                    <div className="bg-slate-900/70 px-4 py-3">
+                        <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Brand vs Non-brand</p>
+                        <p className="text-lg font-black text-violet-400 mt-1">{kpi.brandPct}% <span className="text-slate-400 font-normal text-sm">brand</span></p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">€{kpi.brandSpend.toFixed(0)} vs €{kpi.nonBrandSpend.toFixed(0)}</p>
+                    </div>
+                    {/* Avg ROAS */}
+                    <div className="bg-slate-900/70 px-4 py-3">
+                        <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Avg ROAS</p>
+                        <p className="text-lg font-black text-emerald-400 mt-1">{kpi.avgRoas.toFixed(1)}x</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">across {kpi.roasCount} patterns</p>
+                    </div>
+                    {/* Opportunity */}
+                    <div className="bg-slate-900/70 px-4 py-3">
+                        <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Opportunity</p>
+                        <p className="text-base font-black text-amber-400 mt-1 leading-tight">{kpi.opp?.gram ?? '—'}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                            {kpi.opp ? `${(kpi.opp as any).gramType}+category = ${roasText(kpi.opp.roas ?? null)} ROAS` : 'No 2-gram opportunity'}
+                        </p>
+                    </div>
                 </div>
             )}
 
-            {/* Content Display */}
-            <div className="min-h-[400px]">
-                {activeTab === 'winning' && <Table data={winningGrams} type="winning" />}
-                {activeTab === 'wasteful' && <Table data={wastefulGrams} type="wasteful" />}
-                {activeTab === 'negatives' && <Table data={negativeCandidates} type="negatives" />}
-                {activeTab === 'expansion' && <Table data={expansionCandidates} type="expansion" />}
+            {/* ── Tab + Filter bar ─────────────────────────── */}
+            <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/30 flex flex-wrap items-center gap-3">
+                {/* Tabs */}
+                <div className="flex gap-1.5">
+                    <button onClick={() => setActiveTab('winning')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${activeTab === 'winning' ? 'bg-emerald-500 text-white shadow' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}>
+                        <TrendingUp className="w-3 h-3" /> Печеливши
+                    </button>
+                    <button onClick={() => setActiveTab('wasteful')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${activeTab === 'wasteful' ? 'bg-red-500 text-white shadow' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}>
+                        <TrendingDown className="w-3 h-3" /> Губещи
+                    </button>
+                </div>
+
+                <div className="w-px h-4 bg-slate-700" />
+
+                {/* Size filter */}
+                <div className="flex items-center gap-1 text-[10px]">
+                    <span className="text-slate-500 mr-1">Размер:</span>
+                    {([0, 1, 2, 3] as SizeFilter[]).map(s => (
+                        <button key={s} onClick={() => setNSize(s)}
+                            className={`px-2 py-0.5 rounded font-bold transition-colors ${nSize === s ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                            {s === 0 ? 'ALL' : `${s}W`}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="w-px h-4 bg-slate-700" />
+
+                {/* Type filter */}
+                <div className="flex items-center gap-1 text-[10px]">
+                    <span className="text-slate-500 mr-1">Тип:</span>
+                    {(['all', 'Brand', 'Non-brand', 'Dimension'] as TypeFilter[]).map(t => (
+                        <button key={t} onClick={() => setTypeFilter(t)}
+                            className={`px-2 py-0.5 rounded font-bold transition-colors ${typeFilter === t
+                                ? t === 'Brand' ? 'bg-violet-600 text-white' : t === 'Non-brand' ? 'bg-slate-600 text-white' : t === 'Dimension' ? 'bg-amber-600 text-white' : 'bg-slate-600 text-white'
+                                : 'text-slate-500 hover:text-slate-300'}`}>
+                            {t === 'all' ? 'All' : t}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="ml-auto flex items-center gap-1.5 text-[10px]">
+                    <span className="text-slate-500">Sort:</span>
+                    <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}
+                        className="bg-slate-800 border border-slate-700 text-slate-300 text-[11px] rounded-lg px-2 py-1 focus:ring-violet-500 focus:border-violet-500">
+                        <option value="conversions">Conversions</option>
+                        <option value="roas">ROAS</option>
+                        <option value="cost">Spend</option>
+                        <option value="termCount">Terms</option>
+                        <option value="cpa">CPA</option>
+                    </select>
+                </div>
             </div>
 
-            {/* Footer Summary */}
-            <div className="p-3 bg-slate-900/60 border-t border-slate-800 text-[10px] text-slate-500 flex justify-between items-center">
-                <p>N-Gram анализът разбива търсените термини на фрази от 1, 2 и 3 думи, за да открие повтарящи се модели.</p>
-                <p className="flex items-center gap-1"><ArrowUpDown className="w-3 h-3" /> Кликнете заглавията за сортиране</p>
+            {/* ── Content ──────────────────────────────────── */}
+            <div className="min-h-[360px]">
+                {viewMode === 'bubble' ? (
+                    <BubbleChart data={tableData as any} typeFilter={typeFilter} />
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                            <thead>
+                                <tr className="border-b border-slate-800 text-slate-500 font-medium text-[10px] uppercase tracking-wider">
+                                    <th className="px-4 py-3 w-48">Pattern / Phrase</th>
+                                    <th className="px-3 py-3">Size</th>
+                                    <th className="px-3 py-3">Type</th>
+                                    <th className="px-3 py-3 text-right">Terms</th>
+                                    <th className="px-4 py-3">Spend (Share)</th>
+                                    <th className="px-3 py-3 text-right">Conversions</th>
+                                    <th className="px-3 py-3 text-right">ROAS</th>
+                                    <th className="px-3 py-3 text-right">CPA</th>
+                                    {activeTab === 'wasteful' && <th className="px-3 py-3" />}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/40">
+                                {tableData.map((g, idx) => {
+                                    const gAny = g as any;
+                                    const spendShare = (g.cost / maxSpend) * 100;
+                                    const cpa = g.conversions > 0 ? g.cost / g.conversions : null;
+                                    const isConfirmed = confirmed.has(g.gram);
+
+                                    return (
+                                        <tr key={idx} className="hover:bg-slate-800/25 transition-colors group">
+                                            <td className="px-4 py-2.5 font-bold text-slate-200">{g.gram}</td>
+                                            <td className="px-3 py-2.5">{nBadge(g.n)}</td>
+                                            <td className="px-3 py-2.5">{typeBadge(gAny.gramType)}</td>
+                                            <td className="px-3 py-2.5 text-right text-slate-400 tabular-nums">{g.termCount.toLocaleString()}</td>
+                                            <td className="px-4 py-2.5 min-w-[140px]">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden" style={{ minWidth: 60 }}>
+                                                        <div className="h-full rounded-full bg-indigo-500/60"
+                                                            style={{ width: `${spendShare}%` }} />
+                                                    </div>
+                                                    <span className="text-slate-300 tabular-nums text-[11px]">€{g.cost.toFixed(0)}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right">
+                                                <span className={g.conversions > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
+                                                    {g.conversions > 0 ? g.conversions.toFixed(1) : '—'}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right">
+                                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${roasClass(g.roas)}`}>
+                                                    {roasText(g.roas)}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right text-slate-400 tabular-nums">
+                                                {cpa ? `€${cpa.toFixed(1)}` : '—'}
+                                            </td>
+                                            {activeTab === 'wasteful' && (
+                                                <td className="px-3 py-2.5">
+                                                    {isConfirmed ? (
+                                                        <span className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold">
+                                                            <Check className="w-3 h-3" /> Added
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => setConfirmed(prev => new Set([...prev, g.gram]))}
+                                                            className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] font-bold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2 py-1 rounded transition-all">
+                                                            <MinusCircle className="w-3 h-3" /> Add as Negative
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                        {tableData.length === 0 && (
+                            <div className="p-10 text-center text-slate-500 italic">Няма намерени съвпадения.</div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* ── Insight box ──────────────────────────────── */}
+            {insightText && (
+                <div className="mx-4 mb-4 mt-1 px-4 py-3 bg-indigo-500/8 border border-indigo-500/20 rounded-xl text-[11px] text-slate-300">
+                    <span className="text-indigo-400 font-bold mr-1.5">💡 Insight:</span>
+                    {insightText}
+                </div>
+            )}
+
+            {/* ── Footer ───────────────────────────────────── */}
+            <div className="px-4 py-2 border-t border-slate-800 bg-slate-900/60 text-[10px] text-slate-600 flex justify-between">
+                <span>{allNGrams.length} total patterns · {tableData.length} показани</span>
+                <span>1W = unigram · 2W = bigram · 3W = trigram</span>
             </div>
         </div>
     );
