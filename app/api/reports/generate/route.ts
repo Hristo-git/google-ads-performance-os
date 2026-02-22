@@ -72,11 +72,12 @@ export async function POST(request: Request) {
         // Model selection (same whitelist as stream route)
         const ALLOWED_MODELS: Record<string, string> = {
             'opus-4.6': 'claude-opus-4-6',
+            'sonnet-4.6': 'claude-sonnet-4-6',
             'sonnet-4.5': 'claude-sonnet-4-5-20250929',
             'haiku-4.5': 'claude-haiku-4-5-20251001',
         };
-        const modelId = (settings.model && ALLOWED_MODELS[settings.model]) || 'claude-sonnet-4-5-20250929';
-        const modelLabel = Object.entries(ALLOWED_MODELS).find(([, v]) => v === modelId)?.[0] || 'sonnet-4.5';
+        const modelId = (settings.model && ALLOWED_MODELS[settings.model]) || 'claude-sonnet-4-6';
+        const modelLabel = Object.entries(ALLOWED_MODELS).find(([, v]) => v === modelId)?.[0] || 'sonnet-4.6';
 
         console.log(`Generating report: ${templateId}, Model: ${modelLabel}, Language: ${language}, Expert Mode: ${settings.expertMode}`);
 

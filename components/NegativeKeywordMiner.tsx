@@ -35,7 +35,7 @@ interface WastefulTerm {
 
 type ScopeFilter = 'all' | 'account' | 'campaign';
 type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
-type SortKey = 'cost' | 'clicks' | 'impressions' | 'monthlyCost' | 'cpc' | 'ctr' | 'conversions';
+type SortKey = 'cost' | 'clicks' | 'impressions' | 'monthlyCost' | 'cpc' | 'ctr' | 'conversions' | 'conversionValue';
 
 const BRAND_TERMS = ['videnov', 'vellea', 'videhov', 'виденов'];
 
@@ -52,6 +52,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
     const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>('all');
     const [copied, setCopied] = useState(false);
     const [showTop, setShowTop] = useState(100);
+    const [showConverting, setShowConverting] = useState(false);
 
     const periodDays = useMemo(() => {
         const start = new Date(dateRange.start);
@@ -123,6 +124,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
             clicks: number;
             cost: number;
             conversions: number;
+            conversionValue: number;
             campaigns: Set<string>;
             campaignIds: Set<string>;
         }> = {};
@@ -134,8 +136,8 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
             const key = rawTerm.toLowerCase().trim();
             if (!byTerm[key]) {
                 byTerm[key] = {
-                    searchTerm: rawTerm, // Use clean term
-                    impressions: 0, clicks: 0, cost: 0, conversions: 0,
+                    searchTerm: rawTerm,
+                    impressions: 0, clicks: 0, cost: 0, conversions: 0, conversionValue: 0,
                     campaigns: new Set(),
                     campaignIds: new Set()
                 };
@@ -144,6 +146,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
             byTerm[key].clicks += item.clicks;
             byTerm[key].cost += item.cost;
             byTerm[key].conversions += item.conversions;
+            byTerm[key].conversionValue += item.conversionValue;
             if (item.campaignName) byTerm[key].campaigns.add(item.campaignName);
             if (item.campaignId) byTerm[key].campaignIds.add(item.campaignId);
         });
@@ -152,8 +155,10 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
             .filter(t => {
                 // exclude brand terms for safety
                 if (BRAND_TERMS.some(brand => t.searchTerm.includes(brand))) return false;
-
-                return t.conversions === 0 && t.cost >= minCost && t.clicks >= minClicks;
+                if (t.cost < minCost || t.clicks < minClicks) return false;
+                // In default mode show only 0-conversion terms; toggle shows all
+                if (!showConverting && t.conversions > 0) return false;
+                return true;
             })
             .map(t => {
                 const cpc = t.clicks > 0 ? t.cost / t.clicks : 0;
@@ -169,7 +174,10 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                 const isHighVolume = t.clicks >= 20;
 
                 let confidence: 'high' | 'medium' | 'low';
-                if (isHighCTR && isShortPeriod) {
+                // Terms with conversions are shown for context only — always mark as low
+                if (t.conversions > 0) {
+                    confidence = 'low';
+                } else if (isHighCTR && isShortPeriod) {
                     // High CTR in short period = likely relevant, just needs more data
                     confidence = 'low';
                 } else if (isHighCTR && isHighVolume) {
@@ -192,7 +200,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                     clicks: t.clicks,
                     cost: t.cost,
                     conversions: t.conversions,
-                    conversionValue: 0,
+                    conversionValue: t.conversionValue,
                     cpc,
                     ctr,
                     campaigns: Array.from(t.campaigns),
@@ -201,7 +209,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                     confidence,
                 };
             });
-    }, [rawData, minCost, minClicks, periodDays, avgCPA, avgCTR]);
+    }, [rawData, minCost, minClicks, periodDays, avgCPA, avgCTR, showConverting]);
 
     const accountLevel = useMemo(() => wastefulTerms.filter(t => t.campaigns.length >= 2), [wastefulTerms]);
     const campaignLevel = useMemo(() => wastefulTerms.filter(t => t.campaigns.length === 1), [wastefulTerms]);
@@ -271,9 +279,9 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
     }, [selectedTerms]);
 
     const exportCSV = useCallback(() => {
-        const header = 'Search Term,Impressions,Clicks,CTR,Cost,CPC,Conversions,Monthly Cost Est.,Confidence,Campaigns,Scope';
+        const header = 'Search Term,Impressions,Clicks,CTR,Cost,CPC,Conversions,Revenue,Monthly Cost Est.,Confidence,Campaigns,Scope';
         const rows = selectedTerms.map(t =>
-            `"${t.searchTerm.replace(/"/g, '""')}",${t.impressions},${t.clicks},${(t.ctr * 100).toFixed(1)}%,${t.cost.toFixed(2)},${t.cpc.toFixed(2)},${t.conversions},${t.monthlyCost.toFixed(2)},${t.confidence},"${t.campaigns.join('; ')}",${t.campaigns.length >= 2 ? 'Account' : 'Campaign'}`
+            `"${t.searchTerm.replace(/"/g, '""')}",${t.impressions},${t.clicks},${(t.ctr * 100).toFixed(1)}%,${t.cost.toFixed(2)},${t.cpc.toFixed(2)},${t.conversions},${t.conversionValue.toFixed(2)},${t.monthlyCost.toFixed(2)},${t.confidence},"${t.campaigns.join('; ')}",${t.campaigns.length >= 2 ? 'Account' : 'Campaign'}`
         );
         const csv = [header, ...rows].join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -322,7 +330,8 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                         &euro;{totalWastedCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                     </div>
                     <div className="text-xs text-red-400/60 mt-0.5">
-                        {wastefulTerms.length} terms ({minClicks}+ clicks, 0 conv.)
+                        {wastefulTerms.filter(t => t.conversions === 0).length} terms ({minClicks}+ clicks, 0 conv.)
+                        {showConverting && ` + ${wastefulTerms.filter(t => t.conversions > 0).length} converting`}
                     </div>
                 </div>
                 <div className="rounded-lg p-3 bg-amber-500/10 border border-amber-500/20">
@@ -485,6 +494,17 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                             </select>
                         </div>
 
+                        {/* Show Converting Toggle */}
+                        <button
+                            onClick={() => setShowConverting(!showConverting)}
+                            className={`px-3 py-1 rounded text-xs font-medium transition-colors border ${showConverting
+                                ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400'
+                                : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:text-white'
+                                }`}
+                        >
+                            {showConverting ? 'All Terms' : '0 Conv. Only'}
+                        </button>
+
                         {/* Show Top */}
                         <select
                             value={showTop}
@@ -563,6 +583,11 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                     </button>
                                 </th>
                                 <th className="px-3 py-3 text-right font-medium">
+                                    <button onClick={() => handleSort('conversionValue')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                        Revenue {sortBy === 'conversionValue' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
+                                    </button>
+                                </th>
+                                <th className="px-3 py-3 text-right font-medium">
                                     <button onClick={() => handleSort('monthlyCost')} className="flex items-center gap-1 ml-auto hover:text-white">
                                         Est./Mo {sortBy === 'monthlyCost' && <span>{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>}
                                     </button>
@@ -576,11 +601,12 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                 const isSelected = selected.has(key);
                                 const isAccountScope = item.campaigns.length >= 2;
                                 const confStyle = CONFIDENCE_STYLES[item.confidence];
+                                const hasConv = item.conversions > 0;
                                 return (
                                     <tr
                                         key={idx}
                                         onClick={() => toggleSelect(item.searchTerm)}
-                                        className={`cursor-pointer transition-colors ${isSelected ? 'bg-violet-500/10' : 'hover:bg-slate-700/30'}`}
+                                        className={`cursor-pointer transition-colors ${isSelected ? 'bg-violet-500/10' : hasConv ? 'bg-emerald-500/5 hover:bg-emerald-500/10' : 'hover:bg-slate-700/30'}`}
                                     >
                                         <td className="px-3 py-2.5">
                                             <input
@@ -625,8 +651,11 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                         <td className="px-3 py-2.5 text-right text-slate-400">
                                             &euro;{item.cpc.toFixed(2)}
                                         </td>
-                                        <td className="px-3 py-2.5 text-right text-slate-600 font-medium">
-                                            {item.conversions}
+                                        <td className={`px-3 py-2.5 text-right font-medium ${hasConv ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                            {item.conversions > 0 ? item.conversions.toFixed(1) : item.conversions}
+                                        </td>
+                                        <td className={`px-3 py-2.5 text-right text-xs ${item.conversionValue > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                            {item.conversionValue > 0 ? `\u20AC${item.conversionValue.toFixed(2)}` : '\u2014'}
                                         </td>
                                         <td className="px-3 py-2.5 text-right text-amber-400 text-xs">
                                             &euro;{item.monthlyCost.toFixed(1)}/mo

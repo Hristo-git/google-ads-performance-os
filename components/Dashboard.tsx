@@ -187,28 +187,34 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                 <>
                     <td className="px-4 py-3 text-right">{(metrics.impressions || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-right">{(metrics.clicks || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">€{metrics.cost?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
+                    <td className="px-4 py-3 text-right">{(metrics.conversions || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-right text-emerald-400 font-semibold">€{metrics.conversionValue?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
                     <td className="px-4 py-3 text-right font-semibold">{(metrics.roas || 0).toFixed(2)}x</td>
-                    <td className="px-4 py-3 text-right text-purple-400">
+                    <td className="px-4 py-3 text-center">
                         {metrics.searchImpressionShare != null ? (
-                            <span className={getISColor(metrics.searchImpressionShare)}>
+                            <span className={`font-medium ${getISColor(metrics.searchImpressionShare)}`}>
                                 {(metrics.searchImpressionShare * 100).toFixed(1)}%
                             </span>
                         ) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right text-slate-400">
+                    <td className="px-4 py-3 text-center">
                         {metrics.searchLostISRank != null ? (
-                            <span className={metrics.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}>
+                            <span className={`font-medium ${metrics.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
                                 {(metrics.searchLostISRank * 100).toFixed(1)}%
                             </span>
                         ) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-center">
                         {metrics.adStrength ? (
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase ${getAdStrengthColor(metrics.adStrength)}`}>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${getAdStrengthColor(metrics.adStrength)}`}>
                                 {AD_STRENGTH_LABEL[metrics.adStrength] || metrics.adStrength}
                             </span>
-                        ) : '—'}
+                        ) : (
+                            <span className="text-xs text-slate-400">
+                                {metrics.status === 'ENABLED' ? '✅ ENABLED' : '⚠️ ' + (metrics.status || 'UNKNOWN')}
+                            </span>
+                        )}
                     </td>
                 </>
             )}
@@ -471,6 +477,13 @@ const ASSET_FIELD_TYPE_LABELS: Record<string, string> = {
     'SQUARE_MARKETING_IMAGE': 'Square Image',
     'PORTRAIT_MARKETING_IMAGE': 'Portrait Image',
     'LANDSCAPE_LOGO': 'Landscape Logo',
+    'SQUARE_LOGO': 'Square Logo',
+    'CALL_TO_ACTION_SELECTION': 'Call to Action',
+    'STRUCTURED_SNIPPET_HEADER': 'Snippet Header',
+    'STRUCTURED_SNIPPET_VALUES': 'Snippet Values',
+    'LANDSCAPE_MARKETING_IMAGE': 'Landscape Image',
+    'AD_IMAGE': 'Ad Image',
+    'BUSINESS_LOGO': 'Business Logo',
     // numeric fallbacks (AssetFieldType enum values)
     '2': 'Headline',
     '3': 'Description',
@@ -503,14 +516,14 @@ const ASSET_FIELD_TYPE_LABELS: Record<string, string> = {
 
 // PMax asset recommended counts — used for IS banner + asset header color coding
 const PMAX_ASSET_THRESHOLDS: Record<string, { min: number; rec: number; label: string }> = {
-    'Headline':        { min: 3,  rec: 8,  label: 'Headlines' },
-    'Long Headline':   { min: 1,  rec: 5,  label: 'Long Headlines' },
-    'Description':     { min: 2,  rec: 4,  label: 'Descriptions' },
-    'Marketing Image': { min: 1,  rec: 3,  label: 'Images' },
-    'Square Image':    { min: 1,  rec: 3,  label: 'Sq. Images' },
-    'Logo':            { min: 1,  rec: 1,  label: 'Logo' },
-    'Video':           { min: 0,  rec: 1,  label: 'Videos' },
-    'Portrait Image':  { min: 0,  rec: 1,  label: 'Portrait Imgs' },
+    'Headline': { min: 3, rec: 8, label: 'Headlines' },
+    'Long Headline': { min: 1, rec: 5, label: 'Long Headlines' },
+    'Description': { min: 2, rec: 4, label: 'Descriptions' },
+    'Marketing Image': { min: 1, rec: 3, label: 'Images' },
+    'Square Image': { min: 1, rec: 3, label: 'Sq. Images' },
+    'Logo': { min: 1, rec: 1, label: 'Logo' },
+    'Video': { min: 0, rec: 1, label: 'Videos' },
+    'Portrait Image': { min: 0, rec: 1, label: 'Portrait Imgs' },
 };
 
 const PERFORMANCE_LABEL_LABELS: Record<string, string> = {
@@ -692,6 +705,13 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [dgAssets, setDgAssets] = useState<AssetPerformance[]>([]);
     const [dgAudiences, setDgAudiences] = useState<AudiencePerformance[]>([]);
     const [dgView, setDgView] = useState<'performance' | 'placements' | 'audiences' | 'demographics' | 'time' | 'assets'>('performance');
+
+    // Demographics visualization state
+    const [demoViewMode, setDemoViewMode] = useState<'chart' | 'table'>('chart');
+    const [demoMetricFilter, setDemoMetricFilter] = useState<'cost' | 'conversions' | 'clicks'>('cost');
+    const [placementsMetricFilter, setPlacementsMetricFilter] = useState<'cost' | 'conversions' | 'clicks'>('cost');
+
+    // ... existing state ...
     // Display / Video / DG ad group level state
     const [displayPlacements, setDisplayPlacements] = useState<PlacementPerformance[]>([]);
     const [displayAudiences, setDisplayAudiences] = useState<AudiencePerformance[]>([]);
@@ -1401,86 +1421,495 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         );
     }
 
-    // --- Demand Gen specialized renders ---
-    const renderDGPlacements = () => (
-        <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                    <tr>
-                        <th className="px-4 py-3 font-medium">Placement</th>
-                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
-                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
-                        <th className="px-4 py-3 text-right font-medium">Cost</th>
-                        <th className="px-4 py-3 text-right font-medium">CTR</th>
-                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
-                        <th className="px-4 py-3 text-right font-medium">Action</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700 text-slate-300">
-                    {dgPlacements.length === 0 ? (
-                        <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500 italic">No placement data found for this period.</td></tr>
-                    ) : (
-                        dgPlacements.map((p, i) => (
-                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
-                                <td className="px-4 py-4">{p.placement}</td>
-                                <td className="px-4 py-4 text-right">{p.impressions.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">{p.clicks.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">€{p.cost.toFixed(2)}</td>
-                                <td className="px-4 py-4 text-right">{(p.ctr * 100).toFixed(2)}%</td>
-                                <td className="px-4 py-4 text-right">{p.conversions.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            alert(`Excluding placement: ${p.placement}. This action would typically call the Google Ads API to add a campaign-level exclusion.`);
-                                        }}
-                                        className="text-xs text-red-400 hover:text-red-300 transition-colors bg-red-400/10 px-2 py-1 rounded"
-                                    >
-                                        Exclude
-                                    </button>
-                                </td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
-        </div>
-    );
+    // --- Placements specialized render ---
+    const renderPlacements = (data: PlacementPerformance[]) => {
+        const totalValue = data.reduce((sum, p) => sum + (p[placementsMetricFilter] || 0), 0);
 
-    const renderDGDemographics = () => (
-        <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                    <tr>
-                        <th className="px-4 py-3 font-medium">Category</th>
-                        <th className="px-4 py-3 font-medium">Value</th>
-                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
-                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
-                        <th className="px-4 py-3 text-right font-medium">Cost</th>
-                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700 text-slate-300">
-                    {dgDemographics.length === 0 ? (
-                        <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500 italic">No demographic data found.</td></tr>
-                    ) : (
-                        dgDemographics.map((d, i) => (
-                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
-                                <td className="px-4 py-4">
-                                    {({ AGE: 'Age', GENDER: 'Gender', PARENTAL_STATUS: 'Parental Status', INCOME: 'Household Income' } as Record<string, string>)[d.type] || d.type}
-                                </td>
-                                <td className="px-4 py-4">{d.dimension}</td>
-                                <td className="px-4 py-4 text-right">{d.impressions.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">{d.clicks.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">€{d.cost.toFixed(2)}</td>
-                                <td className="px-4 py-4 text-right">{d.conversions.toLocaleString()}</td>
+        // Categorize
+        const categories = data.reduce((acc, p) => {
+            let cat = 'Other';
+            if (p.type?.includes('YOUTUBE')) cat = 'YouTube';
+            else if (p.type?.includes('APP') || p.type?.includes('MOBILE')) cat = 'App';
+            else if (p.type?.includes('WEBSITE')) cat = 'Website';
+
+            if (!acc[cat]) acc[cat] = { value: 0, count: 0 };
+            acc[cat].value += (p[placementsMetricFilter] || 0);
+            acc[cat].count += 1;
+            return acc;
+        }, {} as Record<string, { value: number; count: number }>);
+
+        const sortedByFilter = [...data].sort((a, b) => (b[placementsMetricFilter] || 0) - (a[placementsMetricFilter] || 0));
+        const top3 = sortedByFilter.slice(0, 3);
+
+        const getCategoryIcon = (type: string) => {
+            if (type.includes('YOUTUBE')) return '📺';
+            if (type.includes('APP') || type.includes('MOBILE')) return '📱';
+            return '🌐';
+        };
+
+        const getCategoryColor = (cat: string) => {
+            switch (cat) {
+                case 'YouTube': return 'bg-red-500/20 text-red-400';
+                case 'Website': return 'bg-indigo-500/20 text-indigo-400';
+                case 'App': return 'bg-emerald-500/20 text-emerald-400';
+                default: return 'bg-slate-500/20 text-slate-400';
+            }
+        };
+
+        return (
+            <div className="space-y-6">
+                {/* Visual Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Category Distribution */}
+                    <div className="col-span-1 md:col-span-2 bg-slate-900/40 rounded-xl p-5 border border-slate-700/50">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-sm font-semibold text-white">Spend by Category</h3>
+                            <div className="flex gap-1 bg-slate-800 p-1 rounded-lg">
+                                {(['cost', 'conversions', 'clicks'] as const).map(m => (
+                                    <button
+                                        key={m}
+                                        onClick={() => setPlacementsMetricFilter(m)}
+                                        className={`px-2 py-1 text-[10px] font-bold rounded uppercase transition-all ${placementsMetricFilter === m ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                                    >
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="space-y-3">
+                            {Object.entries(categories)
+                                .sort((a, b) => b[1].value - a[1].value)
+                                .map(([cat, stats]) => {
+                                    const pct = totalValue > 0 ? (stats.value / totalValue) * 100 : 0;
+                                    return (
+                                        <div key={cat} className="space-y-1">
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-300 flex items-center gap-1.5">
+                                                    <span className={`w-2 h-2 rounded-full ${getCategoryColor(cat).split(' ')[1]}`}></span>
+                                                    {cat} <span className="text-slate-500 text-[10px items-center]">{stats.count}</span>
+                                                </span>
+                                                <span className="text-slate-400 font-mono">
+                                                    {placementsMetricFilter === 'cost' ? `€${stats.value.toFixed(0)}` : stats.value.toLocaleString()}
+                                                    <span className="ml-1.5 text-slate-500">({pct.toFixed(1)}%)</span>
+                                                </span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full transition-all duration-500 ${getCategoryColor(cat).split(' ')[1].replace('text-', 'bg-')}`}
+                                                    style={{ width: `${pct}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    </div>
+
+                    {/* Top 3 Spenders */}
+                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {top3.map((p, idx) => (
+                            <div key={idx} className="bg-slate-900/40 rounded-xl p-4 border border-slate-700/50 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <span className="text-xl">{getCategoryIcon(p.type)}</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${idx === 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
+                                            #{idx + 1}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs font-medium text-slate-200 truncate mb-1" title={p.placement}>
+                                        {p.placement}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500 truncate">{p.description || p.type}</p>
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-slate-800/50">
+                                    <div className="text-lg font-bold text-white font-mono">
+                                        {placementsMetricFilter === 'cost' ? `€${p.cost.toFixed(1)}` : p[placementsMetricFilter].toLocaleString()}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 uppercase mt-0.5">Top Spender</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Placements Table */}
+                <div className="overflow-x-auto rounded-xl border border-slate-700 shadow-sm bg-slate-800/20">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-700/50 text-slate-400 uppercase text-[10px] font-bold">
+                            <tr>
+                                <th className="px-4 py-3">Placement</th>
+                                <th className="px-4 py-3 text-right">Share</th>
+                                <th className="px-4 py-3 text-right">Impr.</th>
+                                <th className="px-4 py-3 text-right">Clicks</th>
+                                <th className="px-4 py-3 text-right font-semibold text-slate-300">Cost</th>
+                                <th className="px-4 py-3 text-right">CTR</th>
+                                <th className="px-4 py-3 text-right font-semibold text-slate-300">Conv.</th>
+                                <th className="px-4 py-3 text-right">Action</th>
                             </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
-        </div>
-    );
+                        </thead>
+                        <tbody className="divide-y divide-slate-700/50 text-slate-300">
+                            {data.length === 0 ? (
+                                <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-500 italic">No placement data found for this period.</td></tr>
+                            ) : (
+                                data.map((p, i) => {
+                                    const share = totalValue > 0 ? (p[placementsMetricFilter] / totalValue) * 100 : 0;
+                                    return (
+                                        <tr key={i} className="hover:bg-slate-700/30 transition-colors group">
+                                            <td className="px-4 py-3.5">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-lg opacity-70 group-hover:opacity-100 transition-opacity">{getCategoryIcon(p.type)}</span>
+                                                    <div className="min-w-0">
+                                                        <div className="font-medium text-slate-200 truncate max-w-[240px]" title={p.placement}>{p.placement}</div>
+                                                        <div className="text-[10px] text-slate-500 uppercase tracking-wider">{p.type.replace('_', ' ')}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3.5 text-right">
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <span className="text-xs font-mono text-slate-400">{share.toFixed(1)}%</span>
+                                                    <div className="w-12 h-1 bg-slate-700 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-indigo-500/50" style={{ width: `${share}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs">{p.impressions.toLocaleString()}</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs">{p.clicks.toLocaleString()}</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-200">€{p.cost.toFixed(2)}</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-400">{(p.ctr * 100).toFixed(2)}%</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-emerald-400 font-medium">{p.conversions.toLocaleString()}</td>
+                                            <td className="px-4 py-3.5 text-right">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        alert(`Excluding placement: ${p.placement}`);
+                                                    }}
+                                                    className="text-[10px] uppercase font-bold text-red-400 opacity-60 hover:opacity-100 transition-all bg-red-400/5 px-2 py-1 rounded border border-red-400/20"
+                                                >
+                                                    Exclude
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
+    const renderDGPlacements = () => renderPlacements(dgPlacements);
+
+    const renderDGDemographics = () => {
+        const categories = {
+            AGE: 'Age',
+            GENDER: 'Gender',
+            PARENTAL_STATUS: 'Parental Status',
+            INCOME: 'Household Income'
+        };
+
+        if (dgDemographics.length === 0) {
+            return (
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-8 text-center text-slate-500 italic">
+                    No demographic data found for this period.
+                </div>
+            );
+        }
+
+        // Calculate total spend and conversions for percentage metrics
+        const totalSpend = dgDemographics.reduce((sum, d) => sum + d.cost, 0) / 4; // Approx because 4 categories
+        const totalConversions = dgDemographics.reduce((sum, d) => sum + d.conversions, 0) / 4;
+
+        // Group data by type
+        const grouped = dgDemographics.reduce((acc: Record<string, typeof dgDemographics>, d) => {
+            if (!acc[d.type]) acc[d.type] = [];
+            acc[d.type].push(d);
+            return acc;
+        }, {});
+
+        const categoryOrder: (keyof typeof categories)[] = ['AGE', 'GENDER', 'PARENTAL_STATUS', 'INCOME'];
+
+        const getMetricValue = (d: DemographicPerformance) => {
+            if (demoMetricFilter === 'cost') return d.cost;
+            if (demoMetricFilter === 'conversions') return d.conversions;
+            return d.clicks;
+        };
+
+        const renderBarChart = (items: DemographicPerformance[]) => {
+            const maxValue = Math.max(...items.map(getMetricValue), 1);
+            const sortedItems = [...items].sort((a, b) => getMetricValue(b) - getMetricValue(a));
+
+            return (
+                <div className="space-y-4 py-4 px-2">
+                    {sortedItems.map((d, i) => {
+                        const val = getMetricValue(d);
+                        const percentage = (val / maxValue) * 100;
+                        const spendPercent = totalSpend > 0 ? (d.cost / totalSpend) * 100 : 0;
+                        const roas = d.cost > 0 ? (d.conversions * 50) / d.cost : 0; // Simulated ROAS if conv value isn't available
+
+                        return (
+                            <div key={i} className="group flex items-center gap-4">
+                                <div className="w-24 text-xs font-medium text-slate-400 truncate" title={d.dimension}>
+                                    {d.dimension}
+                                </div>
+                                <div className="flex-1 h-8 bg-slate-700/30 rounded-full overflow-hidden relative border border-slate-700/50">
+                                    <div
+                                        className={`h-full transition-all duration-700 ease-out flex items-center px-3 ${demoMetricFilter === 'cost' ? 'bg-indigo-500/40 border-r-2 border-indigo-400' :
+                                            demoMetricFilter === 'conversions' ? 'bg-emerald-500/40 border-r-2 border-emerald-400' :
+                                                'bg-blue-500/40 border-r-2 border-blue-400'
+                                            }`}
+                                        style={{ width: `${percentage}%` }}
+                                    >
+                                        <span className="text-[10px] font-bold text-white whitespace-nowrap drop-shadow-sm">
+                                            {demoMetricFilter === 'cost' ? `€${val.toFixed(2)}` : val.toLocaleString()}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="w-32 flex flex-col items-end gap-0.5">
+                                    <div className="text-[11px] text-slate-300 font-mono tracking-tighter">
+                                        {d.impressions.toLocaleString()} <span className="text-slate-600">imp</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {roas > 0 && (
+                                            <span className={`text-[10px] font-bold ${roas > 2 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                {roas.toFixed(1)}x <span className="text-[8px] opacity-70">ROAS</span>
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        };
+
+        const renderDonutChart = (items: DemographicPerformance[]) => {
+            const totalVal = items.reduce((sum, d) => sum + getMetricValue(d), 0);
+            const sortedItems = [...items].sort((a, b) => getMetricValue(b) - getMetricValue(a));
+
+            // Colors for segments
+            const colors = ['#6366f1', '#10b981', '#64748b', '#f59e0b', '#3b82f6'];
+
+            let cumulativePercent = 0;
+            const size = 120;
+            const strokeWidth = 16;
+            const radius = (size - strokeWidth) / 2;
+            const center = size / 2;
+            const circumference = 2 * Math.PI * radius;
+
+            return (
+                <div className="flex flex-col h-full py-2">
+                    <div className="flex items-center justify-between px-6 gap-8 flex-1">
+                        {/* Donut SVG */}
+                        <div className="relative w-[120px] h-[120px] flex-shrink-0">
+                            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
+                                {/* Background circle */}
+                                <circle
+                                    cx={center}
+                                    cy={center}
+                                    r={radius}
+                                    fill="transparent"
+                                    stroke="#1e293b"
+                                    strokeWidth={strokeWidth}
+                                />
+                                {sortedItems.map((d, i) => {
+                                    const val = getMetricValue(d);
+                                    if (val === 0) return null;
+                                    const percent = totalVal > 0 ? val / totalVal : 0;
+                                    const strokeDasharray = `${percent * circumference} ${circumference}`;
+                                    const strokeDashoffset = -(cumulativePercent * circumference);
+                                    cumulativePercent += percent;
+
+                                    return (
+                                        <circle
+                                            key={i}
+                                            cx={center}
+                                            cy={center}
+                                            r={radius}
+                                            fill="transparent"
+                                            stroke={colors[i % colors.length]}
+                                            strokeWidth={strokeWidth}
+                                            strokeDasharray={strokeDasharray}
+                                            strokeDashoffset={strokeDashoffset}
+                                            className="transition-all duration-1000 ease-in-out"
+                                        />
+                                    );
+                                })}
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                <span className="text-lg font-black text-white leading-none">
+                                    {demoMetricFilter === 'cost' ? `€${totalVal.toFixed(0)}` : totalVal.toLocaleString()}
+                                </span>
+                                <span className="text-[8px] text-slate-500 uppercase tracking-tighter mt-1 font-bold">
+                                    total {demoMetricFilter}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex-1 space-y-3">
+                            {sortedItems.map((d, i) => {
+                                const val = getMetricValue(d);
+                                const percent = totalVal > 0 ? (val / totalVal) * 100 : 0;
+                                return (
+                                    <div key={i} className="flex items-center justify-between gap-3 group">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: colors[i % colors.length] }} />
+                                            <span className="text-[11px] font-bold text-slate-400 group-hover:text-slate-200 transition-colors truncate max-w-[80px]">
+                                                {d.dimension}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-[11px] font-medium text-slate-500 w-8 text-right">
+                                                {percent.toFixed(0)}%
+                                            </span>
+                                            <span className="text-[11px] font-bold text-slate-300 w-12 text-right">
+                                                {demoMetricFilter === 'cost' ? `€${val.toFixed(0)}` : val.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Footer Metrics */}
+                    <div className="mt-6 pt-4 border-t border-slate-700/30 px-6 flex items-center gap-8">
+                        {sortedItems.filter(d => d.dimension.toLowerCase() !== 'unknown' && d.dimension.toLowerCase() !== 'undetermined').slice(0, 2).map((d, i) => {
+                            const roas = d.cost > 0 ? (d.conversions * 50) / d.cost : 0;
+                            const cvr = d.clicks > 0 ? (d.conversions / d.clicks) * 100 : 0;
+                            return (
+                                <div key={i} className="flex flex-col gap-0.5">
+                                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">{d.dimension}</div>
+                                    <div className="flex items-baseline gap-1.5">
+                                        <span className="text-sm font-black text-slate-200">
+                                            {roas > 0 ? `${roas.toFixed(2)}x` : `${cvr.toFixed(1)}%`}
+                                        </span>
+                                        <span className="text-[8px] font-bold text-slate-600 uppercase">
+                                            {roas > 0 ? 'ROAS' : 'Conv Rate'}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        return (
+            <div className="space-y-8 max-w-6xl mx-auto p-4">
+                {/* Header Toggles */}
+                <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-800/40 p-2 rounded-2xl border border-slate-700/40 gap-4 mb-2">
+                    <div className="flex bg-slate-900/40 p-1 rounded-xl border border-slate-700/30">
+                        {(['cost', 'conversions', 'clicks'] as const).map(m => (
+                            <button
+                                key={m}
+                                onClick={() => setDemoMetricFilter(m)}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all capitalize ${demoMetricFilter === m ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                                    }`}
+                            >
+                                {m}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex bg-slate-900/40 p-1 rounded-xl border border-slate-700/30">
+                        <button
+                            onClick={() => setDemoViewMode('chart')}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${demoViewMode === 'chart' ? 'bg-slate-700 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                                }`}
+                        >
+                            📊 Chart
+                        </button>
+                        <button
+                            onClick={() => setDemoViewMode('table')}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${demoViewMode === 'table' ? 'bg-slate-700 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                                }`}
+                        >
+                            📋 Table
+                        </button>
+                    </div>
+                </div>
+
+                {demoViewMode === 'chart' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {categoryOrder.map(catKey => {
+                            const items = grouped[catKey];
+                            if (!items || items.length === 0) return null;
+
+                            const isDonutType = catKey === 'GENDER' || catKey === 'PARENTAL_STATUS';
+
+                            return (
+                                <div key={catKey} className={`rounded-3xl bg-slate-800/40 border border-slate-700/40 shadow-xl overflow-hidden flex flex-col ${catKey === 'AGE' || catKey === 'INCOME' ? 'col-span-1 md:col-span-2' : ''}`}>
+                                    <div className="px-8 py-5 border-b border-slate-700/40 flex justify-between items-center bg-slate-700/10">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xl">
+                                                {catKey === 'AGE' ? '🎂' : catKey === 'GENDER' ? '👥' : catKey === 'PARENTAL_STATUS' ? '👶' : '💰'}
+                                            </span>
+                                            <h3 className="text-sm font-black text-white tracking-widest uppercase">
+                                                {categories[catKey]}
+                                            </h3>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 p-4">
+                                        {isDonutType ? renderDonutChart(items) : renderBarChart(items)}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        {categoryOrder.map(catKey => {
+                            const items = grouped[catKey];
+                            if (!items || items.length === 0) return null;
+
+                            return (
+                                <div key={catKey} className="rounded-2xl bg-slate-800/40 border border-slate-700/50 overflow-hidden shadow-sm">
+                                    <div className="px-6 py-3 bg-slate-700/30 border-b border-slate-700/50 flex justify-between items-center font-bold text-xs text-white uppercase tracking-tighter">
+                                        {categories[catKey]}
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm">
+                                            <thead className="bg-slate-900/20 text-slate-400 uppercase text-[10px] tracking-wider">
+                                                <tr>
+                                                    <th className="px-6 py-3 font-medium">Dimension</th>
+                                                    <th className="px-6 py-3 text-right font-medium">Impr.</th>
+                                                    <th className="px-6 py-3 text-right font-medium">Clicks</th>
+                                                    <th className="px-6 py-3 text-right font-medium">Cost</th>
+                                                    <th className="px-6 py-3 text-right font-medium">Conv.</th>
+                                                    <th className="px-6 py-3 text-right font-medium">CVR</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-700/30 text-slate-300">
+                                                {items.sort((a, b) => b.cost - a.cost).map((d, i) => (
+                                                    <tr key={i} className="hover:bg-slate-700/20 transition-colors">
+                                                        <td className="px-6 py-3 font-medium text-slate-200">{d.dimension}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">{d.impressions.toLocaleString()}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">{d.clicks.toLocaleString()}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">€{d.cost.toFixed(2)}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums font-semibold text-emerald-400/80">{d.conversions.toLocaleString()}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-500">
+                                                            {d.clicks > 0 ? ((d.conversions / d.clicks) * 100).toFixed(1) : 0}%
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )
+                }
+            </div >
+        );
+    };
 
     const renderDGAudiences = () => (
         <div className="overflow-x-auto">
@@ -1594,15 +2023,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                     )}
                                 </td>
                                 <td className="px-4 py-4 text-xs text-slate-400">
-                                    {({
-                                        HEADLINE: 'Headline', LONG_HEADLINE: 'Long Headline',
-                                        DESCRIPTION: 'Description', BUSINESS_NAME: 'Business Name',
-                                        IMAGE: 'Image', SQUARE_IMAGE: 'Square Image', PORTRAIT_IMAGE: 'Portrait Image',
-                                        LANDSCAPE_LOGO: 'Landscape Logo', SQUARE_LOGO: 'Square Logo',
-                                        CALL_TO_ACTION_SELECTION: 'Call to Action',
-                                        YOUTUBE_VIDEO: 'YouTube Video', MEDIA_BUNDLE: 'Media Bundle',
-                                        STRUCTURED_SNIPPET_HEADER: 'Snippet Header', STRUCTURED_SNIPPET_VALUES: 'Snippet Values',
-                                    } as Record<string, string>)[a.type] || a.type?.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c: string) => c.toUpperCase()) || '—'}
+                                    <span className="bg-slate-700/50 px-2 py-1 rounded border border-slate-600/50">
+                                        {(a.fieldType && ASSET_FIELD_TYPE_LABELS[a.fieldType]) || (a.type && ASSET_FIELD_TYPE_LABELS[a.type]) || a.fieldType || a.type || '—'}
+                                    </span>
                                 </td>
                                 <td className="px-4 py-4 text-right">{a.impressions.toLocaleString()}</td>
                                 <td className="px-4 py-4 text-right">{(a.ctr * 100).toFixed(2)}%</td>
@@ -3103,15 +3526,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                 </tbody>
                                             </table>
                                         ) : dgView === 'placements' ? (
-                                            renderDGPlacements()
+                                            <div className="p-6">{renderDGPlacements()}</div>
                                         ) : dgView === 'audiences' ? (
-                                            renderDGAudiences()
+                                            <div className="p-6">{renderDGAudiences()}</div>
                                         ) : dgView === 'demographics' ? (
-                                            renderDGDemographics()
+                                            <div className="p-6">{renderDGDemographics()}</div>
                                         ) : dgView === 'time' ? (
-                                            renderDGTimeAnalysis()
+                                            <div className="p-6">{renderDGTimeAnalysis()}</div>
                                         ) : dgView === 'assets' ? (
-                                            renderDGAssets()
+                                            <div className="p-6">{renderDGAssets()}</div>
                                         ) : null}
                                     </div>
                                 </div>
@@ -3128,46 +3551,19 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                             return (
                                                 <>
                                                     {/* Placements */}
-                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
-                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6 p-6">
+                                                        <div className="flex justify-between items-center mb-6">
                                                             <div>
-                                                                <h2 className="font-semibold text-white">Placements</h2>
-                                                                <p className="text-xs text-slate-400 mt-0.5">Where your Display ads are being shown</p>
+                                                                <h2 className="text-xl font-bold text-white">Placements Performance</h2>
+                                                                <p className="text-sm text-slate-400 mt-1">Where your ads are being shown across the Google Display Network and YouTube</p>
                                                             </div>
-                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{displayPlacements.length} placements</span>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded border border-slate-600">
+                                                                    {displayPlacements.length} Total Placements
+                                                                </span>
+                                                            </div>
                                                         </div>
-                                                        <div className="overflow-x-auto">
-                                                            <table className="w-full text-left text-sm">
-                                                                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                                                                    <tr>
-                                                                        <th className="px-4 py-3 font-medium">Placement</th>
-                                                                        <th className="px-4 py-3 font-medium">Type</th>
-                                                                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
-                                                                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
-                                                                        <th className="px-4 py-3 text-right font-medium">CTR</th>
-                                                                        <th className="px-4 py-3 text-right font-medium">Cost</th>
-                                                                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
-                                                                        <th className="px-4 py-3 text-right font-medium">View-through</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="divide-y divide-slate-700 text-slate-300">
-                                                                    {displayPlacements.length === 0 ? (
-                                                                        <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500 italic">No placement data for this period.</td></tr>
-                                                                    ) : displayPlacements.map((p, i) => (
-                                                                        <tr key={i} className="hover:bg-slate-700/30 transition-colors">
-                                                                            <td className="px-4 py-3 max-w-xs truncate text-slate-200" title={p.placement}>{p.placement}</td>
-                                                                            <td className="px-4 py-3"><span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{p.type}</span></td>
-                                                                            <td className="px-4 py-3 text-right">{p.impressions.toLocaleString()}</td>
-                                                                            <td className="px-4 py-3 text-right">{p.clicks.toLocaleString()}</td>
-                                                                            <td className="px-4 py-3 text-right">{(p.ctr * 100).toFixed(2)}%</td>
-                                                                            <td className="px-4 py-3 text-right">€{p.cost.toFixed(2)}</td>
-                                                                            <td className="px-4 py-3 text-right">{p.conversions.toFixed(1)}</td>
-                                                                            <td className="px-4 py-3 text-right">{(p as any).viewThroughConversions ?? 0}</td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
+                                                        {renderPlacements(displayPlacements)}
                                                     </div>
 
                                                     {/* Audiences */}
@@ -3300,9 +3696,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         const perfLabel = PERFORMANCE_LABEL_LABELS[asset.performanceLabel] || asset.performanceLabel || 'Pending';
                                                                         const perfColor = asset.performanceLabel === 'BEST' ? 'bg-emerald-500/20 text-emerald-400'
                                                                             : asset.performanceLabel === 'GOOD' ? 'bg-blue-500/20 text-blue-400'
-                                                                            : asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400'
-                                                                            : asset.performanceLabel === 'LEARNING' ? 'bg-purple-500/20 text-purple-400'
-                                                                            : 'bg-slate-600/40 text-slate-400';
+                                                                                : asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400'
+                                                                                    : asset.performanceLabel === 'LEARNING' ? 'bg-purple-500/20 text-purple-400'
+                                                                                        : 'bg-slate-600/40 text-slate-400';
                                                                         const fieldLabel = ASSET_FIELD_TYPE_LABELS[asset.fieldType] || asset.fieldType;
                                                                         return (
                                                                             <tr key={i} className="hover:bg-slate-700/30 transition-colors">
@@ -3558,163 +3954,163 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
-                                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                                        <h2 className="font-semibold text-white">Keywords & Quality Score</h2>
-                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                            {keywords.length} keywords
-                                                        </span>
-                                                    </div>
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full text-left text-sm">
-                                                            <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                                                                <tr>
-                                                                    <th className="px-4 py-3 font-medium">Keyword</th>
-                                                                    <th className="px-4 py-3 text-right font-medium">Cost</th>
-                                                                    <th className="px-4 py-3 text-right font-medium">Clicks</th>
-                                                                    <th className="px-4 py-3 text-right font-medium">Conv.</th>
-                                                                    <th className="px-4 py-3 text-right font-medium">CPA</th>
-                                                                    <th className="px-4 py-3 text-right font-medium">IS</th>
-                                                                    <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
-                                                                    <th className="px-4 py-3 text-center font-medium">QS</th>
-                                                                    <th className="px-4 py-3 text-center font-medium">Exp. CTR</th>
-                                                                    <th className="px-4 py-3 text-center font-medium">Ad Rel.</th>
-                                                                    <th className="px-4 py-3 text-center font-medium">LP Exp.</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y divide-slate-700">
-                                                                {currentAdGroup && (
-                                                                    <tr className="bg-slate-700/40 border-b-2 border-slate-600/50 italic font-medium">
-                                                                        <td className="px-4 py-2 text-slate-300 text-xs">
-                                                                            Ad Group: {currentAdGroup.name} (All)
-                                                                        </td>
-                                                                        <td className="px-4 py-2 text-right text-slate-300 text-xs">€{currentAdGroup.cost.toFixed(2)}</td>
-                                                                        <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.clicks.toLocaleString()}</td>
-                                                                        <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.conversions.toFixed(1)}</td>
-                                                                        <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.cpa != null ? `€${currentAdGroup.cpa.toFixed(2)}` : '—'}</td>
-                                                                        <td className="px-4 py-2 text-right">
-                                                                            {currentAdGroup.searchImpressionShare != null ? (
-                                                                                <span className={`font-bold ${getISColor(currentAdGroup.searchImpressionShare)}`}>
-                                                                                    {(currentAdGroup.searchImpressionShare * 100).toFixed(1)}%
-                                                                                </span>
-                                                                            ) : '—'}
-                                                                        </td>
-                                                                        <td className="px-4 py-2 text-right text-slate-400 text-xs">
-                                                                            {currentAdGroup.searchLostISRank != null ? `${(currentAdGroup.searchLostISRank * 100).toFixed(1)}%` : '—'}
-                                                                        </td>
-                                                                        <td className="px-4 py-2 text-center text-slate-300 font-bold">
-                                                                            {currentAdGroup.avgQualityScore?.toFixed(1) || '—'}
-                                                                        </td>
-                                                                        <td colSpan={3}></td>
-                                                                    </tr>
-                                                                )}
-                                                                {keywords.map((kw) => (
-                                                                    <tr key={kw.id} className="hover:bg-slate-700/30">
-                                                                        <td className="px-4 py-3 text-white">
-                                                                            <span className="text-xs text-slate-500 mr-1">[{kw.matchType}]</span>
-                                                                            {kw.text}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-right text-slate-300 text-sm">
-                                                                            {kw.cost > 0 ? `€${kw.cost.toFixed(2)}` : <span className="text-slate-600">—</span>}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-right text-slate-300 text-sm">
-                                                                            {kw.clicks > 0 ? kw.clicks.toLocaleString() : <span className="text-slate-600">—</span>}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-right text-slate-300 text-sm">
-                                                                            {kw.conversions != null ? (kw.conversions === 0 ? '0' : kw.conversions.toFixed(1)) : <span className="text-slate-600">—</span>}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-right text-slate-300 text-sm">
-                                                                            {kw.conversions > 0 && kw.cost > 0 ? `€${(kw.cost / kw.conversions).toFixed(2)}` : <span className="text-slate-600">—</span>}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-right">
-                                                                            {kw.searchImpressionShare != null ? (
-                                                                                <span className={`font-medium ${getISColor(kw.searchImpressionShare)}`}>
-                                                                                    {(kw.searchImpressionShare * 100).toFixed(1)}%
-                                                                                </span>
-                                                                            ) : (
-                                                                                <span className="text-slate-500 text-xs">—</span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-right">
-                                                                            {kw.searchLostISRank != null ? (
-                                                                                <span className={`font-medium text-sm ${kw.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                                    {(kw.searchLostISRank * 100).toFixed(1)}%
-                                                                                </span>
-                                                                            ) : (
-                                                                                <span className="text-slate-500 text-xs">—</span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-center">
-                                                                            {kw.qualityScore !== null && kw.qualityScore <= 6 ? (
-                                                                                <Tooltip text={getQSValueTip(kw.qualityScore)}>
-                                                                                    <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)} border-b border-dashed ${kw.qualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
-                                                                                        {kw.qualityScore}
-                                                                                    </span>
-                                                                                </Tooltip>
-                                                                            ) : (
-                                                                                <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)}`}>
-                                                                                    {kw.qualityScore ?? '—'}
-                                                                                </span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-center">
-                                                                            {kw.expectedCtr ? (
-                                                                                kw.expectedCtr === 'BELOW_AVERAGE' ? (
-                                                                                    <Tooltip text={getQSComponentTip('expectedCtr', kw.expectedCtr)}>
-                                                                                        <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
-                                                                                            BELOW AVG
-                                                                                        </span>
-                                                                                    </Tooltip>
-                                                                                ) : (
-                                                                                    <span className={`text-xs px-2 py-0.5 rounded ${kw.expectedCtr === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
-                                                                                        {kw.expectedCtr.replace('_', ' ')}
-                                                                                    </span>
-                                                                                )
-                                                                            ) : <span className="text-slate-600">—</span>}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-center">
-                                                                            {kw.adRelevance ? (
-                                                                                kw.adRelevance === 'BELOW_AVERAGE' ? (
-                                                                                    <Tooltip text={getQSComponentTip('adRelevance', kw.adRelevance)}>
-                                                                                        <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
-                                                                                            BELOW AVG
-                                                                                        </span>
-                                                                                    </Tooltip>
-                                                                                ) : (
-                                                                                    <span className={`text-xs px-2 py-0.5 rounded ${kw.adRelevance === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
-                                                                                        {kw.adRelevance.replace('_', ' ')}
-                                                                                    </span>
-                                                                                )
-                                                                            ) : <span className="text-slate-600">—</span>}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-center">
-                                                                            {kw.landingPageExperience ? (
-                                                                                kw.landingPageExperience === 'BELOW_AVERAGE' ? (
-                                                                                    <Tooltip text={getQSComponentTip('landingPageExperience', kw.landingPageExperience)}>
-                                                                                        <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
-                                                                                            BELOW AVG
-                                                                                        </span>
-                                                                                    </Tooltip>
-                                                                                ) : (
-                                                                                    <span className={`text-xs px-2 py-0.5 rounded ${kw.landingPageExperience === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
-                                                                                        {kw.landingPageExperience.replace('_', ' ')}
-                                                                                    </span>
-                                                                                )
-                                                                            ) : <span className="text-slate-600">—</span>}
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                                {keywords.length === 0 && (
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                            <h2 className="font-semibold text-white">Keywords & Quality Score</h2>
+                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                                {keywords.length} keywords
+                                                            </span>
+                                                        </div>
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full text-left text-sm">
+                                                                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
                                                                     <tr>
-                                                                        <td colSpan={11} className="px-6 py-8 text-center text-slate-500">
-                                                                            No keywords found.
-                                                                        </td>
+                                                                        <th className="px-4 py-3 font-medium">Keyword</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Cost</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">CPA</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">IS</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
+                                                                        <th className="px-4 py-3 text-center font-medium">QS</th>
+                                                                        <th className="px-4 py-3 text-center font-medium">Exp. CTR</th>
+                                                                        <th className="px-4 py-3 text-center font-medium">Ad Rel.</th>
+                                                                        <th className="px-4 py-3 text-center font-medium">LP Exp.</th>
                                                                     </tr>
-                                                                )}
-                                                            </tbody>
-                                                        </table>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-700">
+                                                                    {currentAdGroup && (
+                                                                        <tr className="bg-slate-700/40 border-b-2 border-slate-600/50 italic font-medium">
+                                                                            <td className="px-4 py-2 text-slate-300 text-xs">
+                                                                                Ad Group: {currentAdGroup.name} (All)
+                                                                            </td>
+                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">€{currentAdGroup.cost.toFixed(2)}</td>
+                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.clicks.toLocaleString()}</td>
+                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.conversions.toFixed(1)}</td>
+                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.cpa != null ? `€${currentAdGroup.cpa.toFixed(2)}` : '—'}</td>
+                                                                            <td className="px-4 py-2 text-right">
+                                                                                {currentAdGroup.searchImpressionShare != null ? (
+                                                                                    <span className={`font-bold ${getISColor(currentAdGroup.searchImpressionShare)}`}>
+                                                                                        {(currentAdGroup.searchImpressionShare * 100).toFixed(1)}%
+                                                                                    </span>
+                                                                                ) : '—'}
+                                                                            </td>
+                                                                            <td className="px-4 py-2 text-right text-slate-400 text-xs">
+                                                                                {currentAdGroup.searchLostISRank != null ? `${(currentAdGroup.searchLostISRank * 100).toFixed(1)}%` : '—'}
+                                                                            </td>
+                                                                            <td className="px-4 py-2 text-center text-slate-300 font-bold">
+                                                                                {currentAdGroup.avgQualityScore?.toFixed(1) || '—'}
+                                                                            </td>
+                                                                            <td colSpan={3}></td>
+                                                                        </tr>
+                                                                    )}
+                                                                    {keywords.map((kw) => (
+                                                                        <tr key={kw.id} className="hover:bg-slate-700/30">
+                                                                            <td className="px-4 py-3 text-white">
+                                                                                <span className="text-xs text-slate-500 mr-1">[{kw.matchType}]</span>
+                                                                                {kw.text}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                                {kw.cost > 0 ? `€${kw.cost.toFixed(2)}` : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                                {kw.clicks > 0 ? kw.clicks.toLocaleString() : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                                {kw.conversions != null ? (kw.conversions === 0 ? '0' : kw.conversions.toFixed(1)) : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                                {kw.conversions > 0 && kw.cost > 0 ? `€${(kw.cost / kw.conversions).toFixed(2)}` : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                {kw.searchImpressionShare != null ? (
+                                                                                    <span className={`font-medium ${getISColor(kw.searchImpressionShare)}`}>
+                                                                                        {(kw.searchImpressionShare * 100).toFixed(1)}%
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-slate-500 text-xs">—</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                {kw.searchLostISRank != null ? (
+                                                                                    <span className={`font-medium text-sm ${kw.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                                        {(kw.searchLostISRank * 100).toFixed(1)}%
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-slate-500 text-xs">—</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                {kw.qualityScore !== null && kw.qualityScore <= 6 ? (
+                                                                                    <Tooltip text={getQSValueTip(kw.qualityScore)}>
+                                                                                        <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)} border-b border-dashed ${kw.qualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
+                                                                                            {kw.qualityScore}
+                                                                                        </span>
+                                                                                    </Tooltip>
+                                                                                ) : (
+                                                                                    <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)}`}>
+                                                                                        {kw.qualityScore ?? '—'}
+                                                                                    </span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                {kw.expectedCtr ? (
+                                                                                    kw.expectedCtr === 'BELOW_AVERAGE' ? (
+                                                                                        <Tooltip text={getQSComponentTip('expectedCtr', kw.expectedCtr)}>
+                                                                                            <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
+                                                                                                BELOW AVG
+                                                                                            </span>
+                                                                                        </Tooltip>
+                                                                                    ) : (
+                                                                                        <span className={`text-xs px-2 py-0.5 rounded ${kw.expectedCtr === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
+                                                                                            {kw.expectedCtr.replace('_', ' ')}
+                                                                                        </span>
+                                                                                    )
+                                                                                ) : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                {kw.adRelevance ? (
+                                                                                    kw.adRelevance === 'BELOW_AVERAGE' ? (
+                                                                                        <Tooltip text={getQSComponentTip('adRelevance', kw.adRelevance)}>
+                                                                                            <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
+                                                                                                BELOW AVG
+                                                                                            </span>
+                                                                                        </Tooltip>
+                                                                                    ) : (
+                                                                                        <span className={`text-xs px-2 py-0.5 rounded ${kw.adRelevance === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
+                                                                                            {kw.adRelevance.replace('_', ' ')}
+                                                                                        </span>
+                                                                                    )
+                                                                                ) : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                {kw.landingPageExperience ? (
+                                                                                    kw.landingPageExperience === 'BELOW_AVERAGE' ? (
+                                                                                        <Tooltip text={getQSComponentTip('landingPageExperience', kw.landingPageExperience)}>
+                                                                                            <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
+                                                                                                BELOW AVG
+                                                                                            </span>
+                                                                                        </Tooltip>
+                                                                                    ) : (
+                                                                                        <span className={`text-xs px-2 py-0.5 rounded ${kw.landingPageExperience === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>
+                                                                                            {kw.landingPageExperience.replace('_', ' ')}
+                                                                                        </span>
+                                                                                    )
+                                                                                ) : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                    {keywords.length === 0 && (
+                                                                        <tr>
+                                                                            <td colSpan={11} className="px-6 py-8 text-center text-slate-500">
+                                                                                No keywords found.
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
                                                     </div>
-                                                </div>
                                                 ))}
                                                 {/* end of DSA/Display keywords conditional */}
 
@@ -3839,267 +4235,267 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                                                 {/* Negative Keywords — hidden for Display/Video/DG */}
                                                 {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
-                                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
-                                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                                        <h2 className="font-semibold text-white">Negative Keywords</h2>
-                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                            {negativeKeywords.length} keywords
-                                                        </span>
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                            <h2 className="font-semibold text-white">Negative Keywords</h2>
+                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                                {negativeKeywords.length} keywords
+                                                            </span>
+                                                        </div>
+                                                        <div className="p-4">
+                                                            {negativeKeywords.length > 0 ? (
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {negativeKeywords.map((kw) => (
+                                                                        <span
+                                                                            key={kw.id}
+                                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-sm border border-red-500/20"
+                                                                        >
+                                                                            <span className="text-xs text-red-500/70">[{kw.matchType}]</span>
+                                                                            {kw.text}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <p className="text-slate-500 text-sm">No negative keywords configured.</p>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    <div className="p-4">
-                                                        {negativeKeywords.length > 0 ? (
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {negativeKeywords.map((kw) => (
-                                                                    <span
-                                                                        key={kw.id}
-                                                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-sm border border-red-500/20"
-                                                                    >
-                                                                        <span className="text-xs text-red-500/70">[{kw.matchType}]</span>
-                                                                        {kw.text}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <p className="text-slate-500 text-sm">No negative keywords configured.</p>
-                                                        )}
-                                                    </div>
-                                                </div>
                                                 )}
 
                                                 {/* Search Terms for Ad Group — hidden for Display/Video/DG */}
                                                 {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
-                                                <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mt-6">
-                                                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                                        <h2 className="font-semibold text-white">Search Terms</h2>
-                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                            {searchTerms.filter(st =>
-                                                                String(st.adGroupId) === String(navigation.adGroupId) ||
-                                                                (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
-                                                            ).length} terms
-                                                        </span>
-                                                    </div>
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full text-sm text-left text-slate-300">
-                                                            <thead className="bg-slate-900/50 text-slate-400 uppercase text-xs">
-                                                                <tr>
-                                                                    <th className="px-6 py-3 font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('searchTerm')}>
-                                                                        <div className="flex items-center gap-1">
-                                                                            Search Term
-                                                                            {searchTermSortBy === 'searchTerm' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('clicks')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            Clicks
-                                                                            {searchTermSortBy === 'clicks' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('impressions')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            Impr.
-                                                                            {searchTermSortBy === 'impressions' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('ctr')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            CTR
-                                                                            {searchTermSortBy === 'ctr' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cost')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            Cost
-                                                                            {searchTermSortBy === 'cost' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversions')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            Conv.
-                                                                            {searchTermSortBy === 'conversions' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cpa')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            CPA
-                                                                            {searchTermSortBy === 'cpa' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('roas')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            ROAS
-                                                                            {searchTermSortBy === 'roas' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionRate')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            CVR
-                                                                            {searchTermSortBy === 'conversionRate' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionValue')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            Conv. Value
-                                                                            {searchTermSortBy === 'conversionValue' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('averageCpc')}>
-                                                                        <div className="flex items-center justify-end gap-1">
-                                                                            Avg. CPC
-                                                                            {searchTermSortBy === 'averageCpc' && (
-                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y divide-slate-700">
-                                                                {searchTerms
-                                                                    .filter(st =>
-                                                                        String(st.adGroupId) === String(navigation.adGroupId) ||
-                                                                        (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
-                                                                    )
-                                                                    .sort((a, b) => {
-                                                                        let valA: number | string = 0;
-                                                                        let valB: number | string = 0;
-
-                                                                        // Handle calculated fields
-                                                                        if (searchTermSortBy === 'cpa') {
-                                                                            // For CPA, 0 conversions means infinite cost per conversion. 
-                                                                            // We usually want low CPA at the top for ASC, but high CPA (bad) for DESC?
-                                                                            // Let's standardise: 0 conversions = Infinity
-                                                                            valA = a.conversions > 0 ? a.cost / a.conversions : Infinity;
-                                                                            valB = b.conversions > 0 ? b.cost / b.conversions : Infinity;
-                                                                        } else if (searchTermSortBy === 'roas') {
-                                                                            valA = a.cost > 0 ? a.conversionValue / a.cost : 0;
-                                                                            valB = b.cost > 0 ? b.conversionValue / b.cost : 0;
-                                                                        } else if (searchTermSortBy === 'searchTerm') {
-                                                                            valA = (a.searchTerm || '').toLowerCase();
-                                                                            valB = (b.searchTerm || '').toLowerCase();
-                                                                        } else {
-                                                                            // Direct property access
-                                                                            valA = (a as any)[searchTermSortBy];
-                                                                            valB = (b as any)[searchTermSortBy];
-                                                                        }
-
-                                                                        // Sort logic
-                                                                        if (typeof valA === 'string' && typeof valB === 'string') {
-                                                                            return searchTermSortDirection === 'asc'
-                                                                                ? valA.localeCompare(valB)
-                                                                                : valB.localeCompare(valA);
-                                                                        }
-
-                                                                        const numA = Number(valA) || 0;
-                                                                        const numB = Number(valB) || 0;
-
-                                                                        // Handle Infinity for CPA
-                                                                        if (numA === Infinity && numB === Infinity) return 0;
-                                                                        if (numA === Infinity) return searchTermSortDirection === 'asc' ? 1 : -1;
-                                                                        if (numB === Infinity) return searchTermSortDirection === 'asc' ? -1 : 1;
-
-                                                                        return searchTermSortDirection === 'asc' ? numA - numB : numB - numA;
-                                                                    })
-                                                                    .slice(0, 50) // Show top 50 by spend
-                                                                    .map((term, idx) => (
-                                                                        <tr key={idx} className="hover:bg-slate-700/50 transition-colors">
-                                                                            <td className="px-6 py-3">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <span className="font-medium text-white max-w-md truncate" title={term.searchTerm}>
-                                                                                        {term.searchTerm}
-                                                                                    </span>
-                                                                                    {term.matchType && term.matchType !== 'BROAD' && (
-                                                                                        <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${term.matchType === 'EXACT' ? 'bg-blue-500/20 text-blue-400' : term.matchType === 'PHRASE' ? 'bg-violet-500/20 text-violet-400' : 'bg-slate-600 text-slate-400'}`}>
-                                                                                            {term.matchType}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                {(() => {
-                                                                                    const s = SEARCH_TERM_STATUS_MAP[String(term.searchTermStatus)] ||
-                                                                                        { label: String(term.searchTermStatus) || '—', color: 'text-slate-500 bg-slate-700' };
-                                                                                    return s.label !== 'NONE' && s.label !== '—' ? (
-                                                                                        <span className={`inline-flex mt-1 px-1.5 py-0.5 rounded text-xs font-medium ${s.color}`}>
-                                                                                            {s.label}
-                                                                                        </span>
-                                                                                    ) : null;
-                                                                                })()}
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right">{term.clicks.toLocaleString()}</td>
-                                                                            <td className="px-4 py-3 text-right">{term.impressions.toLocaleString()}</td>
-                                                                            <td className="px-4 py-3 text-right">
-                                                                                <span className={term.ctr >= 0.05 ? 'text-emerald-400' : ''}>
-                                                                                    {(term.ctr * 100).toFixed(2)}%
-                                                                                </span>
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right">€{term.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                                                            <td className="px-4 py-3 text-right">
-                                                                                {term.conversions > 0 ? (
-                                                                                    <span className="text-white font-medium">{term.conversions.toFixed(1)}</span>
-                                                                                ) : (
-                                                                                    <span className="text-slate-600">0</span>
-                                                                                )}
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right">
-                                                                                {term.conversions > 0 ? (
-                                                                                    `€${(term.cost / term.conversions).toFixed(2)}`
-                                                                                ) : (
-                                                                                    <span className="text-slate-600">—</span>
-                                                                                )}
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right">
-                                                                                {term.cost > 0 ? (
-                                                                                    <span className={`font-medium ${term.conversionValue / term.cost >= 4 ? 'text-emerald-400' : term.conversionValue / term.cost < 1 ? 'text-red-400' : 'text-amber-400'}`}>
-                                                                                        {(term.conversionValue / term.cost).toFixed(2)}x
-                                                                                    </span>
-                                                                                ) : (
-                                                                                    <span className="text-slate-600">—</span>
-                                                                                )}
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right text-slate-400 text-xs">
-                                                                                {term.clicks > 0 ? `${((term.conversionRate || (term.conversions / term.clicks)) * 100).toFixed(2)}%` : '—'}
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right">
-                                                                                {term.conversionValue > 0 ? (
-                                                                                    <span className="text-emerald-400 text-xs">€{term.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-                                                                                ) : <span className="text-slate-600">—</span>}
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right text-slate-300 text-xs">
-                                                                                {term.averageCpc > 0 ? `€${term.averageCpc.toFixed(2)}` : '—'}
-                                                                            </td>
-                                                                        </tr>
-                                                                    ))}
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mt-6">
+                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                            <h2 className="font-semibold text-white">Search Terms</h2>
+                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
                                                                 {searchTerms.filter(st =>
                                                                     String(st.adGroupId) === String(navigation.adGroupId) ||
                                                                     (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
-                                                                ).length === 0 && (
-                                                                        <tr>
-                                                                            <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
-                                                                                No search terms found for this ad group.
-                                                                            </td>
-                                                                        </tr>
-                                                                    )}
-                                                            </tbody>
-                                                        </table>
+                                                                ).length} terms
+                                                            </span>
+                                                        </div>
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full text-sm text-left text-slate-300">
+                                                                <thead className="bg-slate-900/50 text-slate-400 uppercase text-xs">
+                                                                    <tr>
+                                                                        <th className="px-6 py-3 font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('searchTerm')}>
+                                                                            <div className="flex items-center gap-1">
+                                                                                Search Term
+                                                                                {searchTermSortBy === 'searchTerm' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('clicks')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                Clicks
+                                                                                {searchTermSortBy === 'clicks' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('impressions')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                Impr.
+                                                                                {searchTermSortBy === 'impressions' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('ctr')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                CTR
+                                                                                {searchTermSortBy === 'ctr' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cost')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                Cost
+                                                                                {searchTermSortBy === 'cost' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversions')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                Conv.
+                                                                                {searchTermSortBy === 'conversions' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cpa')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                CPA
+                                                                                {searchTermSortBy === 'cpa' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('roas')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                ROAS
+                                                                                {searchTermSortBy === 'roas' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionRate')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                CVR
+                                                                                {searchTermSortBy === 'conversionRate' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionValue')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                Conv. Value
+                                                                                {searchTermSortBy === 'conversionValue' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('averageCpc')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                Avg. CPC
+                                                                                {searchTermSortBy === 'averageCpc' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-700">
+                                                                    {searchTerms
+                                                                        .filter(st =>
+                                                                            String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                            (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
+                                                                        )
+                                                                        .sort((a, b) => {
+                                                                            let valA: number | string = 0;
+                                                                            let valB: number | string = 0;
+
+                                                                            // Handle calculated fields
+                                                                            if (searchTermSortBy === 'cpa') {
+                                                                                // For CPA, 0 conversions means infinite cost per conversion. 
+                                                                                // We usually want low CPA at the top for ASC, but high CPA (bad) for DESC?
+                                                                                // Let's standardise: 0 conversions = Infinity
+                                                                                valA = a.conversions > 0 ? a.cost / a.conversions : Infinity;
+                                                                                valB = b.conversions > 0 ? b.cost / b.conversions : Infinity;
+                                                                            } else if (searchTermSortBy === 'roas') {
+                                                                                valA = a.cost > 0 ? a.conversionValue / a.cost : 0;
+                                                                                valB = b.cost > 0 ? b.conversionValue / b.cost : 0;
+                                                                            } else if (searchTermSortBy === 'searchTerm') {
+                                                                                valA = (a.searchTerm || '').toLowerCase();
+                                                                                valB = (b.searchTerm || '').toLowerCase();
+                                                                            } else {
+                                                                                // Direct property access
+                                                                                valA = (a as any)[searchTermSortBy];
+                                                                                valB = (b as any)[searchTermSortBy];
+                                                                            }
+
+                                                                            // Sort logic
+                                                                            if (typeof valA === 'string' && typeof valB === 'string') {
+                                                                                return searchTermSortDirection === 'asc'
+                                                                                    ? valA.localeCompare(valB)
+                                                                                    : valB.localeCompare(valA);
+                                                                            }
+
+                                                                            const numA = Number(valA) || 0;
+                                                                            const numB = Number(valB) || 0;
+
+                                                                            // Handle Infinity for CPA
+                                                                            if (numA === Infinity && numB === Infinity) return 0;
+                                                                            if (numA === Infinity) return searchTermSortDirection === 'asc' ? 1 : -1;
+                                                                            if (numB === Infinity) return searchTermSortDirection === 'asc' ? -1 : 1;
+
+                                                                            return searchTermSortDirection === 'asc' ? numA - numB : numB - numA;
+                                                                        })
+                                                                        .slice(0, 50) // Show top 50 by spend
+                                                                        .map((term, idx) => (
+                                                                            <tr key={idx} className="hover:bg-slate-700/50 transition-colors">
+                                                                                <td className="px-6 py-3">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <span className="font-medium text-white max-w-md truncate" title={term.searchTerm}>
+                                                                                            {term.searchTerm}
+                                                                                        </span>
+                                                                                        {term.matchType && term.matchType !== 'BROAD' && (
+                                                                                            <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${term.matchType === 'EXACT' ? 'bg-blue-500/20 text-blue-400' : term.matchType === 'PHRASE' ? 'bg-violet-500/20 text-violet-400' : 'bg-slate-600 text-slate-400'}`}>
+                                                                                                {term.matchType}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    {(() => {
+                                                                                        const s = SEARCH_TERM_STATUS_MAP[String(term.searchTermStatus)] ||
+                                                                                            { label: String(term.searchTermStatus) || '—', color: 'text-slate-500 bg-slate-700' };
+                                                                                        return s.label !== 'NONE' && s.label !== '—' ? (
+                                                                                            <span className={`inline-flex mt-1 px-1.5 py-0.5 rounded text-xs font-medium ${s.color}`}>
+                                                                                                {s.label}
+                                                                                            </span>
+                                                                                        ) : null;
+                                                                                    })()}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right">{term.clicks.toLocaleString()}</td>
+                                                                                <td className="px-4 py-3 text-right">{term.impressions.toLocaleString()}</td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    <span className={term.ctr >= 0.05 ? 'text-emerald-400' : ''}>
+                                                                                        {(term.ctr * 100).toFixed(2)}%
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right">€{term.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    {term.conversions > 0 ? (
+                                                                                        <span className="text-white font-medium">{term.conversions.toFixed(1)}</span>
+                                                                                    ) : (
+                                                                                        <span className="text-slate-600">0</span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    {term.conversions > 0 ? (
+                                                                                        `€${(term.cost / term.conversions).toFixed(2)}`
+                                                                                    ) : (
+                                                                                        <span className="text-slate-600">—</span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    {term.cost > 0 ? (
+                                                                                        <span className={`font-medium ${term.conversionValue / term.cost >= 4 ? 'text-emerald-400' : term.conversionValue / term.cost < 1 ? 'text-red-400' : 'text-amber-400'}`}>
+                                                                                            {(term.conversionValue / term.cost).toFixed(2)}x
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="text-slate-600">—</span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right text-slate-400 text-xs">
+                                                                                    {term.clicks > 0 ? `${((term.conversionRate || (term.conversions / term.clicks)) * 100).toFixed(2)}%` : '—'}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    {term.conversionValue > 0 ? (
+                                                                                        <span className="text-emerald-400 text-xs">€{term.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                                                                                    ) : <span className="text-slate-600">—</span>}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right text-slate-300 text-xs">
+                                                                                    {term.averageCpc > 0 ? `€${term.averageCpc.toFixed(2)}` : '—'}
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    {searchTerms.filter(st =>
+                                                                        String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                        (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
+                                                                    ).length === 0 && (
+                                                                            <tr>
+                                                                                <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
+                                                                                    No search terms found for this ad group.
+                                                                                </td>
+                                                                            </tr>
+                                                                        )}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
                                                     </div>
-                                                </div>
                                                 )}
                                             </>
                                         )}
