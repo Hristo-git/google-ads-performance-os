@@ -64,7 +64,7 @@ function buildPrompt(data: any): string {
             cost: st.cost || 0, conversions: st.conversions || 0, conversionValue: st.conversionValue || 0,
         }));
 
-        const { healthBlock, ngramBlock } = runPreAnalysis(campaigns, adGroups, keywords, ads, negativeKeywords, searchTermInputs);
+        const { healthBlock, ngramBlock } = runPreAnalysis(data.campaigns || [], adGroups, keywords, ads, negativeKeywords, searchTermInputs);
 
         const totalSpend = campaigns.reduce((sum: number, c: any) => sum + (c?.cost || 0), 0);
         const totalConversions = campaigns.reduce((sum: number, c: any) => sum + (c?.conversions || 0), 0);
