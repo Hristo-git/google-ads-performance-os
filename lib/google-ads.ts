@@ -3384,7 +3384,7 @@ export async function getDemographicsPerformance(
     if (adGroupId) filter += ` AND ad_group.id = ${adGroupId}`;
 
     try {
-        const [ageRows, genderRows, parentalRows, incomeRows] = await Promise.all([
+        const [ageResult, genderResult, parentalResult, incomeResult] = await Promise.allSettled([
             customer.query(`
                 SELECT age_range_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
                 FROM age_range_view WHERE metrics.impressions > 0 ${filter}
@@ -3402,6 +3402,15 @@ export async function getDemographicsPerformance(
                 FROM income_range_view WHERE metrics.impressions > 0 ${filter}
             `)
         ]);
+
+        const ageRows = ageResult.status === 'fulfilled' ? ageResult.value : [];
+        const genderRows = genderResult.status === 'fulfilled' ? genderResult.value : [];
+        const parentalRows = parentalResult.status === 'fulfilled' ? parentalResult.value : [];
+        const incomeRows = incomeResult.status === 'fulfilled' ? incomeResult.value : [];
+        if (ageResult.status === 'rejected') logApiError('getDemographicsPerformance:age', ageResult.reason);
+        if (genderResult.status === 'rejected') logApiError('getDemographicsPerformance:gender', genderResult.reason);
+        if (parentalResult.status === 'rejected') logApiError('getDemographicsPerformance:parental', parentalResult.reason);
+        if (incomeResult.status === 'rejected') logApiError('getDemographicsPerformance:income', incomeResult.reason);
 
         const processRow = (row: any, type: 'AGE' | 'GENDER' | 'PARENTAL_STATUS' | 'INCOME'): DemographicPerformance => {
             const resourceName =
