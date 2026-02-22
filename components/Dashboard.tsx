@@ -4,7 +4,12 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
-import { Campaign, AdGroup, AssetGroup, NegativeKeyword, KeywordWithQS, AdWithStrength, Account, AccountAsset, NavigationState, PMaxAsset, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
+import {
+    Campaign, AdGroup, AssetGroup, NegativeKeyword, KeywordWithQS,
+    AdWithStrength, Account, AccountAsset, NavigationState, PMaxAsset,
+    DeviceBreakdown as DeviceBreakdownType, SearchTerm,
+    PlacementPerformance, DemographicPerformance, TimeAnalysisPerformance, AssetPerformance, AudiencePerformance
+} from "@/types/google-ads";
 import { ACCOUNTS, DEFAULT_ACCOUNT_ID } from "../config/accounts";
 import { processNGrams } from "@/lib/n-gram";
 import AIAnalysisModal from "./AIAnalysisModal";
@@ -44,6 +49,37 @@ const Sparkline = ({ data, color = "#a78bfa" }: { data: number[], color?: string
     );
 };
 
+const getISColor = (is: number | null) => {
+    if (is === null || is === undefined) return 'text-slate-500';
+    if (is >= 0.8) return 'text-emerald-400';
+    if (is >= 0.5) return 'text-amber-400';
+    return 'text-red-400';
+};
+
+const getAdStrengthColor = (strength: string) => {
+    switch (strength) {
+        case 'EXCELLENT': return 'bg-emerald-500/20 text-emerald-400';
+        case 'GOOD': return 'bg-blue-500/20 text-blue-400';
+        case 'AVERAGE': return 'bg-amber-500/20 text-amber-400';
+        case 'POOR': return 'bg-red-500/20 text-red-400';
+        case 'PENDING': return 'bg-purple-500/20 text-purple-400';
+        case 'UNRATED': return 'bg-slate-600/50 text-slate-400';
+        default: return 'bg-slate-600/50 text-slate-400';
+    }
+};
+
+const AD_STRENGTH_LABEL: Record<string, string> = {
+    'EXCELLENT': 'Excellent',
+    'GOOD': 'Good',
+    'AVERAGE': 'Average',
+    'POOR': 'Poor',
+    'PENDING': 'Pending',
+    'UNRATED': 'Unrated',
+    'UNSPECIFIED': '—',
+    'UNKNOWN': '—',
+};
+
+
 const MetricCell = ({ value, format, previous, invertColor = false }: { value: number, format: (v: number) => string, previous?: number, invertColor?: boolean }) => {
     let delta = null;
 
@@ -75,6 +111,167 @@ const MetricCell = ({ value, format, previous, invertColor = false }: { value: n
         </div>
     );
 };
+
+const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: { name: string; type: string; metrics: any; colSpan: number; layout?: 'pmax' | 'search' | 'adgroup' | 'listing_group' | 'pmax_assets' }) => {
+    // Determine number of leading columns (before metrics)
+    const baseColSpan = layout === 'listing_group' ? 2 : 1;
+
+    return (
+        <tr className="bg-slate-700/40 border-b border-slate-700 font-medium text-xs text-slate-300">
+            <td className="px-4 py-3 text-white" colSpan={baseColSpan}>
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded tracking-wider">{type}</span>
+                    <span className="truncate max-w-[200px]" title={name}>{name}</span>
+                </div>
+            </td>
+
+            {layout === 'listing_group' && (
+                <>
+                    <td className="px-4 py-3">
+                        <span className="bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded italic">Total</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">{(metrics.impressions || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">{(metrics.clicks || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">€{metrics.cost?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
+                    <td className="px-4 py-3 text-right">{(metrics.conversions || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right">
+                        {metrics.roas != null ? (
+                            <span className={`font-medium ${metrics.roas >= 3 ? 'text-emerald-400' : metrics.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
+                                {metrics.roas.toFixed(2)}x
+                            </span>
+                        ) : <span className="text-slate-500">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        {metrics.searchImpressionShare != null ? (
+                            <span className={`font-medium ${getISColor(metrics.searchImpressionShare)}`}>
+                                {(metrics.searchImpressionShare * 100).toFixed(1)}%
+                            </span>
+                        ) : <span className="text-slate-500">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        {metrics.searchLostISRank != null ? (
+                            <span className={`font-medium ${metrics.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                {(metrics.searchLostISRank * 100).toFixed(1)}%
+                            </span>
+                        ) : <span className="text-slate-500">—</span>}
+                    </td>
+                </>
+            )}
+
+            {layout === 'pmax_assets' && (
+                <>
+                    <td className="px-4 py-3 italic text-slate-500">Total Asset Group</td>
+                    <td className="px-4 py-3 text-center">
+                        {metrics.adStrength ? (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${getAdStrengthColor(metrics.adStrength)}`}>
+                                {AD_STRENGTH_LABEL[metrics.adStrength] || metrics.adStrength}
+                            </span>
+                        ) : (
+                            <span className="text-slate-500">—</span>
+                        )}
+                    </td>
+                    <td className="px-4 py-3 text-center text-[10px]">
+                        {metrics.status === 'ENABLED' ? '✅ ENABLED' : '⚠️ ' + (metrics.status || 'UNKNOWN')}
+                    </td>
+                </>
+            )}
+
+            {(layout === 'search' || layout === 'pmax' || layout === 'adgroup') && (
+                <>
+                    <td className="px-4 py-3 text-right">€{metrics.cost?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
+                    <td className="px-4 py-3 text-right">{(metrics.ctr * 100).toFixed(2)}%</td>
+                </>
+            )}
+
+            {layout === 'pmax' && (
+                <>
+                    <td className="px-4 py-3 text-right">{(metrics.impressions || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">{(metrics.clicks || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-emerald-400 font-semibold">€{metrics.conversionValue?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{(metrics.roas || 0).toFixed(2)}x</td>
+                    <td className="px-4 py-3 text-right text-purple-400">
+                        {metrics.searchImpressionShare != null ? (
+                            <span className={getISColor(metrics.searchImpressionShare)}>
+                                {(metrics.searchImpressionShare * 100).toFixed(1)}%
+                            </span>
+                        ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.searchLostISRank != null ? (
+                            <span className={metrics.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}>
+                                {(metrics.searchLostISRank * 100).toFixed(1)}%
+                            </span>
+                        ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        {metrics.adStrength ? (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase ${getAdStrengthColor(metrics.adStrength)}`}>
+                                {AD_STRENGTH_LABEL[metrics.adStrength] || metrics.adStrength}
+                            </span>
+                        ) : '—'}
+                    </td>
+                </>
+            )}
+
+            {layout === 'search' && (
+                <>
+                    <td className="px-4 py-3 text-right text-emerald-400">
+                        {metrics.searchImpressionShare ? `${(metrics.searchImpressionShare * 100).toFixed(1)}%` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.searchLostISRank ? `${(metrics.searchLostISRank * 100).toFixed(1)}%` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">{(metrics.avgQualityScore || 0).toFixed(1)}</td>
+                    <td className="px-4 py-3 text-right">
+                        {metrics.adStrength ? (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase ${getAdStrengthColor(metrics.adStrength)}`}>
+                                {AD_STRENGTH_LABEL[metrics.adStrength] || metrics.adStrength}
+                            </span>
+                        ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">{metrics.poorAdsCount || 0}/{metrics.adsCount || 0}</td>
+                </>
+            )}
+
+            {layout === 'adgroup' && (
+                <>
+                    <td className="px-4 py-3 text-right">{metrics.conversions?.toLocaleString('en-US') || 0}</td>
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.clicks > 0 && metrics.conversions > 0
+                            ? `${(metrics.conversions / metrics.clicks * 100).toFixed(2)}%`
+                            : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-emerald-400">
+                        {metrics.conversionValue > 0 ? `€${metrics.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">{metrics.roas?.toFixed(2) || 0}x</td>
+                    <td className="px-4 py-3 text-right text-emerald-400">
+                        {metrics.searchImpressionShare ? `${(metrics.searchImpressionShare * 100).toFixed(1)}%` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.searchLostISRank ? `${(metrics.searchLostISRank * 100).toFixed(1)}%` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        {metrics.adStrength ? (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase ${getAdStrengthColor(metrics.adStrength)}`}>
+                                {AD_STRENGTH_LABEL[metrics.adStrength] || metrics.adStrength}
+                            </span>
+                        ) : '—'}
+                    </td>
+                </>
+            )}
+
+            {(() => {
+                const renderedCols = layout === 'listing_group' ? 9 : layout === 'pmax_assets' ? 4 : (layout === 'search' ? 9 : layout === 'pmax' ? 10 : layout === 'adgroup' ? 10 : 1);
+                return colSpan > renderedCols ? <td colSpan={colSpan - renderedCols}></td> : null;
+            })()}
+        </tr>
+    );
+};
+
+
+
+
 
 // Helper to get default "Last Month" date range
 const getLastMonthRange = () => {
@@ -221,17 +418,28 @@ const BIDDING_STRATEGY_LABELS: Record<string, string> = {
     'TARGET_IMPRESSION_SHARE': 'Target Imp Share',
     'COMMISSION': 'Commission',
     'MAXIMIZE_CONVERSION_VALUE_BASED_BIDDING': 'Max Conv Value',
-    // Numeric mappings (Google Ads Enums)
-    '2': 'Manual CPC',
-    '3': 'Manual CPM',
-    '4': 'Page One Promoted',
-    '5': 'Max Clicks',
-    '6': 'tCPA',
-    '7': 'tROAS',
-    '8': 'Max Conversions',
-    '9': 'Max Conv Value',
-    '10': 'eCPC',
-    '11': 'Target Imp Share'
+    // Numeric mappings — from google-ads-api v22 BiddingStrategyType enum (enums.js)
+    '2': 'eCPC',              // ENHANCED_CPC
+    '3': 'Manual CPC',        // MANUAL_CPC
+    '4': 'Manual CPM',        // MANUAL_CPM
+    '5': 'Page One Promoted', // PAGE_ONE_PROMOTED (deprecated)
+    '6': 'tCPA',              // TARGET_CPA
+    '7': 'Target Outrank',    // TARGET_OUTRANK_SHARE (deprecated)
+    '8': 'tROAS',             // TARGET_ROAS ← verified from enum + tROAS campaign shows '8'
+    '9': 'Max Clicks',        // TARGET_SPEND
+    '10': 'Max Conversions',  // MAXIMIZE_CONVERSIONS
+    '11': 'Max Conv Value',   // MAXIMIZE_CONVERSION_VALUE — verified: PMax returns 11
+    '12': 'Percent CPC',      // PERCENT_CPC
+    '13': 'Manual CPV',       // MANUAL_CPV
+    '14': 'Target CPM',       // TARGET_CPM
+    '15': 'Target Imp Share', // TARGET_IMPRESSION_SHARE
+    '16': 'Commission',       // COMMISSION
+    '17': 'Invalid',          // INVALID
+    '18': 'Manual CPA',       // MANUAL_CPA
+    '19': 'Fixed CPM',        // FIXED_CPM (video)
+    '20': 'Target CPV',       // TARGET_CPV (video) — user sees this on paused campaigns
+    '21': 'Target CPC',       // TARGET_CPC
+    '22': 'Fixed SOV'         // FIXED_SHARE_OF_VOICE
 };
 
 // SearchTermTargetingStatus proto enum → human label
@@ -291,6 +499,18 @@ const ASSET_FIELD_TYPE_LABELS: Record<string, string> = {
     '26': 'Ad Image',
     '27': 'Business Logo',
     '28': 'Hotel Property'
+};
+
+// PMax asset recommended counts — used for IS banner + asset header color coding
+const PMAX_ASSET_THRESHOLDS: Record<string, { min: number; rec: number; label: string }> = {
+    'Headline':        { min: 3,  rec: 8,  label: 'Headlines' },
+    'Long Headline':   { min: 1,  rec: 5,  label: 'Long Headlines' },
+    'Description':     { min: 2,  rec: 4,  label: 'Descriptions' },
+    'Marketing Image': { min: 1,  rec: 3,  label: 'Images' },
+    'Square Image':    { min: 1,  rec: 3,  label: 'Sq. Images' },
+    'Logo':            { min: 1,  rec: 1,  label: 'Logo' },
+    'Video':           { min: 0,  rec: 1,  label: 'Videos' },
+    'Portrait Image':  { min: 0,  rec: 1,  label: 'Portrait Imgs' },
 };
 
 const PERFORMANCE_LABEL_LABELS: Record<string, string> = {
@@ -464,6 +684,21 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [hideStopped, setHideStopped] = useState(false); // Filter for Enabled only items
     const [healthData, setHealthData] = useState<any>(null);
     const [loadingHealth, setLoadingHealth] = useState(false);
+
+    // Demand Gen specific state
+    const [dgPlacements, setDgPlacements] = useState<PlacementPerformance[]>([]);
+    const [dgDemographics, setDgDemographics] = useState<DemographicPerformance[]>([]);
+    const [dgTimeAnalysis, setDgTimeAnalysis] = useState<TimeAnalysisPerformance[]>([]);
+    const [dgAssets, setDgAssets] = useState<AssetPerformance[]>([]);
+    const [dgAudiences, setDgAudiences] = useState<AudiencePerformance[]>([]);
+    const [dgView, setDgView] = useState<'performance' | 'placements' | 'audiences' | 'demographics' | 'time' | 'assets'>('performance');
+    // Display / Video / DG ad group level state
+    const [displayPlacements, setDisplayPlacements] = useState<PlacementPerformance[]>([]);
+    const [displayAudiences, setDisplayAudiences] = useState<AudiencePerformance[]>([]);
+    const [displayDemographics, setDisplayDemographics] = useState<DemographicPerformance[]>([]);
+    const [displayAdAssets, setDisplayAdAssets] = useState<any[]>([]);
+    const [pmaxView, setPmaxView] = useState<'summary' | 'asset_groups'>('summary');
+    const [pmaxListingGroups, setPmaxListingGroups] = useState<any[]>([]);
     const [auditSnapshotDate, setAuditSnapshotDate] = useState<string | null>(null);
 
     // Search Terms implementation state
@@ -643,6 +878,31 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         }
     };
 
+    const fetchDGDetails = async (campaignId: string) => {
+        setLoading(true);
+        try {
+            setLoadingMessage("Fetching Demand Gen insights...");
+            const params = `customerId=${selectedAccountId}&campaignId=${campaignId}&startDate=${dateRange.start}&endDate=${dateRange.end}`;
+            const res = await fetch(`/api/google-ads/dg-details?${params}`);
+            const data = await res.json();
+
+            if (data.error) throw new Error(data.error);
+
+            if (data.placements) setDgPlacements(data.placements);
+            if (data.demographics) setDgDemographics(data.demographics);
+            if (data.timeAnalysis) setDgTimeAnalysis(data.timeAnalysis);
+            if (data.assets) setDgAssets(data.assets);
+            if (data.audiences) setDgAudiences(data.audiences);
+            if (data.adGroups) setAdGroups(data.adGroups);
+
+        } catch (err: any) {
+            console.error("Failed to fetch DG details:", err);
+        } finally {
+            setLoading(false);
+            setLoadingMessage("");
+        }
+    };
+
     const fetchAdGroupData = async () => {
         if (campaigns.length === 0) return; // Wait for campaigns to load context
 
@@ -653,7 +913,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             const commonParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
 
             // Pass campaignType to avoid an extra getCampaigns() call on the backend
-            const currentCampaign = campaigns.find(c => c.id === navigation.campaignId);
+            const currentCampaign = campaigns.find(c => String(c.id) === String(navigation.campaignId));
             const campaignTypeParam = currentCampaign?.advertisingChannelType ? `&campaignType=${currentCampaign.advertisingChannelType}` : '';
             const adGroupParams = navigation.campaignId
                 ? `${commonParams}&campaignId=${navigation.campaignId}${campaignTypeParam}`
@@ -691,6 +951,24 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
     // campaigns.length is in deps so we fire once campaigns resolve (initial load guard).
     // fetchAdGroupData itself guards against campaigns.length === 0.
+
+    useEffect(() => {
+        if (session && navigation.level === 'campaign' && navigation.campaignId && campaigns.length > 0) {
+            const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+            const isDG = camp?.advertisingChannelType === 'DEMAND_GEN' || camp?.advertisingChannelType === 'DISCOVERY' || camp?.advertisingChannelType === '14';
+            if (isDG) {
+                fetchDGDetails(navigation.campaignId);
+            }
+        }
+    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, campaigns.length]);
+    // campaigns.length is in deps so we fire once campaigns resolve (initial load guard).
+    // fetchAdGroupData itself guards against campaigns.length === 0.
+
+    // Reset view-specific state when campaign changes to prevent state leakage across campaigns
+    useEffect(() => {
+        setDgView('performance');
+        setPmaxView('summary');
+    }, [navigation.campaignId]);
 
     // Fetch ALL ad groups when entering Strategic Insights (for Quality Audit)
     useEffect(() => {
@@ -735,12 +1013,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 channelType === 'DEMAND_GEN' || channelType === 'DISCOVERY';
 
             if (isPMax) {
-                // PMax → show asset group assets
+                // PMax → fetch asset group assets + listing groups in parallel
                 setLoadingMessage("Fetching Asset Group Assets...");
-                const res = await fetch(`/api/google-ads/pmax-assets?assetGroupId=${adGroupId}&customerId=${selectedAccountId}`);
-                if (!res.ok) throw new Error('Failed to fetch assets');
-                const data = await res.json();
+                const queryParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}`;
+                const [assetsRes, lgRes] = await Promise.all([
+                    fetch(`/api/google-ads/pmax-assets?assetGroupId=${adGroupId}&customerId=${selectedAccountId}`),
+                    fetch(`/api/google-ads/pmax-listing-groups?assetGroupId=${adGroupId}&${queryParams}`)
+                ]);
+                if (!assetsRes.ok) throw new Error('Failed to fetch assets');
+                const data = await assetsRes.json();
                 setPmaxAssets(data.assets || []);
+                if (lgRes.ok) {
+                    const lgData = await lgRes.json();
+                    setPmaxListingGroups(lgData.listingGroups || []);
+                } else {
+                    setPmaxListingGroups([]);
+                }
                 setListingGroups([]);
                 setAds([]);
                 setKeywords([]);
@@ -767,10 +1055,37 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 setAds([]);
                 setKeywords([]);
                 setNegativeKeywords([]);
+
+                // Fetch Display-specific data for this ad group in parallel
+                setLoadingMessage("Fetching Display insights...");
+                const baseParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}`;
+                const adGroupParam = `adGroupId=${adGroupId}`;
+                const campaignParam = navigation.campaignId ? `&campaignId=${navigation.campaignId}` : '';
+                const [placementsRes, audiencesRes, demographicsRes, assetsRes] = await Promise.all([
+                    fetch(`/api/google-ads/placements?${baseParams}&${adGroupParam}${campaignParam}`),
+                    fetch(`/api/google-ads/audiences?${baseParams}&${adGroupParam}${campaignParam}`),
+                    fetch(`/api/google-ads/demographics?${baseParams}&${adGroupParam}${campaignParam}`),
+                    fetch(`/api/google-ads/display-ad-assets?${baseParams}&${adGroupParam}`)
+                ]);
+                const [placementsData, audiencesData, demographicsData, assetsData] = await Promise.all([
+                    placementsRes.json(),
+                    audiencesRes.json(),
+                    demographicsRes.json(),
+                    assetsRes.json()
+                ]);
+                setDisplayPlacements(placementsData.placements || []);
+                setDisplayAudiences(audiencesData.audiences || []);
+                setDisplayDemographics(demographicsData.demographics || []);
+                setDisplayAdAssets(assetsData.assets || []);
                 return;
             }
 
-            // Standard Search / DSA / Brand → fetch keywords, ads, negative keywords
+            // Standard Search / DSA / Brand → clear Display-specific state and fetch keywords
+            setDisplayPlacements([]);
+            setDisplayAudiences([]);
+            setDisplayDemographics([]);
+            setDisplayAdAssets([]);
+            setAds([]);
             const statusParam = hideStopped ? '&status=ENABLED' : '';
             const queryParams = `&customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
             const [nkRes, kwRes, adsRes] = await Promise.all([
@@ -785,7 +1100,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
             if (nkData.negativeKeywords) setNegativeKeywords(nkData.negativeKeywords);
             if (kwData.keywords) setKeywords(kwData.keywords);
-            if (adsData.ads) setAds(adsData.ads);
+            setAds(adsData.ads || []);
             setListingGroups([]);
             setPmaxAssets([]);
         } catch (error) {
@@ -1026,36 +1341,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         return 'text-red-400';
     };
 
-    const getAdStrengthColor = (strength: string) => {
-        switch (strength) {
-            case 'EXCELLENT': return 'bg-emerald-500/20 text-emerald-400';
-            case 'GOOD': return 'bg-blue-500/20 text-blue-400';
-            case 'AVERAGE': return 'bg-amber-500/20 text-amber-400';
-            case 'POOR': return 'bg-red-500/20 text-red-400';
-            case 'PENDING': return 'bg-purple-500/20 text-purple-400';
-            case 'UNRATED': return 'bg-slate-600/50 text-slate-400';
-            default: return 'bg-slate-600/50 text-slate-400';
-        }
-    };
 
-    // Human-readable labels for Ad Strength (supports BG context)
-    const AD_STRENGTH_LABEL: Record<string, string> = {
-        'EXCELLENT': 'Excellent',
-        'GOOD': 'Good',
-        'AVERAGE': 'Average',
-        'POOR': 'Poor',
-        'PENDING': 'Pending',
-        'UNRATED': 'Unrated',
-        'UNSPECIFIED': '—',
-        'UNKNOWN': '—',
-    };
-
-    const getISColor = (is: number | null) => {
-        if (is === null) return 'text-slate-500';
-        if (is >= 0.8) return 'text-emerald-400';
-        if (is >= 0.5) return 'text-amber-400';
-        return 'text-red-400';
-    };
 
     // Recommendation text helpers
     const getAdStrengthTip = (strength: string, headlinesCount?: number, descriptionsCount?: number, adType?: string) => {
@@ -1093,6 +1379,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         switch (label) {
             case 'LOW': return 'This asset is underperforming compared to others. Consider replacing it with a different creative, text variation, or image to improve results.';
             case 'PENDING': case 'LEARNING': return 'Google is still evaluating this asset. Allow 1-2 weeks for enough data to accumulate before making changes.';
+            case 'UNKNOWN': return 'Insufficient data to rate this asset. It needs more impressions before Google can evaluate its performance.';
             default: return '';
         }
     };
@@ -1113,6 +1400,378 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             </div>
         );
     }
+
+    // --- Demand Gen specialized renders ---
+    const renderDGPlacements = () => (
+        <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                    <tr>
+                        <th className="px-4 py-3 font-medium">Placement</th>
+                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                        <th className="px-4 py-3 text-right font-medium">Cost</th>
+                        <th className="px-4 py-3 text-right font-medium">CTR</th>
+                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                        <th className="px-4 py-3 text-right font-medium">Action</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700 text-slate-300">
+                    {dgPlacements.length === 0 ? (
+                        <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500 italic">No placement data found for this period.</td></tr>
+                    ) : (
+                        dgPlacements.map((p, i) => (
+                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                <td className="px-4 py-4">{p.placement}</td>
+                                <td className="px-4 py-4 text-right">{p.impressions.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">{p.clicks.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">€{p.cost.toFixed(2)}</td>
+                                <td className="px-4 py-4 text-right">{(p.ctr * 100).toFixed(2)}%</td>
+                                <td className="px-4 py-4 text-right">{p.conversions.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            alert(`Excluding placement: ${p.placement}. This action would typically call the Google Ads API to add a campaign-level exclusion.`);
+                                        }}
+                                        className="text-xs text-red-400 hover:text-red-300 transition-colors bg-red-400/10 px-2 py-1 rounded"
+                                    >
+                                        Exclude
+                                    </button>
+                                </td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    const renderDGDemographics = () => (
+        <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                    <tr>
+                        <th className="px-4 py-3 font-medium">Category</th>
+                        <th className="px-4 py-3 font-medium">Value</th>
+                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                        <th className="px-4 py-3 text-right font-medium">Cost</th>
+                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700 text-slate-300">
+                    {dgDemographics.length === 0 ? (
+                        <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500 italic">No demographic data found.</td></tr>
+                    ) : (
+                        dgDemographics.map((d, i) => (
+                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                <td className="px-4 py-4">
+                                    {({ AGE: 'Age', GENDER: 'Gender', PARENTAL_STATUS: 'Parental Status', INCOME: 'Household Income' } as Record<string, string>)[d.type] || d.type}
+                                </td>
+                                <td className="px-4 py-4">{d.dimension}</td>
+                                <td className="px-4 py-4 text-right">{d.impressions.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">{d.clicks.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">€{d.cost.toFixed(2)}</td>
+                                <td className="px-4 py-4 text-right">{d.conversions.toLocaleString()}</td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    const renderDGAudiences = () => (
+        <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                    <tr>
+                        <th className="px-4 py-3 font-medium">Audience</th>
+                        <th className="px-4 py-3 font-medium">Type</th>
+                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                        <th className="px-4 py-3 text-right font-medium">Cost</th>
+                        <th className="px-4 py-3 text-right font-medium">ROAS</th>
+                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700 text-slate-300">
+                    {dgAudiences.length === 0 ? (
+                        <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500 italic">No audience data found.</td></tr>
+                    ) : (
+                        dgAudiences.map((a, i) => (
+                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                <td className="px-4 py-4">{a.audienceName}</td>
+                                <td className="px-4 py-4 text-xs text-slate-400 capitalize">{a.audienceType?.toLowerCase().replace(/_/g, ' ') || 'Other'}</td>
+                                <td className="px-4 py-4 text-right">{a.impressions.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">{a.clicks.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">€{a.cost.toFixed(2)}</td>
+                                <td className="px-4 py-4 text-right">{a.roas ? `${a.roas.toFixed(2)}x` : '—'}</td>
+                                <td className="px-4 py-4 text-right">{a.conversions.toLocaleString()}</td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    const renderDGTimeAnalysis = () => (
+        <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                    <tr>
+                        <th className="px-4 py-3 font-medium">Hour of Day</th>
+                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                        <th className="px-4 py-3 text-right font-medium">Cost</th>
+                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700 text-slate-300">
+                    {dgTimeAnalysis.length === 0 ? (
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 italic">No time analysis data found.</td></tr>
+                    ) : (
+                        dgTimeAnalysis.map((t, i) => (
+                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                <td className="px-4 py-4">{t.period}:00</td>
+                                <td className="px-4 py-4 text-right">{t.impressions.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">{t.clicks.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">€{t.cost.toFixed(2)}</td>
+                                <td className="px-4 py-4 text-right">{t.conversions.toLocaleString()}</td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    const renderDGAssets = () => (
+        <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                    <tr>
+                        <th className="px-4 py-3 font-medium">Asset</th>
+                        <th className="px-4 py-3 font-medium">Type</th>
+                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                        <th className="px-4 py-3 text-right font-medium">CTR</th>
+                        <th className="px-4 py-3 text-right font-medium">Perf. Label</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700 text-slate-300">
+                    {dgAssets.length === 0 ? (
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 italic">No asset data found.</td></tr>
+                    ) : (
+                        dgAssets.map((a, i) => (
+                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                <td className="px-4 py-4 max-w-sm">
+                                    {a.imageUrl ? (
+                                        <div className="flex items-center gap-3">
+                                            <img
+                                                src={a.imageUrl}
+                                                alt={a.name || 'Asset preview'}
+                                                className="w-12 h-12 object-cover rounded border border-slate-700 flex-shrink-0"
+                                                loading="lazy"
+                                            />
+                                            <span className="text-slate-300 text-xs truncate">{a.name || 'Image'}</span>
+                                        </div>
+                                    ) : a.youtubeVideoId ? (
+                                        <div className="flex items-center gap-3">
+                                            <img
+                                                src={`https://img.youtube.com/vi/${a.youtubeVideoId}/default.jpg`}
+                                                alt={a.name || 'Video preview'}
+                                                className="w-16 h-12 object-cover rounded border border-slate-700 flex-shrink-0"
+                                                loading="lazy"
+                                            />
+                                            <span className="text-slate-300 text-xs truncate">{a.name || a.youtubeVideoId}</span>
+                                        </div>
+                                    ) : (
+                                        <div className="truncate" title={a.text || a.name || a.id}>
+                                            {a.text || a.name || a.id}
+                                        </div>
+                                    )}
+                                </td>
+                                <td className="px-4 py-4 text-xs text-slate-400">
+                                    {({
+                                        HEADLINE: 'Headline', LONG_HEADLINE: 'Long Headline',
+                                        DESCRIPTION: 'Description', BUSINESS_NAME: 'Business Name',
+                                        IMAGE: 'Image', SQUARE_IMAGE: 'Square Image', PORTRAIT_IMAGE: 'Portrait Image',
+                                        LANDSCAPE_LOGO: 'Landscape Logo', SQUARE_LOGO: 'Square Logo',
+                                        CALL_TO_ACTION_SELECTION: 'Call to Action',
+                                        YOUTUBE_VIDEO: 'YouTube Video', MEDIA_BUNDLE: 'Media Bundle',
+                                        STRUCTURED_SNIPPET_HEADER: 'Snippet Header', STRUCTURED_SNIPPET_VALUES: 'Snippet Values',
+                                    } as Record<string, string>)[a.type] || a.type?.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c: string) => c.toUpperCase()) || '—'}
+                                </td>
+                                <td className="px-4 py-4 text-right">{a.impressions.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">{(a.ctr * 100).toFixed(2)}%</td>
+                                <td className="px-4 py-4 text-right">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${a.performanceLabel === 'EXCELLENT' ? 'bg-emerald-500/20 text-emerald-400' :
+                                        a.performanceLabel === 'GOOD' ? 'bg-blue-500/20 text-blue-400' :
+                                            a.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400' :
+                                                'bg-slate-700 text-slate-400'
+                                        }`}>
+                                        {a.performanceLabel || 'PENDING'}
+                                    </span>
+                                </td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    // --- PMax Summary View ---
+    const renderPMaxSummary = () => {
+        const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+        if (!camp) return null;
+
+        const biddingLabel: Record<string, string> = {
+            'TARGET_ROAS': 'Target ROAS',
+            'TARGET_CPA': 'Target CPA',
+            'MAXIMIZE_CONVERSION_VALUE': 'Max Conv. Value',
+            'MAXIMIZE_CONVERSIONS': 'Max Conversions',
+            'ENHANCED_CPC': 'Enhanced CPC',
+            'MANUAL_CPC': 'Manual CPC',
+        };
+
+        return (
+            <div className="p-6 space-y-6">
+                {/* KPI Row 1 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-slate-700/30 rounded-lg p-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Spend</div>
+                        <div className="text-xl font-bold text-white">€{camp.cost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">ROAS</div>
+                        <div className={`text-xl font-bold ${camp.roas != null ? (camp.roas >= (camp.targetRoas || 3) ? 'text-emerald-400' : camp.roas >= 1 ? 'text-amber-400' : 'text-red-400') : 'text-slate-400'}`}>
+                            {camp.roas != null ? `${camp.roas.toFixed(2)}x` : '—'}
+                        </div>
+                        {camp.targetRoas ? <div className="text-xs text-slate-500 mt-1">Target: {camp.targetRoas.toFixed(2)}x</div> : null}
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Conv. Value</div>
+                        <div className="text-xl font-bold text-emerald-400">€{(camp.conversionValue || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Conversions</div>
+                        <div className="text-xl font-bold text-white">{camp.conversions.toLocaleString()}</div>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Impressions</div>
+                        <div className="text-xl font-bold text-white">{camp.impressions.toLocaleString()}</div>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Clicks</div>
+                        <div className="text-xl font-bold text-white">{camp.clicks.toLocaleString()}</div>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">CTR</div>
+                        <div className="text-xl font-bold text-white">{(camp.ctr * 100).toFixed(2)}%</div>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Avg. CPC</div>
+                        <div className="text-xl font-bold text-white">€{camp.cpc.toFixed(2)}</div>
+                    </div>
+                </div>
+
+                {/* Bidding + IS Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {camp.biddingStrategyType && (
+                        <div className="bg-slate-700/30 rounded-lg p-4">
+                            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Bidding Strategy</div>
+                            <div className="text-sm font-semibold text-purple-400">{BIDDING_STRATEGY_LABELS[camp.biddingStrategyType] || BIDDING_STRATEGY_LABELS[String(camp.biddingStrategyType).toUpperCase()] || camp.biddingStrategyType}</div>
+                        </div>
+                    )}
+                    {camp.searchImpressionShare != null && (
+                        <div className="bg-slate-700/30 rounded-lg p-4">
+                            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Search IS</div>
+                            <div className={`text-xl font-bold ${getISColor(camp.searchImpressionShare)}`}>
+                                {(camp.searchImpressionShare * 100).toFixed(1)}%
+                            </div>
+                        </div>
+                    )}
+                    {camp.searchLostISRank != null && (
+                        <div className="bg-slate-700/30 rounded-lg p-4">
+                            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Lost IS (Rank)</div>
+                            <div className={`text-xl font-bold ${camp.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-300'}`}>
+                                {(camp.searchLostISRank * 100).toFixed(1)}%
+                            </div>
+                        </div>
+                    )}
+                    {camp.searchLostISBudget != null && (
+                        <div className="bg-slate-700/30 rounded-lg p-4">
+                            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Lost IS (Budget)</div>
+                            <div className={`text-xl font-bold ${camp.searchLostISBudget > 0.15 ? 'text-amber-400' : 'text-slate-300'}`}>
+                                {(camp.searchLostISBudget * 100).toFixed(1)}%
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Asset Groups quick list */}
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-slate-300">
+                            Asset Groups <span className="text-slate-500 font-normal">({sortedData.length})</span>
+                        </h3>
+                        <button
+                            onClick={() => setPmaxView('asset_groups')}
+                            className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                        >
+                            View all →
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {sortedData.slice(0, 6).map((ag: any) => {
+                            const strength = ag.strength || ag.adStrength || 'UNSPECIFIED';
+                            return (
+                                <button
+                                    key={ag.id}
+                                    onClick={() => setNavigation({
+                                        level: 'adgroup',
+                                        campaignId: navigation.campaignId,
+                                        campaignName: navigation.campaignName,
+                                        adGroupId: ag.id,
+                                        adGroupName: ag.name,
+                                    })}
+                                    className="w-full flex items-center justify-between bg-slate-700/20 hover:bg-slate-700/50 rounded-lg px-4 py-3 transition-colors cursor-pointer text-left group"
+                                >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${getAdStrengthColor(strength)}`}>
+                                            {AD_STRENGTH_LABEL[strength] || '—'}
+                                        </span>
+                                        <span className="text-sm text-white truncate group-hover:text-violet-300 transition-colors">{ag.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-5 text-xs text-slate-400 flex-shrink-0 ml-4">
+                                        <span>€{(ag.cost || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                        {ag.roas != null && (
+                                            <span className={`font-medium ${ag.roas >= 3 ? 'text-emerald-400' : ag.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
+                                                {ag.roas.toFixed(2)}x
+                                            </span>
+                                        )}
+                                        <span>{ag.conversions?.toFixed(1) || 0} conv.</span>
+                                        <span className="text-slate-600 group-hover:text-violet-400 transition-colors">→</span>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                        {sortedData.length > 6 && (
+                            <button
+                                onClick={() => setPmaxView('asset_groups')}
+                                className="text-xs text-slate-500 hover:text-violet-400 transition-colors pl-1"
+                            >
+                                +{sortedData.length - 6} more asset groups…
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     // Get current data based on navigation level
     const getCurrentData = () => {
@@ -1538,7 +2197,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 ) : (
                     <main className="flex-1 overflow-auto p-6 space-y-6">
                         {/* KPI Cards */}
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${(() => { const _c = navigation.level === 'adgroup' && campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = (_c as any)?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
                             <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-blue-100">Total Spend</p>
                                 <p className="text-2xl font-bold text-white mt-1">€{totalSpend.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
@@ -1551,14 +2210,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 <p className="text-sm font-medium text-purple-100">Conv. Value</p>
                                 <p className="text-2xl font-bold text-white mt-1">€{totalConversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
                             </div>
-                            <div className="rounded-xl bg-gradient-to-br from-pink-600 to-pink-700 p-5 shadow-lg">
-                                <p className="text-sm font-medium text-pink-100">ROAS</p>
+                            <div className={`rounded-xl bg-gradient-to-br p-5 shadow-lg ${totalROAS === 0 ? 'from-slate-600 to-slate-700' : 'from-pink-600 to-pink-700'}`}>
+                                <p className={`text-sm font-medium ${totalROAS === 0 ? 'text-slate-300' : 'text-pink-100'}`}>ROAS</p>
                                 <p className="text-2xl font-bold text-white mt-1">{totalROAS.toFixed(2)}x</p>
                             </div>
                             <div className="rounded-xl bg-gradient-to-br from-violet-600 to-violet-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-violet-100">Clicks</p>
                                 <p className="text-2xl font-bold text-white mt-1">{totalClicks.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
                             </div>
+                            {/* View-through Conv card — Display/Video/DG ad groups only */}
+                            {navigation.level === 'adgroup' && (() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
+                                <div className="rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 p-5 shadow-lg">
+                                    <p className="text-sm font-medium text-teal-100">View-through Conv.</p>
+                                    <p className="text-2xl font-bold text-white mt-1">{(currentAdGroup?.viewThroughConversions ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                                    <p className="text-xs text-teal-200/70 mt-1">Saw ad, converted later</p>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex flex-col gap-6">
@@ -1570,8 +2237,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                             <h2 className="font-semibold text-white">
                                                 {navigation.level === 'account' && 'Campaigns'}
                                                 {navigation.level === 'campaign' && (
-                                                    (campaigns.find(c => c.id === navigation.campaignId)?.advertisingChannelType === 'PERFORMANCE_MAX' ||
-                                                        campaigns.find(c => c.id === navigation.campaignId)?.name.toLowerCase().includes('pmax'))
+                                                    (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                                        campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
                                                         ? 'Asset Groups'
                                                         : 'Ad Groups'
                                                 )}
@@ -1606,280 +2273,310 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                             }
                                         </span>
                                     </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm">
-                                            <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                                                <tr>
-                                                    <th className="px-4 py-3 font-medium">
-                                                        <button onClick={() => handleSort('name')} className="flex items-center gap-1 hover:text-white">
-                                                            Name
-                                                            {sortBy === 'name' && (
-                                                                <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                            )}
-                                                        </button>
-                                                    </th>
-                                                    <th className="px-4 py-3 text-right font-medium">
-                                                        <button onClick={() => handleSort('cost')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                            Cost
-                                                            {sortBy === 'cost' && (
-                                                                <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                            )}
-                                                        </button>
-                                                    </th>
-                                                    <th className="px-4 py-3 text-right font-medium">
-                                                        <button onClick={() => handleSort('ctr')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                            CTR
-                                                            {sortBy === 'ctr' && (
-                                                                <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                            )}
-                                                        </button>
-                                                    </th>
-                                                    {navigation.level === 'account' && (
-                                                        <>
-                                                            <th className="px-4 py-3 text-right font-medium">
-                                                                <button onClick={() => handleSort('conversions')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                                    Conversions
-                                                                    {sortBy === 'conversions' && (
-                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                    )}
-                                                                </button>
-                                                            </th>
-                                                            <th className="px-4 py-3 text-right font-medium">
-                                                                <button onClick={() => handleSort('cvr')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                                    CVR
-                                                                    {sortBy === 'cvr' && (
-                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                    )}
-                                                                </button>
-                                                            </th>
-                                                            <th className="px-4 py-3 text-right font-medium">
-                                                                <button onClick={() => handleSort('conversionValue')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                                    Conv. Value
-                                                                    {sortBy === 'conversionValue' && (
-                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                    )}
-                                                                </button>
-                                                            </th>
-                                                            <th className="px-4 py-3 text-right font-medium">
-                                                                <button onClick={() => handleSort('roas')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                                    ROAS
-                                                                    {sortBy === 'roas' && (
-                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                    )}
-                                                                </button>
-                                                            </th>
-                                                            <th className="px-4 py-3 text-right font-medium">
-                                                                <button onClick={() => handleSort('searchLostISBudget')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                                    Lost (Budget)
-                                                                    {sortBy === 'searchLostISBudget' && (
-                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                    )}
-                                                                </button>
-                                                            </th>
-                                                            <th className="px-4 py-3 text-right font-medium">
-                                                                <button onClick={() => handleSort('searchLostISRank')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                                    Lost (Rank)
-                                                                    {sortBy === 'searchLostISRank' && (
-                                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                    )}
-                                                                </button>
-                                                            </th>
-                                                            <th className="px-4 py-3 text-center font-medium">Type</th>
-                                                            <th className="px-4 py-3 text-center font-medium">Bidding</th>
-                                                        </>
-                                                    )}
-                                                    {navigation.level === 'campaign' && (() => {
-                                                        const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
-                                                        const ct = camp?.advertisingChannelType || '';
-                                                        const isPMax = ct === 'PERFORMANCE_MAX' || camp?.name?.toLowerCase().includes('pmax');
-                                                        const isShopping = ct === 'SHOPPING';
-                                                        const isUpperFunnel = ct === 'VIDEO' || ct === 'DISPLAY' || ct === 'DEMAND_GEN' || ct === 'DISCOVERY';
 
-                                                        if (isPMax) return (
-                                                            <>
-                                                                <th className="px-4 py-3 text-right font-medium">Impr.</th>
-                                                                <th className="px-4 py-3 text-right font-medium">Clicks</th>
-                                                                <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
-                                                                <th className="px-4 py-3 text-right font-medium">ROAS</th>
-                                                                <th className="px-4 py-3 text-right font-medium">Ad Strength</th>
-                                                            </>
-                                                        );
-                                                        if (isShopping) return (
-                                                            <th className="px-4 py-3 text-right font-medium">Products</th>
-                                                        );
-                                                        if (isUpperFunnel) return (
-                                                            <th className="px-4 py-3 text-right font-medium">Rel. CTR</th>
-                                                        );
-                                                        // Search / DSA / Brand
-                                                        return (
-                                                            <>
-                                                                <th className="px-4 py-3 text-right font-medium">Avg QS</th>
-                                                                <th className="px-4 py-3 text-right font-medium">Ad Strength</th>
-                                                                <th className="px-4 py-3 text-right font-medium">Poor Ads</th>
-                                                            </>
-                                                        );
-                                                    })()}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-700">
-                                                {sortedData.map((item: any) => (
-                                                    <tr
-                                                        key={item.id}
-                                                        className="hover:bg-slate-700/30 transition-colors cursor-pointer"
-                                                        onClick={() => {
-                                                            // Standard navigation
+                                    {/* Campaign-level View Tabs (DG or PMax) */}
+                                    {(() => {
+                                        const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                        const isDG = camp?.advertisingChannelType === 'DEMAND_GEN' || camp?.advertisingChannelType === 'DISCOVERY' || camp?.advertisingChannelType === '14';
+                                        const isPMaxCamp = camp?.advertisingChannelType === 'PERFORMANCE_MAX' || camp?.advertisingChannelType === '10';
 
-                                                            if (navigation.level === 'account') {
-                                                                setNavigation({
-                                                                    level: 'campaign',
-                                                                    campaignId: item.id,
-                                                                    campaignName: item.name,
-                                                                });
-                                                            } else if (navigation.level === 'campaign') {
-                                                                setNavigation({
-                                                                    level: 'adgroup',
-                                                                    campaignId: navigation.campaignId,
-                                                                    campaignName: navigation.campaignName,
-                                                                    adGroupId: item.id,
-                                                                    adGroupName: item.name,
-                                                                });
-                                                            }
-                                                        }}
-                                                    >
-                                                        <td className="px-4 py-4 font-medium text-white">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-sm mr-1">
-                                                                    {(item.status === 'ENABLED' || item.status === 'enabled') ? '✅' : `⚠️ ${item.status || ''}`}
+                                        if (isDG && navigation.level === 'campaign') {
+                                            const tabs = [
+                                                { id: 'performance', label: 'Ad Groups' },
+                                                { id: 'placements', label: 'Placements' },
+                                                { id: 'audiences', label: 'Audiences' },
+                                                { id: 'demographics', label: 'Demographics' },
+                                                { id: 'time', label: 'Time Analysis' },
+                                                { id: 'assets', label: 'Ads & Assets' }
+                                            ];
+                                            return (
+                                                <div className="flex gap-1 bg-slate-900/50 p-1 rounded-lg border-x border-slate-700/50 w-full px-6 py-2">
+                                                    {tabs.map(tab => (
+                                                        <button
+                                                            key={tab.id}
+                                                            onClick={() => setDgView(tab.id as any)}
+                                                            className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dgView === tab.id
+                                                                ? 'bg-slate-700 text-white shadow-sm'
+                                                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                                                                }`}
+                                                        >
+                                                            {tab.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            );
+                                        }
+
+                                        if (isPMaxCamp && navigation.level === 'campaign') {
+                                            return (
+                                                <div className="flex gap-1 bg-slate-900/50 p-1 rounded-lg border-x border-slate-700/50 w-full px-6 py-2">
+                                                    {([{ id: 'summary', label: 'Summary' }, { id: 'asset_groups', label: 'Asset Groups' }] as const).map(tab => (
+                                                        <button
+                                                            key={tab.id}
+                                                            onClick={() => setPmaxView(tab.id)}
+                                                            className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${pmaxView === tab.id
+                                                                ? 'bg-slate-700 text-white shadow-sm'
+                                                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                                                                }`}
+                                                        >
+                                                            {tab.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            );
+                                        }
+
+                                        return null;
+                                    })()}
+
+                                    {/* PMax adgroup-level IS diagnostic banner */}
+                                    {navigation.level === 'adgroup' && (() => {
+                                        const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                        const isPMax = camp?.advertisingChannelType === 'PERFORMANCE_MAX' || camp?.advertisingChannelType === '10';
+                                        if (!isPMax || !camp) return null;
+
+                                        const is = camp.searchImpressionShare;
+                                        const lostRank = camp.searchLostISRank;
+                                        const lostBudget = camp.searchLostISBudget;
+                                        const targetRoas = camp.targetRoas;
+                                        const bidding = camp.biddingStrategyType;
+                                        const adStrength = currentAdGroup?.adStrength;
+
+                                        // Use global BIDDING_STRATEGY_LABELS (numeric keys from google-ads-api v22 enum)
+                                        const biddingLabel = BIDDING_STRATEGY_LABELS[bidding || ''] || bidding || '—';
+                                        // 11 = MAXIMIZE_CONVERSION_VALUE (verified from enum + Google Ads UI)
+                                        const isMaxConvValue = bidding === 'MAXIMIZE_CONVERSION_VALUE' || bidding === '11';
+                                        // 8 = TARGET_ROAS (from google-ads-api v22 enum)
+                                        const isTargetRoasBidding = bidding === 'TARGET_ROAS' || bidding === '8';
+
+                                        // Smart diagnosis logic
+                                        const highLostRank = lostRank != null && lostRank > 0.3;
+                                        const highLostBudget = lostBudget != null && lostBudget > 0.2;
+                                        const excellentStrength = adStrength === 'EXCELLENT';
+
+                                        let diagnosisIcon = '';
+                                        let diagnosisText = '';
+                                        let diagnosisColor = 'text-slate-300';
+                                        let showAssetBreakdown = false;
+
+                                        if (highLostBudget && highLostRank) {
+                                            diagnosisIcon = '🔴';
+                                            diagnosisText = 'Both budget and rank are limiting IS. Increase daily budget AND review Target ROAS.';
+                                            diagnosisColor = 'text-red-300';
+                                        } else if (highLostBudget) {
+                                            diagnosisIcon = '💰';
+                                            diagnosisText = 'Budget is the main constraint — impressions cut off when budget runs out. Increase daily budget to capture more potential.';
+                                            diagnosisColor = 'text-amber-300';
+                                        } else if (highLostRank && excellentStrength) {
+                                            diagnosisIcon = '🎯';
+                                            diagnosisText = targetRoas
+                                                ? `Ad Strength is Excellent, so the quality is not the issue. With Target ROAS set to ${targetRoas.toFixed(2)}x, Smart Bidding skips auctions where predicted ROAS is below the target. Try reducing Target ROAS by 10–20% to allow more participation.`
+                                                : isMaxConvValue
+                                                    ? `Ad Strength is Excellent. Maximize Conv. Value without a Target ROAS means Google only bids in auctions it predicts will be profitable — the high Lost Rank reflects deliberate selectivity, not a failure. To expand reach, set a Target ROAS below the current achieved ROAS (e.g. ${camp.roas ? Math.round(camp.roas * 0.75) + 'x' : '10–15x'}) — the algorithm will then participate in more auctions at a slightly lower return threshold.`
+                                                    : 'Ad Strength is Excellent — rank loss is driven by bidding constraints, not creative quality. Check the bidding strategy settings for this campaign.';
+                                            diagnosisColor = 'text-violet-300';
+                                        } else if (highLostRank && !excellentStrength) {
+                                            diagnosisIcon = '📝';
+                                            diagnosisText = 'Improving Ad Strength will increase auction eligibility and reduce rank loss. Add more variety across all asset types:';
+                                            diagnosisColor = 'text-amber-300';
+                                            showAssetBreakdown = true;
+                                        } else if (lostRank != null && lostRank > 0.1) {
+                                            diagnosisIcon = '📊';
+                                            diagnosisText = 'Moderate rank loss. Monitor over time — could be competitive pressure or temporary bidding calibration.';
+                                            diagnosisColor = 'text-slate-400';
+                                        }
+
+                                        return (
+                                            <div className="mx-6 mt-3 mb-1 rounded-lg bg-amber-500/10 border border-amber-500/20 p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <span className="text-amber-400 flex-shrink-0 mt-0.5">⚠️</span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-white font-medium text-xs mb-2">
+                                                            Campaign Impression Share{' '}
+                                                            <span className="text-slate-400 font-normal">(asset group–level IS is not available in Google Ads API)</span>
+                                                        </p>
+
+                                                        {/* Metrics row with tooltips */}
+                                                        <div className="flex items-center gap-4 flex-wrap">
+                                                            {is != null && (
+                                                                <Tooltip text="Share of eligible auctions where your ads were shown. Low IS means you're missing a significant portion of potential traffic.">
+                                                                    <span className="text-xs cursor-help">
+                                                                        IS:{' '}
+                                                                        <span className={`font-semibold border-b border-dashed border-current ${getISColor(is)}`}>
+                                                                            {(is * 100).toFixed(1)}%
+                                                                        </span>
+                                                                    </span>
+                                                                </Tooltip>
+                                                            )}
+                                                            {lostRank != null && (
+                                                                <Tooltip text="Impressions lost because Smart Bidding chose not to enter auctions. With Excellent Ad Strength this is almost always caused by Target ROAS set too high — the algorithm skips any auction where the predicted ROAS is below the target.">
+                                                                    <span className={`text-xs cursor-help ${lostRank > 0.3 ? 'text-red-400' : 'text-slate-300'}`}>
+                                                                        Lost (Rank):{' '}
+                                                                        <span className="font-semibold border-b border-dashed border-current">
+                                                                            {(lostRank * 100).toFixed(1)}%
+                                                                        </span>
+                                                                    </span>
+                                                                </Tooltip>
+                                                            )}
+                                                            {lostBudget != null && (
+                                                                <Tooltip text="Impressions lost because the daily budget was exhausted before the day ended. Fix: increase daily budget.">
+                                                                    <span className={`text-xs cursor-help ${lostBudget > 0.2 ? 'text-amber-400' : 'text-slate-400'}`}>
+                                                                        Lost (Budget):{' '}
+                                                                        <span className="font-semibold border-b border-dashed border-current">
+                                                                            {(lostBudget * 100).toFixed(1)}%
+                                                                        </span>
+                                                                    </span>
+                                                                </Tooltip>
+                                                            )}
+                                                            {bidding && (
+                                                                <span className="text-xs text-slate-400">
+                                                                    Bidding:{' '}
+                                                                    <span className="text-slate-200">{biddingLabel}</span>
                                                                 </span>
-                                                                {item.name}
-                                                                {navigation.level !== 'adgroup' && (
-                                                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                                    </svg>
-                                                                )}
-                                                                {navigation.level === 'account' && selectedCampaignId === item.id && (
-                                                                    <span className="text-xs text-violet-400 font-medium ml-1">Selected for analysis</span>
-                                                                )}
-                                                                {navigation.level === 'account' && selectedCampaignId !== item.id && (
-                                                                    <span className="text-xs text-slate-500 italic ml-1">(click to select)</span>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-4 text-right text-slate-200">
-                                                            <MetricCell
-                                                                value={item.cost}
-                                                                previous={item.previous?.cost}
-                                                                format={(v) => `€${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
-                                                                invertColor={true}
-                                                            />
-                                                        </td>
-                                                        <td className="px-4 py-4 text-right">
-                                                            <span className={`font-medium ${item.ctr >= 0.05 ? 'text-emerald-400' :
-                                                                item.ctr >= 0.02 ? 'text-amber-400' : 'text-red-400'
-                                                                }`}>
-                                                                {(item.ctr * 100).toFixed(2)}%
-                                                            </span>
-                                                        </td>
-                                                        {navigation.level === 'account' && (
-                                                            <>
-                                                                <td className="px-4 py-4 text-right text-slate-200">
-                                                                    <MetricCell
-                                                                        value={item.conversions || 0}
-                                                                        previous={item.previous?.conversions}
-                                                                        format={(v) => v.toLocaleString('en-US')}
-                                                                    />
-                                                                </td>
-                                                                <td className="px-4 py-4 text-right text-slate-400">
-                                                                    {item.clicks > 0 ? ((item.conversions || 0) / item.clicks * 100).toFixed(2) : '0.00'}%
-                                                                </td>
-                                                                <td className="px-4 py-4 text-right">
-                                                                    {item.conversionValue != null && item.conversionValue > 0 ? (
-                                                                        <span className="text-slate-200">€{item.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                                            )}
+                                                            <Tooltip text={targetRoas != null
+                                                                ? `This campaign targets ${targetRoas.toFixed(2)}x ROAS. If this is significantly above the actual achieved ROAS, Smart Bidding will skip many auctions to protect the target — causing high Lost IS (Rank) even with excellent creative quality.`
+                                                                : 'No Target ROAS is set. The campaign uses Maximize Conversion Value, bidding as high as profitable. High Lost IS (Rank) in this mode is usually due to competition, not bidding limits.'
+                                                            }>
+                                                                <span className="text-xs cursor-help">
+                                                                    Target ROAS:{' '}
+                                                                    {targetRoas != null ? (
+                                                                        <span className="font-semibold text-violet-400 border-b border-dashed border-violet-400/50">
+                                                                            {targetRoas.toFixed(2)}x
+                                                                        </span>
                                                                     ) : (
-                                                                        <span className="text-slate-500">—</span>
+                                                                        <span className="text-slate-500 border-b border-dashed border-slate-500/50">Not set</span>
                                                                     )}
-                                                                </td>
-                                                                <td className="px-4 py-4 text-right">
-                                                                    <div className="flex flex-col items-end">
-                                                                        {item.roas != null ? (
-                                                                            <span className={`font-medium ${item.roas >= 3 ? 'text-emerald-400' : item.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
-                                                                                {item.roas.toFixed(2)}x
-                                                                            </span>
-                                                                        ) : (
-                                                                            <span className="text-slate-500">—</span>
-                                                                        )}
-                                                                        {item.roas != null && item.previous?.roas && (
-                                                                            (() => {
-                                                                                const delta = ((item.roas - item.previous.roas) / item.previous.roas) * 100;
-                                                                                if (Math.abs(delta) < 0.5) return null;
-                                                                                const color = delta > 0 ? 'text-emerald-400' : 'text-red-400';
-                                                                                const arrow = delta > 0 ? '↑' : '↓';
+                                                                </span>
+                                                            </Tooltip>
+                                                        </div>
+
+                                                        {/* Smart diagnosis */}
+                                                        {diagnosisText && (
+                                                            <div className="mt-2 pt-2 border-t border-amber-500/20">
+                                                                <div className="flex items-start gap-2">
+                                                                    <span className="flex-shrink-0 text-sm">{diagnosisIcon}</span>
+                                                                    <p className={`text-xs leading-relaxed ${diagnosisColor}`}>{diagnosisText}</p>
+                                                                </div>
+                                                                {showAssetBreakdown && pmaxAssets.length > 0 && (() => {
+                                                                    const counts = pmaxAssets.reduce((acc: Record<string, number>, a) => {
+                                                                        const lbl = ASSET_FIELD_TYPE_LABELS[a.fieldType] || a.fieldType;
+                                                                        acc[lbl] = (acc[lbl] || 0) + 1;
+                                                                        return acc;
+                                                                    }, {});
+                                                                    return (
+                                                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                                                            {Object.entries(PMAX_ASSET_THRESHOLDS).map(([type, { min, rec, label }]) => {
+                                                                                const count = counts[type] || 0;
+                                                                                const isDanger = count < min;
+                                                                                const isWarn = !isDanger && count < rec;
+                                                                                const cls = isDanger
+                                                                                    ? 'text-red-400 bg-red-500/10 border-red-500/30'
+                                                                                    : isWarn
+                                                                                        ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                                                                                        : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+                                                                                const icon = isDanger ? '✗' : isWarn ? '~' : '✓';
                                                                                 return (
-                                                                                    <span className={`text-[10px] ${color} flex items-center`}>
-                                                                                        {arrow} {Math.abs(delta).toFixed(0)}%
+                                                                                    <span key={type} className={`text-[10px] px-2 py-0.5 rounded border font-mono ${cls}`}>
+                                                                                        {icon} {count}/{rec} {label}
                                                                                     </span>
                                                                                 );
-                                                                            })()
+                                                                            })}
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    <div className="overflow-x-auto">
+                                        {(navigation.level === 'campaign' && pmaxView === 'summary' && (() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); return _c?.advertisingChannelType === 'PERFORMANCE_MAX' || _c?.advertisingChannelType === '10'; })()) ? (
+                                            renderPMaxSummary()
+                                        ) : (dgView === 'performance' || (() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); return _c?.advertisingChannelType === 'PERFORMANCE_MAX' || _c?.advertisingChannelType === '10'; })()) ? (
+                                            <table className="w-full text-left text-sm">
+                                                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                    <tr>
+                                                        <th className="px-4 py-3 font-medium">
+                                                            <button onClick={() => handleSort('name')} className="flex items-center gap-1 hover:text-white">
+                                                                Name
+                                                                {sortBy === 'name' && (
+                                                                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                )}
+                                                            </button>
+                                                        </th>
+                                                        {/* ... rest of existing table structure ... */}
+                                                        <th className="px-4 py-3 text-right font-medium">
+                                                            <button onClick={() => handleSort('cost')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                Cost
+                                                                {sortBy === 'cost' && (
+                                                                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                )}
+                                                            </button>
+                                                        </th>
+                                                        <th className="px-4 py-3 text-right font-medium">
+                                                            <button onClick={() => handleSort('ctr')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                CTR
+                                                                {sortBy === 'ctr' && (
+                                                                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                )}
+                                                            </button>
+                                                        </th>
+                                                        {navigation.level === 'account' && (
+                                                            <>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('conversions')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        Conversions
+                                                                        {sortBy === 'conversions' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
                                                                         )}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-4 py-4 text-right">
-                                                                    {item.searchLostISBudget != null && item.searchLostISBudget > 0.15 ? (
-                                                                        <span className="text-red-400 font-medium">
-                                                                            {(item.searchLostISBudget * 100).toFixed(1)}%
-                                                                        </span>
-                                                                    ) : item.searchLostISBudget != null ? (
-                                                                        <span className="text-slate-400">
-                                                                            {(item.searchLostISBudget * 100).toFixed(1)}%
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-slate-500">—</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-4 text-right">
-                                                                    {item.searchLostISRank != null && item.searchLostISRank > 0.15 ? (
-                                                                        <span className="text-red-400 font-medium">
-                                                                            {(item.searchLostISRank * 100).toFixed(1)}%
-                                                                        </span>
-                                                                    ) : item.searchLostISRank != null ? (
-                                                                        <span className="text-slate-400">
-                                                                            {(item.searchLostISRank * 100).toFixed(1)}%
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-slate-500">—</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-4 text-center">
-                                                                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${item.category === 'pmax_sale' || item.category === 'pmax_aon' ? 'bg-purple-500/20 text-purple-400' :
-                                                                        item.category === 'search_nonbrand' || item.category === 'search_dsa' ? 'bg-blue-500/20 text-blue-400' :
-                                                                            item.category === 'upper_funnel' ? 'bg-orange-500/20 text-orange-400' :
-                                                                                item.category === 'brand' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                                    'bg-slate-600/50 text-slate-400'
-                                                                        }`}>
-                                                                        {item.category === 'pmax_sale' ? 'PMax – Sale' :
-                                                                            item.category === 'pmax_aon' ? 'PMax – AON' :
-                                                                                item.category === 'search_dsa' ? 'Search – DSA' :
-                                                                                    item.category === 'search_nonbrand' ? 'Search' :
-                                                                                        item.category === 'upper_funnel' ? 'Video/Display' :
-                                                                                            item.category === 'brand' ? 'Brand' :
-                                                                                                CHANNEL_TYPE_LABELS[String(item.advertisingChannelType).toUpperCase()] ||
-                                                                                                CHANNEL_TYPE_LABELS[String(item.advertisingChannelType)] ||
-                                                                                                (String(item.advertisingChannelType).toUpperCase().includes('MULTI_CHANNEL') ? 'PMax (Multi)' :
-                                                                                                    String(item.advertisingChannelType).toUpperCase().includes('DISPLAY') ? 'Display' :
-                                                                                                        item.advertisingChannelType || 'Other')}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-4 py-4 text-center">
-                                                                    {(item as Campaign).biddingStrategyType ? (
-                                                                        <span className="text-xs text-slate-300 bg-slate-700 px-2 py-1 rounded">
-                                                                            {BIDDING_STRATEGY_LABELS[String((item as Campaign).biddingStrategyType).toUpperCase()] ||
-                                                                                BIDDING_STRATEGY_LABELS[String((item as Campaign).biddingStrategyType)] ||
-                                                                                String((item as Campaign).biddingStrategyType).replace('TARGET_', 't').replace('MAXIMIZE_', 'Max ').replace(/_/g, ' ')}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-slate-500 text-xs">—</span>
-                                                                    )}
-                                                                </td>
+                                                                    </button>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('cvr')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        CVR
+                                                                        {sortBy === 'cvr' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </button>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('conversionValue')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        Conv. Value
+                                                                        {sortBy === 'conversionValue' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </button>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('roas')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        ROAS
+                                                                        {sortBy === 'roas' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </button>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('searchLostISBudget')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        Lost (Budget)
+                                                                        {sortBy === 'searchLostISBudget' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </button>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('searchLostISRank')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        Lost (Rank)
+                                                                        {sortBy === 'searchLostISRank' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </button>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-center font-medium">Type</th>
+                                                                <th className="px-4 py-3 text-center font-medium">Bidding</th>
                                                             </>
                                                         )}
                                                         {navigation.level === 'campaign' && (() => {
@@ -1891,137 +2588,753 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                                                             if (isPMax) return (
                                                                 <>
-                                                                    <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
-                                                                        {((item as any).impressions ?? 0).toLocaleString()}
+                                                                    <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">ROAS</th>
+                                                                    <th className="px-4 py-3 text-right font-medium text-purple-400">IS</th>
+                                                                    <th className="px-4 py-3 text-right font-medium text-slate-400">Lost (Rank)</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Ad Strength</th>
+                                                                </>
+                                                            );
+                                                            if (isShopping) return (
+                                                                <th className="px-4 py-3 text-right font-medium">Products</th>
+                                                            );
+                                                            if (isUpperFunnel) return (
+                                                                <th className="px-4 py-3 text-right font-medium">Rel. CTR</th>
+                                                            );
+                                                            // Search / DSA / Brand
+                                                            const isDSA = camp?.name?.toLowerCase().includes('dsa') || camp?.advertisingChannelSubType === 'SEARCH_DYNAMIC_ADS';
+                                                            return (
+                                                                <>
+                                                                    <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Conversions</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">CVR</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">IS</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Lost (Budget)</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Avg QS</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Ad Strength</th>
+                                                                    {!isDSA && <th className="px-4 py-3 text-right font-medium">Poor Ads</th>}
+                                                                </>
+                                                            );
+                                                        })()}
+                                                        {navigation.level === 'adgroup' && (
+                                                            <>
+                                                                <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Conversions</th>
+                                                                <th className="px-4 py-3 text-right font-medium">CVR</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
+                                                                <th className="px-4 py-3 text-right font-medium">ROAS</th>
+                                                                <th className="px-4 py-3 text-right font-medium">IS</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Ad Strength</th>
+                                                            </>
+                                                        )}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-700">
+                                                    {navigation.level === 'campaign' && (() => {
+                                                        const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                                        if (camp) {
+                                                            const ct = camp.advertisingChannelType || '';
+                                                            const isPMax = ct === 'PERFORMANCE_MAX' || camp.name?.toLowerCase().includes('pmax');
+                                                            return (
+                                                                <ParentContextRow
+                                                                    name={camp.name}
+                                                                    type="Campaign"
+                                                                    metrics={camp}
+                                                                    colSpan={8}
+                                                                    layout={isPMax ? 'pmax' : 'search'}
+                                                                />
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
+
+                                                    {navigation.level === 'adgroup' && currentAdGroup && (() => {
+                                                        const _camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                                        const _isPMax = _camp?.advertisingChannelType === 'PERFORMANCE_MAX' || _camp?.advertisingChannelType === '10';
+                                                        // For PMax: asset groups don't have IS data from API; fall back to campaign-level IS
+                                                        const _metrics = (_isPMax && _camp) ? {
+                                                            ...currentAdGroup,
+                                                            searchImpressionShare: currentAdGroup.searchImpressionShare ?? _camp.searchImpressionShare,
+                                                            searchLostISRank: currentAdGroup.searchLostISRank ?? _camp.searchLostISRank,
+                                                        } : currentAdGroup;
+                                                        return (
+                                                            <ParentContextRow
+                                                                name={currentAdGroup.name}
+                                                                type="Ad Group"
+                                                                metrics={_metrics}
+                                                                colSpan={8}
+                                                                layout="adgroup"
+                                                            />
+                                                        );
+                                                    })()}
+
+                                                    {sortedData.map((item: any) => (
+                                                        <tr
+                                                            key={item.id}
+                                                            className="hover:bg-slate-700/30 transition-colors cursor-pointer"
+                                                            onClick={() => {
+                                                                // Standard navigation
+
+                                                                if (navigation.level === 'account') {
+                                                                    setDgView('performance');
+                                                                    setPmaxView('summary');
+                                                                    setNavigation({
+                                                                        level: 'campaign',
+                                                                        campaignId: item.id,
+                                                                        campaignName: item.name,
+                                                                    });
+                                                                } else if (navigation.level === 'campaign') {
+                                                                    setNavigation({
+                                                                        level: 'adgroup',
+                                                                        campaignId: navigation.campaignId,
+                                                                        campaignName: navigation.campaignName,
+                                                                        adGroupId: item.id,
+                                                                        adGroupName: item.name,
+                                                                    });
+                                                                }
+                                                            }}
+                                                        >
+                                                            <td className="px-4 py-4 font-medium text-white">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm mr-1">
+                                                                        {(item.status === 'ENABLED' || item.status === 'enabled') ? '✅' : `⚠️ ${item.status || ''}`}
+                                                                    </span>
+                                                                    {item.name}
+                                                                    {navigation.level !== 'adgroup' && (
+                                                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                        </svg>
+                                                                    )}
+                                                                    {navigation.level === 'account' && selectedCampaignId === item.id && (
+                                                                        <span className="text-xs text-violet-400 font-medium ml-1">Selected for analysis</span>
+                                                                    )}
+                                                                    {navigation.level === 'account' && selectedCampaignId !== item.id && (
+                                                                        <span className="text-xs text-slate-500 italic ml-1">(click to select)</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4 text-right text-slate-200">
+                                                                <MetricCell
+                                                                    value={item.cost}
+                                                                    previous={item.previous?.cost}
+                                                                    format={(v) => `€${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+                                                                    invertColor={true}
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-4 text-right">
+                                                                <span className={`font-medium ${item.ctr >= 0.05 ? 'text-emerald-400' :
+                                                                    item.ctr >= 0.02 ? 'text-amber-400' : 'text-red-400'
+                                                                    }`}>
+                                                                    {(item.ctr * 100).toFixed(2)}%
+                                                                </span>
+                                                            </td>
+                                                            {navigation.level === 'account' && (
+                                                                <>
+                                                                    <td className="px-4 py-4 text-right text-slate-200">
+                                                                        <MetricCell
+                                                                            value={item.conversions || 0}
+                                                                            previous={item.previous?.conversions}
+                                                                            format={(v) => v.toLocaleString('en-US')}
+                                                                        />
                                                                     </td>
-                                                                    <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
-                                                                        {((item as any).clicks ?? 0).toLocaleString()}
+                                                                    <td className="px-4 py-4 text-right text-slate-400">
+                                                                        {item.clicks > 0 ? ((item.conversions || 0) / item.clicks * 100).toFixed(2) : '0.00'}%
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
-                                                                        {(item as any).conversionValue > 0 ? (
-                                                                            <span className="text-emerald-400 font-mono text-xs font-semibold">
-                                                                                €{((item as any).conversionValue as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                                                        {item.conversionValue != null && item.conversionValue > 0 ? (
+                                                                            <span className="text-slate-200">€{item.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        <div className="flex flex-col items-end">
+                                                                            {item.roas != null ? (
+                                                                                <span className={`font-medium ${item.roas >= 3 ? 'text-emerald-400' : item.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
+                                                                                    {item.roas.toFixed(2)}x
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-500">—</span>
+                                                                            )}
+                                                                            {item.roas != null && item.previous?.roas && (
+                                                                                (() => {
+                                                                                    const delta = ((item.roas - item.previous.roas) / item.previous.roas) * 100;
+                                                                                    if (Math.abs(delta) < 0.5) return null;
+                                                                                    const color = delta > 0 ? 'text-emerald-400' : 'text-red-400';
+                                                                                    const arrow = delta > 0 ? '↑' : '↓';
+                                                                                    return (
+                                                                                        <span className={`text-[10px] ${color} flex items-center`}>
+                                                                                            {arrow} {Math.abs(delta).toFixed(0)}%
+                                                                                        </span>
+                                                                                    );
+                                                                                })()
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {item.searchLostISBudget != null && item.searchLostISBudget > 0.15 ? (
+                                                                            <span className="text-red-400 font-medium">
+                                                                                {(item.searchLostISBudget * 100).toFixed(1)}%
+                                                                            </span>
+                                                                        ) : item.searchLostISBudget != null ? (
+                                                                            <span className="text-slate-400">
+                                                                                {(item.searchLostISBudget * 100).toFixed(1)}%
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {item.searchLostISRank != null && item.searchLostISRank > 0.15 ? (
+                                                                            <span className="text-red-400 font-medium">
+                                                                                {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                            </span>
+                                                                        ) : item.searchLostISRank != null ? (
+                                                                            <span className="text-slate-400">
+                                                                                {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-center">
+                                                                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${item.category === 'pmax_sale' || item.category === 'pmax_aon' ? 'bg-purple-500/20 text-purple-400' :
+                                                                            item.category === 'search_nonbrand' || item.category === 'search_dsa' ? 'bg-blue-500/20 text-blue-400' :
+                                                                                item.category === 'upper_funnel' ? 'bg-orange-500/20 text-orange-400' :
+                                                                                    item.category === 'brand' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                                        'bg-slate-600/50 text-slate-400'
+                                                                            }`}>
+                                                                            {item.category === 'pmax_sale' ? 'PMax – Sale' :
+                                                                                item.category === 'pmax_aon' ? 'PMax – AON' :
+                                                                                    item.category === 'search_dsa' ? 'Search – DSA' :
+                                                                                        item.category === 'search_nonbrand' ? 'Search' :
+                                                                                            item.category === 'upper_funnel' ? 'Video/Display' :
+                                                                                                item.category === 'brand' ? 'Brand' :
+                                                                                                    CHANNEL_TYPE_LABELS[String(item.advertisingChannelType).toUpperCase()] ||
+                                                                                                    CHANNEL_TYPE_LABELS[String(item.advertisingChannelType)] ||
+                                                                                                    (String(item.advertisingChannelType).toUpperCase().includes('MULTI_CHANNEL') ? 'PMax (Multi)' :
+                                                                                                        String(item.advertisingChannelType).toUpperCase().includes('DISPLAY') ? 'Display' :
+                                                                                                            item.advertisingChannelType || 'Other')}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-center">
+                                                                        {(item as Campaign).biddingStrategyType ? (
+                                                                            <span className="text-xs text-slate-300 bg-slate-700 px-2 py-1 rounded">
+                                                                                {BIDDING_STRATEGY_LABELS[String((item as Campaign).biddingStrategyType).toUpperCase()] ||
+                                                                                    BIDDING_STRATEGY_LABELS[String((item as Campaign).biddingStrategyType)] ||
+                                                                                    String((item as Campaign).biddingStrategyType).replace('TARGET_', 't').replace('MAXIMIZE_', 'Max ').replace(/_/g, ' ')}
                                                                             </span>
                                                                         ) : (
                                                                             <span className="text-slate-500 text-xs">—</span>
                                                                         )}
                                                                     </td>
+                                                                </>
+                                                            )}
+                                                            {navigation.level === 'campaign' && (() => {
+                                                                const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                                                const ct = camp?.advertisingChannelType || '';
+                                                                const isPMax = ct === 'PERFORMANCE_MAX' || camp?.name?.toLowerCase().includes('pmax');
+                                                                const isShopping = ct === 'SHOPPING';
+                                                                const isUpperFunnel = ct === 'VIDEO' || ct === 'DISPLAY' || ct === 'DEMAND_GEN' || ct === 'DISCOVERY';
+
+                                                                if (isPMax) return (
+                                                                    <>
+                                                                        <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
+                                                                            {((item as any).impressions ?? 0).toLocaleString()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
+                                                                            {((item as any).clicks ?? 0).toLocaleString()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
+                                                                            {((item as any).conversions ?? 0).toLocaleString()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(item as any).conversionValue > 0 ? (
+                                                                                <span className="text-emerald-400 font-mono text-xs font-semibold">
+                                                                                    €{((item as any).conversionValue as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-500 text-xs">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(item as any).roas != null ? (
+                                                                                <span className={`font-mono text-xs font-semibold ${(item as any).roas >= 3 ? 'text-emerald-400' :
+                                                                                    (item as any).roas >= 1 ? 'text-amber-400' : 'text-red-400'
+                                                                                    }`}>
+                                                                                    {((item as any).roas as number).toFixed(2)}x
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-500 text-xs">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(() => {
+                                                                                const is = (item as any).searchImpressionShare ?? camp?.searchImpressionShare;
+                                                                                return is != null ? (
+                                                                                    <span className={`font-mono text-xs font-medium ${getISColor(is)}`}>
+                                                                                        {(is * 100).toFixed(1)}%
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-slate-500 text-xs">—</span>
+                                                                                );
+                                                                            })()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(() => {
+                                                                                const lost = (item as any).searchLostISRank ?? camp?.searchLostISRank;
+                                                                                return lost != null ? (
+                                                                                    <span className={`font-mono text-xs font-medium ${lost > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                                        {(lost * 100).toFixed(1)}%
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-slate-500 text-xs">—</span>
+                                                                                );
+                                                                            })()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(() => {
+                                                                                const s = (item as any).strength || (item as any).adStrength || 'UNSPECIFIED';
+                                                                                const label = AD_STRENGTH_LABEL[s] ?? s;
+                                                                                const tooltip = s === 'UNRATED'
+                                                                                    ? 'Няма достатъчно данни за оценка на Ad Strength'
+                                                                                    : undefined;
+                                                                                const badge = (
+                                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor(s)}`} title={tooltip ?? s}>
+                                                                                        {label}
+                                                                                    </span>
+                                                                                );
+                                                                                return tooltip
+                                                                                    ? <Tooltip text={tooltip}>{badge}</Tooltip>
+                                                                                    : badge;
+                                                                            })()}
+                                                                        </td>
+                                                                    </>
+                                                                );
+
+                                                                if (isShopping) return (
                                                                     <td className="px-4 py-4 text-right">
-                                                                        {(item as any).roas != null ? (
-                                                                            <span className={`font-mono text-xs font-semibold ${(item as any).roas >= 3 ? 'text-emerald-400' :
-                                                                                (item as any).roas >= 1 ? 'text-amber-400' : 'text-red-400'
-                                                                                }`}>
-                                                                                {((item as any).roas as number).toFixed(2)}x
+                                                                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">Shopping</span>
+                                                                    </td>
+                                                                );
+
+                                                                if (isUpperFunnel) return (
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {item.relativeCtr != null ? (
+                                                                            <span className={`font-medium ${item.relativeCtr >= 1 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                                                {item.relativeCtr.toFixed(1)}x
                                                                             </span>
                                                                         ) : (
-                                                                            <span className="text-slate-500 text-xs">—</span>
+                                                                            <span className="text-slate-500">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                );
+
+                                                                // Search / DSA / Brand — show Impr. + Clicks + Conversions + CVR + Conv.Value + IS + Lost Rank + QS + Ad Strength + Poor Ads
+                                                                const isDSARow = camp?.name?.toLowerCase().includes('dsa') || camp?.advertisingChannelSubType === 'SEARCH_DYNAMIC_ADS';
+                                                                return (
+                                                                    <>
+                                                                        <td className="px-4 py-4 text-right text-slate-300">
+                                                                            {(item.impressions || 0).toLocaleString()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-300">
+                                                                            {(item.clicks || 0).toLocaleString()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-300">
+                                                                            {(item.conversions || 0).toLocaleString()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-400 text-xs">
+                                                                            {item.clicks > 0 ? `${(item.conversions / item.clicks * 100).toFixed(2)}%` : '—'}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(item as any).conversionValue > 0 ? (
+                                                                                <span className="text-emerald-400 font-medium">€{((item as any).conversionValue as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                                                            ) : <span className="text-slate-500">—</span>}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {item.searchImpressionShare != null ? (
+                                                                                <span className={`font-medium ${getISColor(item.searchImpressionShare)}`}>
+                                                                                    {(item.searchImpressionShare * 100).toFixed(1)}%
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-500">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {item.searchLostISRank != null ? (
+                                                                                <span className={`font-medium ${item.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                                    {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-500">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(() => {
+                                                                                const budgetLost = (item as any).searchLostISBudget ?? camp?.searchLostISBudget;
+                                                                                return budgetLost != null ? (
+                                                                                    <span className={`font-medium ${budgetLost > 0.15 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                                        {(budgetLost * 100).toFixed(1)}%
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-slate-500">—</span>
+                                                                                );
+                                                                            })()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {item.avgQualityScore !== null && item.avgQualityScore <= 6 ? (
+                                                                                <Tooltip text={getQSValueTip(item.avgQualityScore)}>
+                                                                                    <span className={`font-medium ${getQSColor(item.avgQualityScore)} border-b border-dashed ${item.avgQualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
+                                                                                        {item.avgQualityScore.toFixed(1)}
+                                                                                    </span>
+                                                                                </Tooltip>
+                                                                            ) : (
+                                                                                <span className={`font-medium ${getQSColor(item.avgQualityScore)}`}>
+                                                                                    {item.avgQualityScore !== null ? item.avgQualityScore.toFixed(1) : '—'}
+                                                                                </span>
+                                                                            )}
+                                                                            {item.keywordsWithLowQS > 0 && (
+                                                                                <Tooltip text={`${item.keywordsWithLowQS} keyword${item.keywordsWithLowQS > 1 ? 's' : ''} with Quality Score below 5. Click into this ad group to see which keywords need attention.`}>
+                                                                                    <span className="ml-1 text-xs text-red-400 border-b border-dashed border-red-400/40">
+                                                                                        ({item.keywordsWithLowQS} low)
+                                                                                    </span>
+                                                                                </Tooltip>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {((item as any).adStrength === 'POOR' || (item as any).adStrength === 'AVERAGE') ? (
+                                                                                <Tooltip text={getAdStrengthTip((item as any).adStrength || 'UNSPECIFIED')}>
+                                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border-b border-dashed ${(item as any).adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
+                                                                                        {(item as any).adStrength || 'UNSPECIFIED'}
+                                                                                    </span>
+                                                                                </Tooltip>
+                                                                            ) : (
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
+                                                                                    {(item as any).adStrength || 'UNSPECIFIED'}
+                                                                                </span>
+                                                                            )}
+                                                                        </td>
+                                                                        {!isDSARow && (
+                                                                            <td className="px-4 py-4 text-right">
+                                                                                {item.poorAdsCount > 0 ? (
+                                                                                    <Tooltip text={`${item.poorAdsCount} of ${item.adsCount} ad${item.adsCount > 1 ? 's' : ''} have Poor or Average strength. Click into this ad group to review and improve headline/description diversity.`}>
+                                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
+                                                                                            {item.poorAdsCount}/{item.adsCount}
+                                                                                        </span>
+                                                                                    </Tooltip>
+                                                                                ) : (
+                                                                                    <span className="text-slate-500 text-xs">0</span>
+                                                                                )}
+                                                                            </td>
+                                                                        )}
+                                                                    </>
+                                                                );
+                                                            })()}
+                                                            {navigation.level === 'adgroup' && (
+                                                                <>
+                                                                    <td className="px-4 py-4 text-right text-slate-300">
+                                                                        {(item.impressions || 0).toLocaleString()}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right text-slate-300">
+                                                                        {(item.clicks || 0).toLocaleString()}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right text-slate-200 font-mono text-sm">
+                                                                        {(item.conversions || 0).toLocaleString()}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right text-slate-400 text-xs">
+                                                                        {item.clicks > 0 ? `${(item.conversions / item.clicks * 100).toFixed(2)}%` : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {(item as any).conversionValue > 0 ? (
+                                                                            <span className="text-emerald-400 font-medium">€{((item as any).conversionValue as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                                                        ) : <span className="text-slate-500">—</span>}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right text-slate-200 font-mono text-sm">
+                                                                        {item.roas != null ? `${item.roas.toFixed(2)}x` : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {item.searchImpressionShare != null ? (
+                                                                            <span className={`font-medium ${getISColor(item.searchImpressionShare)}`}>
+                                                                                {(item.searchImpressionShare * 100).toFixed(1)}%
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {item.searchLostISRank != null ? (
+                                                                            <span className={`font-medium ${item.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                                {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-slate-500">—</span>
                                                                         )}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {(() => {
                                                                             const s = (item as any).strength || (item as any).adStrength || 'UNSPECIFIED';
-                                                                            const label = AD_STRENGTH_LABEL[s] ?? s;
-                                                                            const tooltip = s === 'UNRATED'
-                                                                                ? 'Няма достатъчно данни за оценка на Ad Strength'
-                                                                                : undefined;
-                                                                            const badge = (
-                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor(s)}`} title={tooltip ?? s}>
-                                                                                    {label}
+                                                                            return (
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor(s)}`}>
+                                                                                    {AD_STRENGTH_LABEL[s] ?? s}
                                                                                 </span>
                                                                             );
-                                                                            return tooltip
-                                                                                ? <Tooltip text={tooltip}>{badge}</Tooltip>
-                                                                                : badge;
                                                                         })()}
                                                                     </td>
                                                                 </>
-                                                            );
+                                                            )}
+                                                        </tr>
+                                                    ))}
+                                                    {sortedData.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan={11} className="px-6 py-12 text-center text-slate-500">
+                                                                No data found.
+                                                            </td>
+                                                        </tr>
+                                                    )}
 
-                                                            if (isShopping) return (
-                                                                <td className="px-4 py-4 text-right">
-                                                                    <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">Shopping</span>
-                                                                </td>
-                                                            );
-
-                                                            if (isUpperFunnel) return (
-                                                                <td className="px-4 py-4 text-right">
-                                                                    {item.relativeCtr != null ? (
-                                                                        <span className={`font-medium ${item.relativeCtr >= 1 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                                                            {item.relativeCtr.toFixed(1)}x
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-slate-500">—</span>
-                                                                    )}
-                                                                </td>
-                                                            );
-
-                                                            // Search / DSA / Brand — show QS + Ad Strength + Poor Ads
-                                                            return (
-                                                                <>
-                                                                    <td className="px-4 py-4 text-right">
-                                                                        {item.avgQualityScore !== null && item.avgQualityScore <= 6 ? (
-                                                                            <Tooltip text={getQSValueTip(item.avgQualityScore)}>
-                                                                                <span className={`font-medium ${getQSColor(item.avgQualityScore)} border-b border-dashed ${item.avgQualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
-                                                                                    {item.avgQualityScore.toFixed(1)}
-                                                                                </span>
-                                                                            </Tooltip>
-                                                                        ) : (
-                                                                            <span className={`font-medium ${getQSColor(item.avgQualityScore)}`}>
-                                                                                {item.avgQualityScore !== null ? item.avgQualityScore.toFixed(1) : '—'}
-                                                                            </span>
-                                                                        )}
-                                                                        {item.keywordsWithLowQS > 0 && (
-                                                                            <Tooltip text={`${item.keywordsWithLowQS} keyword${item.keywordsWithLowQS > 1 ? 's' : ''} with Quality Score below 5. Click into this ad group to see which keywords need attention.`}>
-                                                                                <span className="ml-1 text-xs text-red-400 border-b border-dashed border-red-400/40">
-                                                                                    ({item.keywordsWithLowQS} low)
-                                                                                </span>
-                                                                            </Tooltip>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="px-4 py-4 text-right">
-                                                                        {((item as any).adStrength === 'POOR' || (item as any).adStrength === 'AVERAGE') ? (
-                                                                            <Tooltip text={getAdStrengthTip((item as any).adStrength || 'UNSPECIFIED')}>
-                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border-b border-dashed ${(item as any).adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
-                                                                                    {(item as any).adStrength || 'UNSPECIFIED'}
-                                                                                </span>
-                                                                            </Tooltip>
-                                                                        ) : (
-                                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor((item as any).adStrength || 'UNSPECIFIED')}`}>
-                                                                                {(item as any).adStrength || 'UNSPECIFIED'}
-                                                                            </span>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="px-4 py-4 text-right">
-                                                                        {item.poorAdsCount > 0 ? (
-                                                                            <Tooltip text={`${item.poorAdsCount} of ${item.adsCount} ad${item.adsCount > 1 ? 's' : ''} have Poor or Average strength. Click into this ad group to review and improve headline/description diversity.`}>
-                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">
-                                                                                    {item.poorAdsCount}/{item.adsCount}
-                                                                                </span>
-                                                                            </Tooltip>
-                                                                        ) : (
-                                                                            <span className="text-slate-500 text-xs">0</span>
-                                                                        )}
-                                                                    </td>
-                                                                </>
-                                                            );
-                                                        })()}
-                                                    </tr>
-                                                ))}
-                                                {sortedData.length === 0 && (
-                                                    <tr>
-                                                        <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-                                                            No data found.
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </tbody>
-                                        </table>
+                                                </tbody>
+                                            </table>
+                                        ) : dgView === 'placements' ? (
+                                            renderDGPlacements()
+                                        ) : dgView === 'audiences' ? (
+                                            renderDGAudiences()
+                                        ) : dgView === 'demographics' ? (
+                                            renderDGDemographics()
+                                        ) : dgView === 'time' ? (
+                                            renderDGTimeAnalysis()
+                                        ) : dgView === 'assets' ? (
+                                            renderDGAssets()
+                                        ) : null}
                                     </div>
                                 </div>
 
                                 {/* Ad Group Detail Sections */}
                                 {navigation.level === 'adgroup' && currentAdGroup && (
                                     <>
+                                        {/* ── Display / Video / DG ad group sections ─────────────────── */}
+                                        {(() => {
+                                            const _camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                            const _ct = _camp?.advertisingChannelType || '';
+                                            const _isUF = _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY';
+                                            if (!_isUF) return null;
+                                            return (
+                                                <>
+                                                    {/* Placements */}
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
+                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                            <div>
+                                                                <h2 className="font-semibold text-white">Placements</h2>
+                                                                <p className="text-xs text-slate-400 mt-0.5">Where your Display ads are being shown</p>
+                                                            </div>
+                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{displayPlacements.length} placements</span>
+                                                        </div>
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full text-left text-sm">
+                                                                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                                    <tr>
+                                                                        <th className="px-4 py-3 font-medium">Placement</th>
+                                                                        <th className="px-4 py-3 font-medium">Type</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">CTR</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Cost</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">View-through</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-700 text-slate-300">
+                                                                    {displayPlacements.length === 0 ? (
+                                                                        <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500 italic">No placement data for this period.</td></tr>
+                                                                    ) : displayPlacements.map((p, i) => (
+                                                                        <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                                                            <td className="px-4 py-3 max-w-xs truncate text-slate-200" title={p.placement}>{p.placement}</td>
+                                                                            <td className="px-4 py-3"><span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{p.type}</span></td>
+                                                                            <td className="px-4 py-3 text-right">{p.impressions.toLocaleString()}</td>
+                                                                            <td className="px-4 py-3 text-right">{p.clicks.toLocaleString()}</td>
+                                                                            <td className="px-4 py-3 text-right">{(p.ctr * 100).toFixed(2)}%</td>
+                                                                            <td className="px-4 py-3 text-right">€{p.cost.toFixed(2)}</td>
+                                                                            <td className="px-4 py-3 text-right">{p.conversions.toFixed(1)}</td>
+                                                                            <td className="px-4 py-3 text-right">{(p as any).viewThroughConversions ?? 0}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Audiences */}
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
+                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                            <div>
+                                                                <h2 className="font-semibold text-white">Audiences</h2>
+                                                                <p className="text-xs text-slate-400 mt-0.5">Audience segments targeted in this ad group</p>
+                                                            </div>
+                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{displayAudiences.length} audiences</span>
+                                                        </div>
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full text-left text-sm">
+                                                                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                                    <tr>
+                                                                        <th className="px-4 py-3 font-medium">Audience</th>
+                                                                        <th className="px-4 py-3 font-medium">Type</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Cost</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">ROAS</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-700 text-slate-300">
+                                                                    {displayAudiences.length === 0 ? (
+                                                                        <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500 italic">No audience data for this period.</td></tr>
+                                                                    ) : displayAudiences.map((a, i) => (
+                                                                        <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                                                            <td className="px-4 py-3 text-slate-200">{a.audienceName}</td>
+                                                                            <td className="px-4 py-3"><span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded">{a.audienceType || 'AUDIENCE'}</span></td>
+                                                                            <td className="px-4 py-3 text-right">{a.impressions.toLocaleString()}</td>
+                                                                            <td className="px-4 py-3 text-right">{a.clicks.toLocaleString()}</td>
+                                                                            <td className="px-4 py-3 text-right">€{a.cost.toFixed(2)}</td>
+                                                                            <td className="px-4 py-3 text-right">{a.conversions.toFixed(1)}</td>
+                                                                            <td className="px-4 py-3 text-right">€{a.conversionValue.toFixed(2)}</td>
+                                                                            <td className="px-4 py-3 text-right">{a.roas != null ? a.roas.toFixed(2) : '—'}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Demographics */}
+                                                    {displayDemographics.length > 0 && (
+                                                        <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
+                                                            <div className="px-6 py-4 border-b border-slate-700">
+                                                                <h2 className="font-semibold text-white">Demographics</h2>
+                                                                <p className="text-xs text-slate-400 mt-0.5">Age and gender breakdown for this ad group</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-700">
+                                                                {/* Age */}
+                                                                <div className="overflow-x-auto">
+                                                                    <table className="w-full text-left text-sm">
+                                                                        <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                                            <tr>
+                                                                                <th className="px-4 py-3 font-medium">Age</th>
+                                                                                <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                                <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                                <th className="px-4 py-3 text-right font-medium">Cost</th>
+                                                                                <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody className="divide-y divide-slate-700 text-slate-300">
+                                                                            {displayDemographics.filter(d => d.type === 'AGE').map((d, i) => (
+                                                                                <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                                                                    <td className="px-4 py-3 text-slate-200">{d.dimension}</td>
+                                                                                    <td className="px-4 py-3 text-right">{d.impressions.toLocaleString()}</td>
+                                                                                    <td className="px-4 py-3 text-right">{d.clicks.toLocaleString()}</td>
+                                                                                    <td className="px-4 py-3 text-right">€{d.cost.toFixed(2)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{d.conversions.toFixed(1)}</td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                                {/* Gender */}
+                                                                <div className="overflow-x-auto">
+                                                                    <table className="w-full text-left text-sm">
+                                                                        <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                                            <tr>
+                                                                                <th className="px-4 py-3 font-medium">Gender</th>
+                                                                                <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                                <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                                <th className="px-4 py-3 text-right font-medium">Cost</th>
+                                                                                <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody className="divide-y divide-slate-700 text-slate-300">
+                                                                            {displayDemographics.filter(d => d.type === 'GENDER').map((d, i) => (
+                                                                                <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                                                                    <td className="px-4 py-3 text-slate-200">{d.dimension}</td>
+                                                                                    <td className="px-4 py-3 text-right">{d.impressions.toLocaleString()}</td>
+                                                                                    <td className="px-4 py-3 text-right">{d.clicks.toLocaleString()}</td>
+                                                                                    <td className="px-4 py-3 text-right">€{d.cost.toFixed(2)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{d.conversions.toFixed(1)}</td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Ad Assets */}
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
+                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                            <div>
+                                                                <h2 className="font-semibold text-white">Ad Assets</h2>
+                                                                <p className="text-xs text-slate-400 mt-0.5">Responsive Display Ad creative elements</p>
+                                                            </div>
+                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{displayAdAssets.length} assets</span>
+                                                        </div>
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full text-left text-sm">
+                                                                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                                    <tr>
+                                                                        <th className="px-4 py-3 font-medium">Type</th>
+                                                                        <th className="px-4 py-3 font-medium">Content</th>
+                                                                        <th className="px-4 py-3 font-medium">Performance</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-700 text-slate-300">
+                                                                    {displayAdAssets.length === 0 ? (
+                                                                        <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-500 italic">No ad asset data for this period.</td></tr>
+                                                                    ) : displayAdAssets.map((asset, i) => {
+                                                                        const perfLabel = PERFORMANCE_LABEL_LABELS[asset.performanceLabel] || asset.performanceLabel || 'Pending';
+                                                                        const perfColor = asset.performanceLabel === 'BEST' ? 'bg-emerald-500/20 text-emerald-400'
+                                                                            : asset.performanceLabel === 'GOOD' ? 'bg-blue-500/20 text-blue-400'
+                                                                            : asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400'
+                                                                            : asset.performanceLabel === 'LEARNING' ? 'bg-purple-500/20 text-purple-400'
+                                                                            : 'bg-slate-600/40 text-slate-400';
+                                                                        const fieldLabel = ASSET_FIELD_TYPE_LABELS[asset.fieldType] || asset.fieldType;
+                                                                        return (
+                                                                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                                                                <td className="px-4 py-3">
+                                                                                    <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{fieldLabel}</span>
+                                                                                </td>
+                                                                                <td className="px-4 py-3 max-w-sm">
+                                                                                    {asset.text ? (
+                                                                                        <span className="text-slate-200">{asset.text}</span>
+                                                                                    ) : asset.imageUrl ? (
+                                                                                        <a href={asset.imageUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline text-xs truncate block max-w-xs">{asset.name || asset.imageUrl}</a>
+                                                                                    ) : asset.youtubeVideoId ? (
+                                                                                        <span className="text-slate-400 text-xs">YouTube: {asset.youtubeVideoId}</span>
+                                                                                    ) : (
+                                                                                        <span className="text-slate-500 italic">{asset.name || '—'}</span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="px-4 py-3">
+                                                                                    <span className={`text-xs px-2 py-0.5 rounded font-medium ${perfColor}`}>{perfLabel}</span>
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
+                                        {/* ── end Display sections ─────────────────────────────────── */}
+
                                         {/* Shopping: Listing Groups / Product Groups */}
                                         {listingGroups.length > 0 && (
                                             <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
@@ -2046,9 +3359,21 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <th className="px-4 py-3 text-right font-medium">Cost</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Conv.</th>
                                                                 <th className="px-4 py-3 text-right font-medium">ROAS</th>
+                                                                <th className="px-4 py-3 text-right font-medium">IS</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-700">
+                                                            {currentAdGroup && (
+                                                                <ParentContextRow
+                                                                    name={currentAdGroup.name}
+                                                                    type="Ad Group"
+                                                                    metrics={currentAdGroup}
+                                                                    colSpan={10}
+                                                                    layout="listing_group"
+                                                                />
+                                                            )}
+
                                                             {listingGroups.map((lg: any, idx: number) => (
                                                                 <tr key={idx} className="hover:bg-slate-700/30 transition-colors">
                                                                     <td className="px-4 py-3 text-slate-300 text-xs font-medium">{lg.dimension}</td>
@@ -2068,6 +3393,20 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             </span>
                                                                         ) : <span className="text-slate-500">—</span>}
                                                                     </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        {lg.searchImpressionShare != null ? (
+                                                                            <span className={`font-medium ${getISColor(lg.searchImpressionShare)}`}>
+                                                                                {(lg.searchImpressionShare * 100).toFixed(1)}%
+                                                                            </span>
+                                                                        ) : <span className="text-slate-500">—</span>}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        {lg.searchLostISRank != null ? (
+                                                                            <span className={`font-medium ${lg.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                                {(lg.searchLostISRank * 100).toFixed(1)}%
+                                                                            </span>
+                                                                        ) : <span className="text-slate-500">—</span>}
+                                                                    </td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
@@ -2079,8 +3418,51 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                         {pmaxAssets.length > 0 ? (
                                             <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
                                                 <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                                    <h2 className="font-semibold text-white">Asset Group Assets</h2>
-                                                    <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                    <div>
+                                                        <h2 className="font-semibold text-white">Asset Group Assets</h2>
+                                                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                            {(() => {
+                                                                const counts = pmaxAssets.reduce((acc: Record<string, number>, a) => {
+                                                                    const lbl = ASSET_FIELD_TYPE_LABELS[a.fieldType] || a.fieldType;
+                                                                    acc[lbl] = (acc[lbl] || 0) + 1;
+                                                                    return acc;
+                                                                }, {});
+                                                                // Show threshold-aware pills for known types, plain pills for others
+                                                                const knownTypes = new Set(Object.keys(PMAX_ASSET_THRESHOLDS));
+                                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                                const pills: any[] = [];
+                                                                // Known types first (with color coding)
+                                                                Object.entries(PMAX_ASSET_THRESHOLDS).forEach(([type, { min, rec, label }]) => {
+                                                                    const count = counts[type] || 0;
+                                                                    if (count === 0 && min === 0) return; // skip optional missing
+                                                                    const isDanger = count < min;
+                                                                    const isWarn = !isDanger && count < rec;
+                                                                    const cls = isDanger
+                                                                        ? 'text-red-400 bg-red-500/10 border border-red-500/30'
+                                                                        : isWarn
+                                                                            ? 'text-amber-400 bg-amber-500/10 border border-amber-500/30'
+                                                                            : 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20';
+                                                                    const icon = isDanger ? '✗' : isWarn ? '~' : '✓';
+                                                                    pills.push(
+                                                                        <span key={type} className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${cls}`}>
+                                                                            {icon} {count}/{rec} {label}
+                                                                        </span>
+                                                                    );
+                                                                });
+                                                                // Other types (no threshold) — plain
+                                                                Object.entries(counts).forEach(([type, count]) => {
+                                                                    if (knownTypes.has(type)) return;
+                                                                    pills.push(
+                                                                        <span key={type} className="text-[10px] text-slate-400 bg-slate-700/60 px-2 py-0.5 rounded-full">
+                                                                            {count} {type}
+                                                                        </span>
+                                                                    );
+                                                                });
+                                                                return pills;
+                                                            })()}
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded flex-shrink-0">
                                                         {pmaxAssets.length} assets
                                                     </span>
                                                 </div>
@@ -2095,6 +3477,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-700">
+                                                            {currentAdGroup && (
+                                                                <ParentContextRow
+                                                                    name={currentAdGroup.name}
+                                                                    type="Asset Group"
+                                                                    metrics={currentAdGroup}
+                                                                    colSpan={4}
+                                                                    layout="pmax_assets"
+                                                                />
+                                                            )}
                                                             {pmaxAssets.map((asset) => (
                                                                 <tr key={`${asset.id}-${asset.fieldType}`} className="hover:bg-slate-700/30">
                                                                     <td className="px-4 py-3 text-white">
@@ -2128,16 +3519,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         )}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-center">
-                                                                        {(asset.performanceLabel === 'LOW' || asset.performanceLabel === 'PENDING' || asset.performanceLabel === 'LEARNING') ? (
-                                                                            <Tooltip text={getPMaxPerfTip(asset.performanceLabel)}>
-                                                                                <span className={`px-2 py-1 rounded text-xs font-bold border-b border-dashed ${asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400 border-red-400/40' : 'bg-slate-600/50 text-slate-400 border-slate-400/40'
-                                                                                    }`}>
-                                                                                    {PERFORMANCE_LABEL_LABELS[asset.performanceLabel] || asset.performanceLabel}
+                                                                        {(asset.performanceLabel === 'LOW' || asset.performanceLabel === 'PENDING' || asset.performanceLabel === 'LEARNING' || asset.performanceLabel === 'UNKNOWN' || !asset.performanceLabel) ? (
+                                                                            <Tooltip text={getPMaxPerfTip(asset.performanceLabel || 'UNKNOWN')}>
+                                                                                <span className={`px-2 py-1 rounded text-xs font-bold border-b border-dashed ${asset.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400 border-red-400/40' : 'bg-slate-600/50 text-slate-400 border-slate-400/40'}`}>
+                                                                                    {PERFORMANCE_LABEL_LABELS[asset.performanceLabel || 'UNKNOWN'] || 'Pending'}
                                                                                 </span>
                                                                             </Tooltip>
                                                                         ) : (
                                                                             <span className={`px-2 py-1 rounded text-xs font-bold ${(asset.performanceLabel === 'BEST' || asset.performanceLabel === 'GOOD') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-400'}`}>
-                                                                                {PERFORMANCE_LABEL_LABELS[asset.performanceLabel || 'UNKNOWN'] || asset.performanceLabel || 'Pending'}
+                                                                                {PERFORMANCE_LABEL_LABELS[asset.performanceLabel] || asset.performanceLabel}
                                                                             </span>
                                                                         )}
                                                                     </td>
@@ -2152,7 +3542,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                             </div>
                                         ) : (
                                             <>
-                                                {/* Keywords with QS */}
+                                                {/* Keywords with QS — hidden for Display/Video/DG; DSA banner shown for DSA; table for Search */}
+                                                {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && ((() => {
+                                                    const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                                    const _isDSA = _c?.name?.toLowerCase().includes('dsa') || _c?.advertisingChannelSubType === 'SEARCH_DYNAMIC_ADS';
+                                                    return _isDSA;
+                                                })() ? (
+                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 p-5 mb-4">
+                                                        <div className="flex items-start gap-3">
+                                                            <span className="text-slate-400 text-lg leading-none mt-0.5">ℹ️</span>
+                                                            <div>
+                                                                <h3 className="font-medium text-white mb-1">Dynamic Search Ads — no standard keywords</h3>
+                                                                <p className="text-sm text-slate-400">DSA campaigns target searches automatically based on your website content. Check the <span className="text-violet-400">Search Terms</span> section below for actual query data.</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
                                                 <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
                                                     <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                                         <h2 className="font-semibold text-white">Keywords & Quality Score</h2>
@@ -2165,6 +3570,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                             <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
                                                                 <tr>
                                                                     <th className="px-4 py-3 font-medium">Keyword</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Cost</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">CPA</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">IS</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
                                                                     <th className="px-4 py-3 text-center font-medium">QS</th>
                                                                     <th className="px-4 py-3 text-center font-medium">Exp. CTR</th>
                                                                     <th className="px-4 py-3 text-center font-medium">Ad Rel.</th>
@@ -2172,11 +3583,66 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y divide-slate-700">
+                                                                {currentAdGroup && (
+                                                                    <tr className="bg-slate-700/40 border-b-2 border-slate-600/50 italic font-medium">
+                                                                        <td className="px-4 py-2 text-slate-300 text-xs">
+                                                                            Ad Group: {currentAdGroup.name} (All)
+                                                                        </td>
+                                                                        <td className="px-4 py-2 text-right text-slate-300 text-xs">€{currentAdGroup.cost.toFixed(2)}</td>
+                                                                        <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.clicks.toLocaleString()}</td>
+                                                                        <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.conversions.toFixed(1)}</td>
+                                                                        <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.cpa != null ? `€${currentAdGroup.cpa.toFixed(2)}` : '—'}</td>
+                                                                        <td className="px-4 py-2 text-right">
+                                                                            {currentAdGroup.searchImpressionShare != null ? (
+                                                                                <span className={`font-bold ${getISColor(currentAdGroup.searchImpressionShare)}`}>
+                                                                                    {(currentAdGroup.searchImpressionShare * 100).toFixed(1)}%
+                                                                                </span>
+                                                                            ) : '—'}
+                                                                        </td>
+                                                                        <td className="px-4 py-2 text-right text-slate-400 text-xs">
+                                                                            {currentAdGroup.searchLostISRank != null ? `${(currentAdGroup.searchLostISRank * 100).toFixed(1)}%` : '—'}
+                                                                        </td>
+                                                                        <td className="px-4 py-2 text-center text-slate-300 font-bold">
+                                                                            {currentAdGroup.avgQualityScore?.toFixed(1) || '—'}
+                                                                        </td>
+                                                                        <td colSpan={3}></td>
+                                                                    </tr>
+                                                                )}
                                                                 {keywords.map((kw) => (
                                                                     <tr key={kw.id} className="hover:bg-slate-700/30">
                                                                         <td className="px-4 py-3 text-white">
                                                                             <span className="text-xs text-slate-500 mr-1">[{kw.matchType}]</span>
                                                                             {kw.text}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                            {kw.cost > 0 ? `€${kw.cost.toFixed(2)}` : <span className="text-slate-600">—</span>}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                            {kw.clicks > 0 ? kw.clicks.toLocaleString() : <span className="text-slate-600">—</span>}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                            {kw.conversions != null ? (kw.conversions === 0 ? '0' : kw.conversions.toFixed(1)) : <span className="text-slate-600">—</span>}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                            {kw.conversions > 0 && kw.cost > 0 ? `€${(kw.cost / kw.conversions).toFixed(2)}` : <span className="text-slate-600">—</span>}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {kw.searchImpressionShare != null ? (
+                                                                                <span className={`font-medium ${getISColor(kw.searchImpressionShare)}`}>
+                                                                                    {(kw.searchImpressionShare * 100).toFixed(1)}%
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-500 text-xs">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {kw.searchLostISRank != null ? (
+                                                                                <span className={`font-medium text-sm ${kw.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                                    {(kw.searchLostISRank * 100).toFixed(1)}%
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-500 text-xs">—</span>
+                                                                            )}
                                                                         </td>
                                                                         <td className="px-4 py-3 text-center">
                                                                             {kw.qualityScore !== null && kw.qualityScore <= 6 ? (
@@ -2240,7 +3706,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 ))}
                                                                 {keywords.length === 0 && (
                                                                     <tr>
-                                                                        <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                                                                        <td colSpan={11} className="px-6 py-8 text-center text-slate-500">
                                                                             No keywords found.
                                                                         </td>
                                                                     </tr>
@@ -2249,79 +3715,130 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         </table>
                                                     </div>
                                                 </div>
+                                                ))}
+                                                {/* end of DSA/Display keywords conditional */}
 
-                                                {/* Ads with Strength — only shown when ads are available */}
-                                                {ads.length > 0 && (
+                                                {/* Ads with Strength — shown for Search/DSA campaigns (not upper-funnel/PMax/Shopping) */}
+                                                {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY' || _ct === 'PERFORMANCE_MAX' || _ct === 'SHOPPING'; })() && (
                                                     <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
                                                         <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                                             <h2 className="font-semibold text-white">Ads & Ad Strength</h2>
-                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                                {ads.length} ads
-                                                            </span>
+                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{ads.length} ads</span>
                                                         </div>
                                                         <div className="p-4 space-y-4">
-                                                            {ads.map((ad) => (
-                                                                <div key={ad.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
-                                                                    <div className="flex items-center justify-between mb-3">
-                                                                        {(ad.adStrength === 'POOR' || ad.adStrength === 'AVERAGE') ? (
-                                                                            <Tooltip text={getAdStrengthTip(ad.adStrength, ad.headlinesCount, ad.descriptionsCount, ad.type)}>
-                                                                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border-b border-dashed ${ad.adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor(ad.adStrength)}`}>
+                                                            {ads.map((ad) => {
+                                                                const AD_TYPE_LABEL: Record<string, string> = {
+                                                                    RESPONSIVE_SEARCH_AD: 'Responsive Search Ad',
+                                                                    RESPONSIVE_DISPLAY_AD: 'Responsive Display Ad',
+                                                                    DEMAND_GEN_MULTI_ASSET_AD: 'Demand Gen Multi-Asset',
+                                                                    DEMAND_GEN_CAROUSEL_AD: 'Demand Gen Carousel',
+                                                                    DEMAND_GEN_VIDEO_RESPONSIVE_AD: 'Demand Gen Video',
+                                                                    DISCOVERY_MULTI_ASSET_AD: 'Discovery Multi-Asset',
+                                                                    DISCOVERY_CAROUSEL_AD: 'Discovery Carousel',
+                                                                    SHOPPING_PRODUCT_AD: 'Shopping Product',
+                                                                };
+                                                                const typeLabel = AD_TYPE_LABEL[ad.type] || ad.type;
+                                                                const isRDA = ad.type === 'RESPONSIVE_DISPLAY_AD';
+                                                                const maxH = isRDA ? 5 : 15;
+                                                                const maxD = isRDA ? 5 : 4;
+                                                                const minH = isRDA ? 5 : 10;
+                                                                const minD = isRDA ? 5 : 3;
+                                                                const adImpr = ad.impressions ?? 0;
+                                                                const adClicks = ad.clicks ?? 0;
+                                                                const adCtr = ad.ctr ?? 0;
+                                                                const adCost = ad.cost ?? 0;
+                                                                const adConv = ad.conversions ?? 0;
+                                                                const adRoas = ad.roas ?? null;
+                                                                const adDescs = ad.descriptions ?? [];
+                                                                const adUrl = ad.finalUrls?.[0] ?? '';
+                                                                return (
+                                                                    <div key={ad.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
+                                                                        {/* Header: status + strength + type */}
+                                                                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                                                                            {ad.status && (
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ad.status === 'ENABLED' ? 'bg-emerald-900/50 text-emerald-400' : ad.status === 'PAUSED' ? 'bg-amber-900/50 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
+                                                                                    {ad.status}
+                                                                                </span>
+                                                                            )}
+                                                                            {(ad.adStrength === 'POOR' || ad.adStrength === 'AVERAGE') ? (
+                                                                                <Tooltip text={getAdStrengthTip(ad.adStrength, ad.headlinesCount, ad.descriptionsCount, ad.type)}>
+                                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border-b border-dashed ${ad.adStrength === 'POOR' ? 'border-red-400/40' : 'border-amber-400/40'} ${getAdStrengthColor(ad.adStrength)}`}>
+                                                                                        {ad.adStrength}
+                                                                                    </span>
+                                                                                </Tooltip>
+                                                                            ) : (
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
                                                                                     {ad.adStrength}
                                                                                 </span>
-                                                                            </Tooltip>
-                                                                        ) : (
-                                                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getAdStrengthColor(ad.adStrength)}`}>
-                                                                                {ad.adStrength}
-                                                                            </span>
-                                                                        )}
-                                                                        <div className="flex items-center gap-4 text-sm">
-                                                                            {ad.headlinesCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10) ? (
-                                                                                <Tooltip text={`Add more headlines (currently ${ad.headlinesCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 15}). Aim for at least ${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 10} unique headlines with diverse messaging and keywords.`}>
-                                                                                    <span className="text-amber-400 border-b border-dashed border-amber-400/40">
-                                                                                        Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
-                                                                                    </span>
-                                                                                </Tooltip>
-                                                                            ) : (
-                                                                                <span className="text-slate-400">
-                                                                                    Headlines: <strong>{ad.headlinesCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '15'}
-                                                                                </span>
                                                                             )}
-                                                                            {ad.descriptionsCount < (ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 3) ? (
-                                                                                <Tooltip text={`Add more descriptions (currently ${ad.descriptionsCount}/${ad.type === 'RESPONSIVE_DISPLAY_AD' ? 5 : 4}). Each description should highlight a unique benefit or call-to-action.`}>
-                                                                                    <span className="text-amber-400 border-b border-dashed border-amber-400/40">
-                                                                                        Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
-                                                                                    </span>
-                                                                                </Tooltip>
-                                                                            ) : (
-                                                                                <span className="text-slate-400">
-                                                                                    Descriptions: <strong>{ad.descriptionsCount}</strong>/{ad.type === 'RESPONSIVE_DISPLAY_AD' ? '5' : '4'}
-                                                                                </span>
-                                                                            )}
+                                                                            <span className="text-xs text-slate-500">{typeLabel}</span>
+                                                                            {/* Metrics row */}
+                                                                            <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                                                                                <span>Impr: <strong className="text-slate-200">{adImpr.toLocaleString()}</strong></span>
+                                                                                <span>Clicks: <strong className="text-slate-200">{adClicks.toLocaleString()}</strong></span>
+                                                                                <span>CTR: <strong className="text-slate-200">{(adCtr * 100).toFixed(2)}%</strong></span>
+                                                                                <span>Cost: <strong className="text-slate-200">€{adCost.toFixed(2)}</strong></span>
+                                                                                <span>Conv: <strong className="text-slate-200">{adConv === 0 ? '0' : adConv.toFixed(1)}</strong></span>
+                                                                                <span>ROAS: <strong className={adRoas ? 'text-emerald-400' : 'text-slate-400'}>{adRoas != null ? adRoas.toFixed(2) + 'x' : '—'}</strong></span>
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                    <div className="flex flex-wrap gap-2">
-                                                                        {ad.headlines.slice(0, 6).map((headline, idx) => (
-                                                                            <span key={idx} className="text-xs bg-slate-600/50 text-slate-300 px-2 py-1 rounded">
-                                                                                {headline}
-                                                                            </span>
-                                                                        ))}
-                                                                        {ad.headlines.length > 6 && (
-                                                                            <span className="text-xs text-slate-500">
-                                                                                +{ad.headlines.length - 6} more
-                                                                            </span>
+                                                                        {/* Headlines */}
+                                                                        <div className="mb-2">
+                                                                            <div className="flex items-center gap-2 mb-1.5">
+                                                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Headlines</span>
+                                                                                {ad.headlinesCount < minH ? (
+                                                                                    <Tooltip text={`Add more headlines (currently ${ad.headlinesCount}/${maxH}). Aim for at least ${minH} unique headlines with diverse messaging and keywords.`}>
+                                                                                        <span className="text-xs text-amber-400 border-b border-dashed border-amber-400/40">{ad.headlinesCount}/{maxH}</span>
+                                                                                    </Tooltip>
+                                                                                ) : (
+                                                                                    <span className="text-xs text-slate-500">{ad.headlinesCount}/{maxH}</span>
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="flex flex-wrap gap-1.5">
+                                                                                {ad.headlines.map((h, i) => (
+                                                                                    <span key={i} className="text-xs bg-slate-600/50 text-slate-300 px-2 py-1 rounded">{h}</span>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                        {/* Descriptions */}
+                                                                        {adDescs.length > 0 && (
+                                                                            <div className="mb-2">
+                                                                                <div className="flex items-center gap-2 mb-1.5">
+                                                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Descriptions</span>
+                                                                                    {ad.descriptionsCount < minD ? (
+                                                                                        <Tooltip text={`Add more descriptions (currently ${ad.descriptionsCount}/${maxD}). Each description should highlight a unique benefit or call-to-action.`}>
+                                                                                            <span className="text-xs text-amber-400 border-b border-dashed border-amber-400/40">{ad.descriptionsCount}/{maxD}</span>
+                                                                                        </Tooltip>
+                                                                                    ) : (
+                                                                                        <span className="text-xs text-slate-500">{ad.descriptionsCount}/{maxD}</span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <div className="space-y-1">
+                                                                                    {adDescs.map((d, i) => (
+                                                                                        <div key={i} className="text-xs bg-slate-600/30 text-slate-300 px-3 py-2 rounded border-l-2 border-slate-600">{d}</div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        {/* Final URL */}
+                                                                        {adUrl && (
+                                                                            <div className="text-xs text-slate-500 mt-2">
+                                                                                URL: <span className="text-slate-400">{adUrl.length > 90 ? adUrl.slice(0, 90) + '…' : adUrl}</span>
+                                                                            </div>
                                                                         )}
                                                                     </div>
-                                                                </div>
-                                                            ))}
+                                                                );
+                                                            })}
                                                             {ads.length === 0 && (
-                                                                <p className="text-slate-500 text-sm text-center py-4">No ads found.</p>
+                                                                <p className="text-slate-500 text-sm text-center py-6">No ads found for this ad group.</p>
                                                             )}
                                                         </div>
                                                     </div>
                                                 )}
                                                 {/* /Ads with Strength */}
 
-                                                {/* Negative Keywords */}
+                                                {/* Negative Keywords — hidden for Display/Video/DG */}
+                                                {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
                                                 <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
                                                     <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                                         <h2 className="font-semibold text-white">Negative Keywords</h2>
@@ -2347,13 +3864,18 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         )}
                                                     </div>
                                                 </div>
+                                                )}
 
-                                                {/* Search Terms for Ad Group */}
+                                                {/* Search Terms for Ad Group — hidden for Display/Video/DG */}
+                                                {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
                                                 <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mt-6">
                                                     <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                                         <h2 className="font-semibold text-white">Search Terms</h2>
                                                         <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                            {searchTerms.filter(st => String(st.adGroupId) === String(navigation.adGroupId)).length} terms
+                                                            {searchTerms.filter(st =>
+                                                                String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
+                                                            ).length} terms
                                                         </span>
                                                     </div>
                                                     <div className="overflow-x-auto">
@@ -2424,11 +3946,38 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             )}
                                                                         </div>
                                                                     </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionRate')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            CVR
+                                                                            {searchTermSortBy === 'conversionRate' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionValue')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            Conv. Value
+                                                                            {searchTermSortBy === 'conversionValue' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
+                                                                    <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('averageCpc')}>
+                                                                        <div className="flex items-center justify-end gap-1">
+                                                                            Avg. CPC
+                                                                            {searchTermSortBy === 'averageCpc' && (
+                                                                                <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y divide-slate-700">
                                                                 {searchTerms
-                                                                    .filter(st => String(st.adGroupId) === String(navigation.adGroupId))
+                                                                    .filter(st =>
+                                                                        String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                        (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
+                                                                    )
                                                                     .sort((a, b) => {
                                                                         let valA: number | string = 0;
                                                                         let valB: number | string = 0;
@@ -2473,8 +4022,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     .map((term, idx) => (
                                                                         <tr key={idx} className="hover:bg-slate-700/50 transition-colors">
                                                                             <td className="px-6 py-3">
-                                                                                <div className="font-medium text-white max-w-md truncate" title={term.searchTerm}>
-                                                                                    {term.searchTerm}
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="font-medium text-white max-w-md truncate" title={term.searchTerm}>
+                                                                                        {term.searchTerm}
+                                                                                    </span>
+                                                                                    {term.matchType && term.matchType !== 'BROAD' && (
+                                                                                        <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${term.matchType === 'EXACT' ? 'bg-blue-500/20 text-blue-400' : term.matchType === 'PHRASE' ? 'bg-violet-500/20 text-violet-400' : 'bg-slate-600 text-slate-400'}`}>
+                                                                                            {term.matchType}
+                                                                                        </span>
+                                                                                    )}
                                                                                 </div>
                                                                                 {(() => {
                                                                                     const s = SEARCH_TERM_STATUS_MAP[String(term.searchTermStatus)] ||
@@ -2517,21 +4073,107 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                     <span className="text-slate-600">—</span>
                                                                                 )}
                                                                             </td>
+                                                                            <td className="px-4 py-3 text-right text-slate-400 text-xs">
+                                                                                {term.clicks > 0 ? `${((term.conversionRate || (term.conversions / term.clicks)) * 100).toFixed(2)}%` : '—'}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                {term.conversionValue > 0 ? (
+                                                                                    <span className="text-emerald-400 text-xs">€{term.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                                                                                ) : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right text-slate-300 text-xs">
+                                                                                {term.averageCpc > 0 ? `€${term.averageCpc.toFixed(2)}` : '—'}
+                                                                            </td>
                                                                         </tr>
                                                                     ))}
-                                                                {searchTerms.filter(st => String(st.adGroupId) === String(navigation.adGroupId)).length === 0 && (
-                                                                    <tr>
-                                                                        <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
-                                                                            No search terms found for this ad group.
-                                                                        </td>
-                                                                    </tr>
-                                                                )}
+                                                                {searchTerms.filter(st =>
+                                                                    String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                    (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
+                                                                ).length === 0 && (
+                                                                        <tr>
+                                                                            <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
+                                                                                No search terms found for this ad group.
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
                                                             </tbody>
                                                         </table>
                                                     </div>
                                                 </div>
+                                                )}
                                             </>
                                         )}
+
+                                        {/* PMax Listing Groups — Product Coverage */}
+                                        {pmaxListingGroups.length > 0 && (
+                                            <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
+                                                <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                    <div>
+                                                        <h2 className="font-semibold text-white">Product Coverage</h2>
+                                                        <p className="text-xs text-slate-400 mt-0.5">Listing group breakdown for this asset group</p>
+                                                    </div>
+                                                    <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded flex-shrink-0">
+                                                        {pmaxListingGroups.length} groups
+                                                    </span>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-left text-sm">
+                                                        <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                            <tr>
+                                                                <th className="px-4 py-3 font-medium">Dimension</th>
+                                                                <th className="px-4 py-3 font-medium">Value</th>
+                                                                <th className="px-4 py-3 text-center font-medium">Type</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Cost</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Conv.Value</th>
+                                                                <th className="px-4 py-3 text-right font-medium">ROAS</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-700">
+                                                            {pmaxListingGroups.map((lg: any) => (
+                                                                <tr key={lg.id} className="hover:bg-slate-700/30">
+                                                                    <td className="px-4 py-3 text-slate-300 text-xs capitalize">
+                                                                        {lg.dimension || '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-white text-sm">
+                                                                        {lg.value || <span className="text-slate-500 italic">All products</span>}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        <span className={`text-xs px-2 py-0.5 rounded font-medium ${lg.type === 'SUBDIVISION' ? 'bg-violet-500/20 text-violet-400' : 'bg-slate-600/50 text-slate-300'}`}>
+                                                                            {lg.type === 'SUBDIVISION' ? 'Group' : 'Unit'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-slate-300 text-xs">
+                                                                        {lg.impressions > 0 ? lg.impressions.toLocaleString() : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-slate-300 text-xs">
+                                                                        {lg.clicks > 0 ? lg.clicks.toLocaleString() : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-slate-300 text-xs">
+                                                                        {lg.cost > 0 ? `€${lg.cost.toFixed(2)}` : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-sm">
+                                                                        {lg.conversionValue > 0 ? (
+                                                                            <span className="text-emerald-400">€{lg.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                                                                        ) : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-sm">
+                                                                        {lg.roas != null ? (
+                                                                            <span className={lg.roas >= 2 ? 'text-emerald-400 font-semibold' : lg.roas >= 1 ? 'text-amber-400' : 'text-red-400'}>
+                                                                                {lg.roas.toFixed(2)}x
+                                                                            </span>
+                                                                        ) : '—'}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* end PMax Listing Groups */}
+
                                     </>
                                 )}
                             </div>

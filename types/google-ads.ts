@@ -59,6 +59,10 @@ export interface AssetGroup {
     roas?: number | null;
     category?: string;
     strength?: string;
+    // Impression Share metrics
+    searchImpressionShare?: number | null;
+    searchLostISRank?: number | null;
+    searchLostISBudget?: number | null;
 }
 
 export interface AdGroup {
@@ -83,7 +87,14 @@ export interface AdGroup {
     adsCount: number;
     poorAdsCount: number;
     adStrength?: string;
+    finalUrl?: string;
     campaignName?: string;
+    adGroupName?: string;
+    // Impression Share metrics
+    searchImpressionShare: number | null;
+    searchLostISRank: number | null;
+    searchLostISBudget: number | null;
+    viewThroughConversions?: number;
 }
 
 export interface NegativeKeyword {
@@ -117,6 +128,9 @@ export interface KeywordWithQS {
     policySummary?: string[];
     allConversions?: number;
     viewThroughConversions?: number;
+    searchImpressionShare: number | null;
+    searchLostISRank: number | null;
+    searchLostISBudget: number | null;
 }
 
 export interface AssetPerformance {
@@ -126,8 +140,14 @@ export interface AssetPerformance {
     text?: string;
     finalUrls?: string[];
     performanceLabel?: string;
-    policySummary?: string[];
     approvalStatus?: string;
+    policySummary?: string[];
+    performance?: string;
+    assetType?: string;
+    content?: string;
+    url?: string;
+    imageUrl?: string;
+    youtubeVideoId?: string;
     impressions: number;
     clicks: number;
     cost: number;
@@ -179,6 +199,7 @@ export interface AudiencePerformance {
     adGroupName: string;
     criterionId: string;
     audienceName: string;
+    audienceType?: string;
     impressions: number;
     clicks: number;
     cost: number;
@@ -188,6 +209,8 @@ export interface AudiencePerformance {
     cpc: number;
     roas: number | null;
     cpa: number | null;
+    searchImpressionShare: number | null;
+    searchLostISRank: number | null;
 }
 
 export interface PMaxSearchInsight {
@@ -231,15 +254,47 @@ export interface PMaxProductPerformance {
     roas: number | null;
 }
 
+export interface ListingGroupItem {
+    id: string;
+    adGroupId: string;
+    adGroupName: string;
+    campaignId: string;
+    campaignName: string;
+    dimension: string;  // e.g., "All products", product type, brand, custom label
+    caseValue: string;  // The specific value (e.g., product type value)
+    type: string;       // SUBDIVISION | UNIT
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    ctr: number;
+    cpc: number;
+    roas: number | null;
+    cpa: number | null;
+    searchImpressionShare: number | null;
+    searchLostISRank: number | null;
+    searchLostISBudget: number | null;
+}
+
 export interface AdWithStrength {
     id: string;
     adGroupId: string;
     type: string;
+    status?: string;
     adStrength: string;
     headlinesCount: number;
     descriptionsCount: number;
     finalUrls: string[];
     headlines: string[];
+    descriptions?: string[];
+    impressions?: number;
+    clicks?: number;
+    cost?: number;
+    conversions?: number;
+    conversionValue?: number;
+    ctr?: number;
+    roas?: number | null;
 }
 
 export interface Account {
@@ -296,6 +351,7 @@ export interface SearchTerm {
     adGroupId?: string;
     adGroupName?: string;
     searchTerm: string;
+    matchType?: string | null; // BROAD, EXACT, PHRASE, etc.
     searchTermStatus?: string;
     date?: string;
     device?: string; // MOBILE, DESKTOP, TABLET, UNKNOWN — optional (not segmented in adgroup view)
@@ -345,7 +401,7 @@ export interface ReportTemplate {
 }
 
 export interface ReportSettings {
-    model: 'opus-4.6' | 'sonnet-4.5' | 'haiku-4.5';
+    model: 'opus-4.6' | 'sonnet-4.6' | 'sonnet-4.5' | 'haiku-4.5';
     language: 'bg' | 'en';
     audience: 'internal' | 'client';
     expertMode: boolean;
@@ -375,3 +431,39 @@ export interface NetworkPerformance {
     conversions: number;
     conversionValue: number;
 }
+
+export interface PlacementPerformance {
+    placement: string;
+    description?: string;
+    type: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    ctr: number;
+    viewThroughConversions: number;
+}
+
+export interface DemographicPerformance {
+    type: 'AGE' | 'GENDER' | 'PARENTAL_STATUS' | 'INCOME';
+    dimension: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    ctr: number;
+}
+
+export interface TimeAnalysisPerformance {
+    period: string; // Hour (0-23) or Day of Week
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    roas?: number | null;
+}
+
+

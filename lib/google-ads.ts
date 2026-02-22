@@ -12,7 +12,10 @@ import {
     NetworkPerformance,
     AuctionInsight,
     AudiencePerformance,
-    PMaxSearchInsight
+    PMaxSearchInsight,
+    PlacementPerformance,
+    DemographicPerformance,
+    TimeAnalysisPerformance
 } from "@/types/google-ads";
 
 
@@ -165,6 +168,10 @@ export interface AdGroupPerformance {
     // Type classification
     adGroupType?: string;   // SEARCH_STANDARD, SEARCH_DYNAMIC_AD, etc.
     campaignType?: string;  // SEARCH, PERFORMANCE_MAX, DISPLAY, VIDEO
+    // Impression Share metrics
+    searchImpressionShare: number | null;
+    searchLostISRank: number | null;
+    searchLostISBudget: number | null;
 }
 
 export interface NegativeKeyword {
@@ -212,6 +219,7 @@ export interface KeywordWithQS {
             type: string;
         }[];
     };
+    searchImpressionShare: number | null;
 }
 
 export interface AdWithStrength {
@@ -354,6 +362,18 @@ export function mapBiddingStrategyType(type: any): string {
     return MAP[type] || MAP[Number(type)] || 'UNKNOWN';
 }
 
+function parseImpressionShare(val: any): number | null {
+    if (val === null || val === undefined || val === '--') return null;
+    if (typeof val === 'number') return val;
+    const s = String(val);
+    if (s.includes('< 0.1') || s.includes('< 10%')) return 0.099; // Represent as slightly less than 0.1
+    const clean = s.replace('< ', '').replace('> ', '').replace('%', '');
+    const num = parseFloat(clean);
+    if (isNaN(num)) return null;
+    // If it's a percentage (e.g. > 10), convert to fraction
+    if (num > 1 && s.includes('%')) return num / 100;
+    return num;
+}
 
 export async function getCampaigns(refreshToken: string, customerId?: string, dateRange?: DateRange, onlyEnabled: boolean = false, userId?: string): Promise<CampaignPerformance[]> {
     if (userId) logActivity(userId, 'API_CALL', { category: 'campaigns', customerId });
@@ -404,10 +424,10 @@ campaign.id, campaign.name, campaign.status,
                     conversions,
                     ctr: Number(row.metrics?.ctr) || 0,
                     cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
-                    searchImpressionShare: row.metrics?.search_impression_share ?? null,
-                    searchTopImpressionShare: row.metrics?.search_top_impression_share ?? null,
-                    searchLostISRank: row.metrics?.search_rank_lost_impression_share ?? null,
-                    searchLostISBudget: row.metrics?.search_budget_lost_impression_share ?? null,
+                    searchImpressionShare: parseImpressionShare(row.metrics?.search_impression_share),
+                    searchTopImpressionShare: parseImpressionShare(row.metrics?.search_top_impression_share),
+                    searchLostISRank: parseImpressionShare(row.metrics?.search_rank_lost_impression_share),
+                    searchLostISBudget: parseImpressionShare(row.metrics?.search_budget_lost_impression_share),
                     conversionValue,
                     roas: cost > 0 ? conversionValue / cost : null,
                     cpa: conversions > 0 ? cost / conversions : null,
@@ -422,7 +442,7 @@ campaign.id, campaign.name, campaign.status,
                     budgetDeliveryMethod: String(row.campaign_budget?.delivery_method || 'STANDARD'),
                     budgetStatus: String(row.campaign_budget?.status || 'UNKNOWN'),
                     optimizationScore: row.campaign?.optimization_score ?? null,
-                    searchAbsTopIS: row.metrics?.search_absolute_top_impression_share ?? null,
+                    searchAbsTopIS: parseImpressionShare(row.metrics?.search_absolute_top_impression_share),
                 };
             });
         } catch (error: unknown) {
@@ -541,7 +561,11 @@ ad_group.id,
     metrics.ctr,
     metrics.average_cpc,
     metrics.conversions_value,
-    metrics.relative_ctr
+    metrics.view_through_conversions,
+    metrics.interaction_rate,
+    metrics.average_cpm,
+    metrics.search_impression_share,
+    metrics.search_rank_lost_impression_share
             FROM ad_group
             WHERE ${statusClause} ${campaignClause} ${dateFilter}
             ORDER BY 
@@ -658,7 +682,13 @@ ad_group.id,
                     conversions,
                     ctr: Number(row.metrics?.ctr) || 0,
                     cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
-                    relativeCtr: Number(row.metrics?.relative_ctr) || null,
+                    searchImpressionShare: parseImpressionShare(row.metrics?.search_impression_share),
+                    searchLostISRank: parseImpressionShare(row.metrics?.search_rank_lost_impression_share),
+                    viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
+                    interactionRate: Number(row.metrics?.interaction_rate) || 0,
+                    averageCpm: Number(row.metrics?.average_cpm) / 1_000_000 || 0,
+                    keywords: groupKeywords,
+                    searchLostISBudget: null,
                     avgQualityScore,
                     keywordsWithLowQS,
                     adsCount: groupAds.length,
@@ -780,6 +810,7 @@ ad_group_criterion.criterion_id,
     metrics.average_cpc,
     metrics.all_conversions,
     metrics.view_through_conversions,
+    metrics.search_impression_share,
     ad_group_criterion.approval_status
             FROM keyword_view
             ${whereClause} ${dateFilter}
@@ -829,6 +860,7 @@ campaign.status = 'ENABLED'
                 finalUrl: row.ad_group_criterion?.final_urls?.[0] || adGroupUrlMap.get(row.ad_group?.id?.toString() || "") || undefined,
                 allConversions: Number(row.metrics?.all_conversions) || 0,
                 viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
+                searchImpressionShare: row.metrics?.search_impression_share ?? null,
                 approvalStatus: String(row.ad_group_criterion?.approval_status || 'UNKNOWN'),
             }));
 
@@ -1131,7 +1163,10 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
                     roas: cost > 0 ? conversionValue / cost : null,
                     cpa: conversions > 0 ? cost / conversions : null,
                     adGroupType: 'ASSET_GROUP',
-                    campaignType: 'PERFORMANCE_MAX'
+                    campaignType: 'PERFORMANCE_MAX',
+                    searchImpressionShare: null,
+                    searchLostISRank: null,
+                    searchLostISBudget: null
                 };
             });
         } catch (error: unknown) {
@@ -1143,25 +1178,7 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
 
 // ─── Shopping: Listing Groups (Product Groups) ───────────────────────────────
 
-export interface ListingGroupItem {
-    id: string;
-    adGroupId: string;
-    adGroupName: string;
-    campaignId: string;
-    campaignName: string;
-    dimension: string;  // e.g., "All products", product type, brand, custom label
-    caseValue: string;  // The specific value (e.g., product type value)
-    type: string;       // SUBDIVISION | UNIT
-    impressions: number;
-    clicks: number;
-    cost: number;
-    conversions: number;
-    conversionValue: number;
-    ctr: number;
-    cpc: number;
-    roas: number | null;
-    cpa: number | null;
-}
+import { ListingGroupItem } from "@/types/google-ads";
 
 export async function getListingGroups(
     refreshToken: string,
@@ -1194,7 +1211,8 @@ export async function getListingGroups(
                     metrics.conversions,
                     metrics.conversions_value,
                     metrics.ctr,
-                    metrics.average_cpc
+                    metrics.average_cpc,
+                    metrics.search_impression_share
                 FROM listing_group_view
                 WHERE ad_group.id = ${adGroupId}
                     AND ad_group_criterion.status != 'REMOVED'
@@ -1252,6 +1270,9 @@ export async function getListingGroups(
                     cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
                     roas: cost > 0 ? conversionValue / cost : null,
                     cpa: conversions > 0 ? cost / conversions : null,
+                    searchImpressionShare: row.metrics?.search_impression_share ?? null,
+                    searchLostISRank: null,
+                    searchLostISBudget: null,
                 };
             });
         } catch (error: unknown) {
@@ -2576,15 +2597,16 @@ export async function getSearchTerms(
             // Use fields known to work from the API route
             const query = `
 SELECT
-search_term_view.search_term,
+    search_term_view.search_term,
+    segments.search_term_match_type,
     metrics.impressions,
     metrics.clicks,
     metrics.cost_micros,
     metrics.conversions,
     metrics.conversions_value
 FROM
-search_term_view
-WHERE 
+    search_term_view
+WHERE
                 ${dateFilter}
             ORDER BY
                 metrics.impressions DESC,
@@ -2602,16 +2624,28 @@ WHERE
                 const clicks = Number(row.metrics?.clicks) || 0;
                 const cost = Number(row.metrics?.cost_micros) / 1000000 || 0;
 
+                const conversions = Number(row.metrics?.conversions) || 0;
+                // segments.search_term_match_type returns numeric enum or string
+                const matchTypeRaw = row.segments?.search_term_match_type;
+                const MATCH_TYPE_MAP: Record<string, string> = {
+                    '2': 'BROAD', 'BROAD': 'BROAD',
+                    '3': 'EXACT', 'EXACT': 'EXACT',
+                    '4': 'PHRASE', 'PHRASE': 'PHRASE',
+                    '5': 'NEAR_EXACT', 'NEAR_EXACT': 'NEAR_EXACT',
+                    '6': 'NEAR_PHRASE', 'NEAR_PHRASE': 'NEAR_PHRASE',
+                };
                 return {
                     term: row.search_term_view?.search_term,
+                    matchType: MATCH_TYPE_MAP[String(matchTypeRaw)] || null,
                     status: 'UNKNOWN', // Removed from query
                     impressions,
                     clicks,
                     cost,
-                    conversions: Number(row.metrics?.conversions) || 0,
+                    conversions,
                     conversionValue: Number(row.metrics?.conversions_value) || 0,
                     ctr: impressions > 0 ? clicks / impressions : 0,
-                    averageCpc: clicks > 0 ? cost / clicks : 0
+                    averageCpc: clicks > 0 ? cost / clicks : 0,
+                    conversionRate: clicks > 0 ? conversions / clicks : 0,
                 };
             });
         } catch (error) {
@@ -2629,8 +2663,9 @@ WHERE
 
 /**
  * Helper to resolve audience names from various signal types.
+ * @param interestNames - Map of user_interest criterion_id → human-readable name
  */
-function resolveAudienceName(row: any): string {
+function resolveAudienceName(row: any, interestNames: Record<string, string> = {}): string {
     const criterion = row.ad_group_criterion || row.campaign_criterion;
 
     // If it's a PMax signal, use the audience name from the attributed resource
@@ -2642,21 +2677,33 @@ function resolveAudienceName(row: any): string {
 
     // Fallback names for various types
     const type = criterion.type || 'UNKNOWN';
-    const resourceName = criterion.user_list?.user_list ||
+    const criterionId = String(criterion.criterion_id || '');
+
+    // Check user_list resource name in the names map (remarketing audiences)
+    const userListRef = criterion.user_list?.user_list;
+    if (userListRef && interestNames[userListRef]) return interestNames[userListRef];
+
+    const resourceName = userListRef ||
         criterion.custom_audience?.custom_audience ||
         criterion.combined_audience?.combined_audience ||
-        // Use display_name as a strong fallback (e.g. for user_interest/verticals)
         criterion.display_name;
 
     if (resourceName) {
-        const name = resourceName.split('/').pop();
-        if (name?.startsWith('uservertical::')) {
-            return `Interest (${name.replace('uservertical::', '')})`;
+        const lastSegment = resourceName.split('/').pop() || '';
+        if (lastSegment.startsWith('uservertical::')) {
+            const interestId = lastSegment.replace('uservertical::', '');
+            if (interestNames[interestId]) return interestNames[interestId];
+            return `Interest (${interestId})`;
         }
-        return name || 'Unknown';
+        // Check the bare ID/segment in the names map
+        if (interestNames[lastSegment]) return interestNames[lastSegment];
+        return lastSegment || 'Unknown';
     }
 
-    return `${type} (${criterion.criterion_id || 'unknown'})`;
+    // Check names map by criterion_id as fallback
+    if (interestNames[criterionId]) return interestNames[criterionId];
+
+    return `${type} (${criterionId || 'unknown'})`;
 }
 
 // Audience Performance Data
@@ -2665,13 +2712,15 @@ export async function getAudiencePerformance(
     customerId?: string,
     dateRange?: DateRange,
     campaignIds?: string[],
-    userId?: string
+    userId?: string,
+    adGroupId?: string
 ): Promise<AudiencePerformance[]> {
     if (userId) logActivity(userId, 'API_CALL', { category: 'audiences', customerId });
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
     const dateFilter = getDateFilter(dateRange);
     const campaignFilter = campaignIds?.length
         ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
+    const adGroupFilter = adGroupId ? `AND ad_group.id = ${adGroupId}` : '';
 
     try {
         // Query Ad Group and Campaign audiences in parallel
@@ -2693,13 +2742,15 @@ export async function getAudiencePerformance(
                     metrics.conversions,
                     metrics.conversions_value,
                     metrics.average_cpc,
-                    metrics.ctr
+                    metrics.ctr,
+                    metrics.search_impression_share
                 FROM ad_group_audience_view
-                WHERE campaign.status != 'REMOVED' 
+                WHERE campaign.status != 'REMOVED'
                 AND ad_group.status != 'REMOVED'
                 ${dateFilter}
                 AND metrics.impressions > 0
                 ${campaignFilter}
+                ${adGroupFilter}
                 LIMIT 1000
             `).catch(e => { console.error("AdGroup query failed:", e); return []; }),
             customer.query(`
@@ -2716,7 +2767,8 @@ export async function getAudiencePerformance(
                     metrics.conversions,
                     metrics.conversions_value,
                     metrics.average_cpc,
-                    metrics.ctr
+                    metrics.ctr,
+                    metrics.search_impression_share
                 FROM campaign_audience_view
                 WHERE campaign.status != 'REMOVED'
                 ${dateFilter}
@@ -2726,10 +2778,71 @@ export async function getAudiencePerformance(
             `).catch(e => { console.error("Campaign query failed:", e); return []; })
         ]);
 
-        // Process rows for standard campaigns
+        // Batch-resolve audience names (user_interest + user_list)
+        const interestIds = new Set<string>();
+        const userListResourceNames = new Set<string>();
+        const allRows = [...adGroupResults, ...campaignResults];
 
+        allRows.forEach((row: any) => {
+            const criterion = row.ad_group_criterion || row.campaign_criterion;
+            if (!criterion) return;
+            const displayName = criterion.display_name || '';
+            const lastSegment = displayName.split('/').pop() || '';
+            if (lastSegment.startsWith('uservertical::')) {
+                interestIds.add(lastSegment.replace('uservertical::', ''));
+            } else if ((criterion.type === 'USER_INTEREST' || criterion.type === 2) && criterion.criterion_id) {
+                interestIds.add(String(criterion.criterion_id));
+            }
+            // Collect user_list resource names for remarketing audiences
+            const userListRef = criterion.user_list?.user_list;
+            if (userListRef) userListResourceNames.add(userListRef);
+        });
 
+        const interestNames: Record<string, string> = {};
 
+        // 1) Resolve user_interest names
+        if (interestIds.size > 0) {
+            try {
+                const idList = Array.from(interestIds).join(',');
+                const interestRows = await customer.query(`
+                    SELECT user_interest.user_interest_id, user_interest.name
+                    FROM user_interest
+                    WHERE user_interest.user_interest_id IN (${idList})
+                `);
+                interestRows.forEach((r: any) => {
+                    const id = String(r.user_interest?.user_interest_id || '');
+                    const name = r.user_interest?.name || '';
+                    if (id && name) interestNames[id] = name;
+                });
+            } catch (e) {
+                console.error('[Audiences] user_interest lookup failed:', e);
+            }
+        }
+
+        // 2) Resolve user_list names (remarketing audiences)
+        // user_list resource names look like: "customers/123/userLists/456"
+        // We map the full resource name → display name, and also the last segment (ID) → display name
+        if (userListResourceNames.size > 0) {
+            try {
+                const resourceList = Array.from(userListResourceNames)
+                    .map(r => `'${r}'`).join(',');
+                const listRows = await customer.query(`
+                    SELECT user_list.resource_name, user_list.name, user_list.id
+                    FROM user_list
+                    WHERE user_list.resource_name IN (${resourceList})
+                `);
+                listRows.forEach((r: any) => {
+                    const resName = r.user_list?.resource_name || '';
+                    const name = r.user_list?.name || '';
+                    const id = String(r.user_list?.id || '');
+                    // Map both the full resource name and the bare ID
+                    if (resName && name) interestNames[resName] = name;
+                    if (id && name) interestNames[id] = name;
+                });
+            } catch (e) {
+                console.error('[Audiences] user_list lookup failed:', e);
+            }
+        }
 
         const processRows = (rows: any[], level: 'adgroup' | 'campaign') => {
             return rows.map((row) => {
@@ -2739,7 +2852,18 @@ export async function getAudiencePerformance(
                 const clicks = Number(row.metrics?.clicks) || 0;
                 const impressions = Number(row.metrics?.impressions) || 0;
 
-                let audienceName = resolveAudienceName(row);
+                let audienceName = resolveAudienceName(row, interestNames);
+
+                // Determine audience type label
+                const criterion = row.ad_group_criterion || row.campaign_criterion;
+                const cType = criterion?.type;
+                const AUDIENCE_TYPE_MAP: Record<string | number, string> = {
+                    'USER_INTEREST': 'Interest', 24: 'Interest',
+                    'USER_LIST': 'Remarketing', 22: 'Remarketing',
+                    'CUSTOM_AUDIENCE': 'Custom', 36: 'Custom',
+                    'COMBINED_AUDIENCE': 'Combined', 29: 'Combined',
+                };
+                const audienceType = AUDIENCE_TYPE_MAP[cType] || (criterion?.display_name?.includes('uservertical') ? 'Interest' : 'Other');
 
                 return {
                     campaignId: row.campaign?.id?.toString() || "",
@@ -2748,6 +2872,7 @@ export async function getAudiencePerformance(
                     adGroupName: level === 'adgroup' ? (row.ad_group?.name || "") : "All Ad Groups",
                     criterionId: (row.ad_group_criterion?.criterion_id || row.campaign_criterion?.criterion_id || row.audience?.id || "").toString(),
                     audienceName,
+                    audienceType,
                     impressions,
                     clicks,
                     cost,
@@ -2756,7 +2881,10 @@ export async function getAudiencePerformance(
                     ctr: Number(row.metrics?.ctr) || 0,
                     cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
                     roas: cost > 0 ? conversionValue / cost : null,
-                    cpa: conversions > 0 ? cost / conversions : null
+                    cpa: conversions > 0 ? cost / conversions : null,
+                    searchImpressionShare: row.metrics?.search_impression_share ?? null,
+                    searchLostISRank: null,
+                    searchLostISBudget: null,
                 };
             });
         };
@@ -2904,9 +3032,9 @@ export async function getAssetPerformance(
         // For simplicity, we'll focus on ad_group_ad_asset_view first as it covers extensions
         const query = `
 SELECT
-asset.id,
-    asset.type,
     asset.name,
+    asset.image_asset.full_size,
+    asset.youtube_video_asset.youtube_video_id,
     asset.text_asset.text,
     asset.final_urls,
     ad_group_ad_asset_view.performance_label,
@@ -2931,10 +3059,12 @@ asset.id,
             id: row.asset?.id?.toString() || "",
             type: String(row.asset?.type || 'UNKNOWN'),
             name: row.asset?.name || "",
+            imageUrl: (row.asset?.image_asset?.full_size as any)?.url || "",
+            youtubeVideoId: row.asset?.youtube_video_asset?.youtube_video_id || "",
             text: row.asset?.text_asset?.text || "",
             finalUrls: row.asset?.final_urls || [],
             performanceLabel: String(row.ad_group_ad_asset_view?.performance_label || 'UNKNOWN'),
-            approvalStatus: 'ENABLED', // Assets in ad_group_ad_asset_view with enabled=TRUE are effectively approved
+            approvalStatus: 'ENABLED',
             policySummary: [],
             impressions: Number(row.metrics?.impressions) || 0,
             clicks: Number(row.metrics?.clicks) || 0,
@@ -3179,9 +3309,322 @@ export async function getNetworkPerformance(
     });
 }
 
+// Placements Performance (for DG/Display)
+export async function getPlacementsPerformance(
+    refreshToken: string,
+    customerId: string,
+    dateRange?: DateRange,
+    campaignId?: string,
+    adGroupId?: string
+): Promise<PlacementPerformance[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+    let filter = dateFilter;
+    if (campaignId) filter += ` AND campaign.id = ${campaignId}`;
+    if (adGroupId) filter += ` AND ad_group.id = ${adGroupId}`;
 
+    try {
+        const query = `
+            SELECT
+                detail_placement_view.placement,
+                detail_placement_view.display_name,
+                detail_placement_view.placement_type,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value,
+                metrics.ctr,
+                metrics.view_through_conversions
+            FROM detail_placement_view
+            WHERE detail_placement_view.placement IS NOT NULL
+            ${filter}
+            AND metrics.impressions > 0
+            ORDER BY metrics.cost_micros DESC
+            LIMIT 1000
+        `;
 
+        const result = await customer.query(query);
 
+        return result.map((row: any) => ({
+            placement: row.detail_placement_view?.placement || "",
+            description: row.detail_placement_view?.display_name || "",
+            type: String(row.detail_placement_view?.placement_type || 'UNKNOWN'),
+            impressions: Number(row.metrics?.impressions) || 0,
+            clicks: Number(row.metrics?.clicks) || 0,
+            cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
+            conversions: Number(row.metrics?.conversions) || 0,
+            conversionValue: Number(row.metrics?.conversions_value) || 0,
+            ctr: Number(row.metrics?.ctr) || 0,
+            viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
+        }));
+    } catch (error: unknown) {
+        logApiError("getPlacementsPerformance", error);
+        return [];
+    }
+}
+
+// Demographics Performance
+export async function getDemographicsPerformance(
+    refreshToken: string,
+    customerId: string,
+    dateRange?: DateRange,
+    campaignId?: string,
+    adGroupId?: string
+): Promise<DemographicPerformance[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+    let filter = dateFilter;
+    if (campaignId) filter += ` AND campaign.id = ${campaignId}`;
+    if (adGroupId) filter += ` AND ad_group.id = ${adGroupId}`;
+
+    try {
+        const [ageRows, genderRows] = await Promise.all([
+            customer.query(`
+                SELECT age_range_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
+                FROM age_range_view WHERE metrics.impressions > 0 ${filter}
+            `),
+            customer.query(`
+                SELECT gender_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
+                FROM gender_view WHERE metrics.impressions > 0 ${filter}
+            `)
+        ]);
+
+        const processRow = (row: any, type: 'AGE' | 'GENDER'): DemographicPerformance => {
+            const resourceName = row.age_range_view?.resource_name || row.gender_view?.resource_name || "";
+            const rawId = resourceName.split('~').pop() || "";
+
+            let dimension = "Unknown";
+            if (type === 'AGE') {
+                const AGE_MAP: Record<string, string> = {
+                    "503001": "18-24", "503002": "25-34", "503003": "35-44",
+                    "503004": "45-54", "503005": "55-64", "503006": "65+", "503000": "Unknown"
+                };
+                dimension = AGE_MAP[rawId] || rawId;
+            } else {
+                const GENDER_MAP: Record<string, string> = {
+                    "10": "Male", "11": "Female", "20": "Unknown"
+                };
+                dimension = GENDER_MAP[rawId] || rawId;
+            }
+
+            return {
+                type,
+                dimension,
+                impressions: Number(row.metrics?.impressions) || 0,
+                clicks: Number(row.metrics?.clicks) || 0,
+                cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
+                conversions: Number(row.metrics?.conversions) || 0,
+                conversionValue: Number(row.metrics?.conversions_value) || 0,
+                ctr: Number(row.metrics?.ctr) || 0,
+            };
+        };
+
+        return [
+            ...ageRows.map(r => processRow(r, 'AGE')),
+            ...genderRows.map(r => processRow(r, 'GENDER'))
+        ].sort((a, b) => b.cost - a.cost);
+    } catch (error) {
+        logApiError("getDemographicsPerformance", error);
+        return [];
+    }
+}
+
+// Time Analysis Performance
+export async function getTimeAnalysisPerformance(
+    refreshToken: string,
+    customerId: string,
+    dateRange?: DateRange,
+    campaignId?: string,
+    adGroupId?: string
+): Promise<TimeAnalysisPerformance[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+    let filter = dateFilter;
+    if (campaignId) filter += ` AND campaign.id = ${campaignId}`;
+    if (adGroupId) filter += ` AND ad_group.id = ${adGroupId}`;
+
+    try {
+        const query = `
+            SELECT
+                segments.day_of_week,
+                segments.hour_of_day,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM ad_group
+            WHERE metrics.impressions > 0
+            ${filter}
+        `;
+
+        const result = await customer.query(query);
+
+        return result.map((row: any) => {
+            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+            const conversionValue = Number(row.metrics?.conversions_value) || 0;
+            return {
+                period: `${row.segments?.day_of_week || 'Unknown'} ${row.segments?.hour_of_day || '0'}:00`,
+                impressions: Number(row.metrics?.impressions) || 0,
+                clicks: Number(row.metrics?.clicks) || 0,
+                cost,
+                conversions: Number(row.metrics?.conversions) || 0,
+                conversionValue,
+                roas: cost > 0 ? conversionValue / cost : null,
+            };
+        }).sort((a, b) => b.cost - a.cost);
+    } catch (error) {
+        logApiError("getTimeAnalysisPerformance", error);
+        return [];
+    }
+}
+
+// ============================================
+// PMax Listing Groups (product coverage per asset group)
+// ============================================
+
+export interface PMaxListingGroupItem {
+    id: string;
+    type: string;          // SUBDIVISION | UNIT
+    dimension: string;     // 'brand' | 'category' | 'product_type' | 'condition' | 'all'
+    value: string;         // e.g. "Samsung", "Electronics", "All products"
+    impressions: number;
+    clicks: number;
+    cost: number;
+    conversions: number;
+    conversionValue: number;
+    roas: number | null;
+    cpa: number | null;
+}
+
+export async function getPMaxListingGroups(
+    refreshToken: string,
+    customerId: string,
+    assetGroupId: string,
+    dateRange?: DateRange
+): Promise<PMaxListingGroupItem[]> {
+    try {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
+
+        const query = `
+            SELECT
+                asset_group_listing_group_filter.id,
+                asset_group_listing_group_filter.type,
+                asset_group_listing_group_filter.case_value.product_brand.value,
+                asset_group_listing_group_filter.case_value.product_type.value,
+                asset_group_listing_group_filter.case_value.product_condition.condition,
+                asset_group_listing_group_filter.case_value.product_item_id.value,
+                asset_group_listing_group_filter.case_value.product_channel.channel,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM asset_group_listing_group_filter
+            WHERE asset_group.id = ${assetGroupId}
+            ${dateFilter}
+            ORDER BY metrics.cost_micros DESC
+            LIMIT 500
+        `;
+
+        const rows = await customer.query(query);
+
+        return rows.map((row: any): PMaxListingGroupItem => {
+            const filter = row.asset_group_listing_group_filter || {};
+            const caseValue = filter.case_value || {};
+            const cost = Number(row.metrics?.cost_micros || 0) / 1_000_000;
+            const conversionValue = Number(row.metrics?.conversions_value || 0);
+            const conversions = Number(row.metrics?.conversions || 0);
+
+            // Determine dimension and value from whichever case_value is set
+            let dimension = 'all';
+            let value = 'All products';
+            if (caseValue.product_brand?.value) {
+                dimension = 'brand';
+                value = caseValue.product_brand.value;
+            } else if (caseValue.product_type?.value) {
+                dimension = 'product_type';
+                value = caseValue.product_type.value;
+            } else if (caseValue.product_condition?.condition != null) {
+                dimension = 'condition';
+                const condMap: Record<string, string> = { '1': 'New', '2': 'Refurbished', '3': 'Used', '4': 'Unknown' };
+                value = condMap[String(caseValue.product_condition.condition)] || String(caseValue.product_condition.condition);
+            } else if (caseValue.product_item_id?.value) {
+                dimension = 'item_id';
+                value = caseValue.product_item_id.value;
+            }
+
+            const typeRaw = filter.type;
+            const TYPE_MAP: Record<string, string> = { '2': 'SUBDIVISION', 'SUBDIVISION': 'SUBDIVISION', '3': 'UNIT', 'UNIT': 'UNIT' };
+
+            return {
+                id: String(filter.id || ''),
+                type: TYPE_MAP[String(typeRaw)] || String(typeRaw || 'UNIT'),
+                dimension,
+                value,
+                impressions: Number(row.metrics?.impressions || 0),
+                clicks: Number(row.metrics?.clicks || 0),
+                cost,
+                conversions,
+                conversionValue,
+                roas: cost > 0 ? conversionValue / cost : null,
+                cpa: conversions > 0 ? cost / conversions : null,
+            };
+        });
+    } catch (error) {
+        logApiError('getPMaxListingGroups', error);
+        return [];
+    }
+}
+
+// Display Ad Assets (Responsive Display Ads)
+export async function getDisplayAdAssets(
+    refreshToken: string,
+    customerId: string,
+    adGroupId: string,
+    dateRange?: DateRange
+): Promise<any[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+
+    try {
+        const query = `
+            SELECT
+                ad_group_ad_asset_view.field_type,
+                ad_group_ad_asset_view.performance_label,
+                ad_group_ad_asset_view.enabled,
+                asset.id,
+                asset.name,
+                asset.type,
+                asset.text_asset.text,
+                asset.image_asset.full_size.url,
+                asset.youtube_video_asset.youtube_video_id
+            FROM ad_group_ad_asset_view
+            WHERE ad_group.id = ${adGroupId}
+            AND ad_group_ad_asset_view.enabled = TRUE
+            ${dateFilter}
+            LIMIT 200
+        `;
+
+        const result = await customer.query(query);
+
+        return result.map((row: any) => ({
+            id: String(row.asset?.id || ''),
+            fieldType: String(row.ad_group_ad_asset_view?.field_type || 'UNKNOWN'),
+            performanceLabel: String(row.ad_group_ad_asset_view?.performance_label || 'UNRATED'),
+            name: row.asset?.name || '',
+            type: String(row.asset?.type || ''),
+            text: row.asset?.text_asset?.text || '',
+            imageUrl: row.asset?.image_asset?.full_size?.url || '',
+            youtubeVideoId: row.asset?.youtube_video_asset?.youtube_video_id || '',
+        }));
+    } catch (error: unknown) {
+        logApiError('getDisplayAdAssets', error);
+        return [];
+    }
+}
 
 
 

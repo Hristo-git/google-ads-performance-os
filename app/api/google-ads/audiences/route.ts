@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     let customerId = searchParams.get('customerId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const adGroupId = searchParams.get('adGroupId') || undefined;
 
     if (!startDate || !endDate) {
         return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -50,7 +51,8 @@ export async function GET(request: Request) {
             customerId,
             dateRange,
             undefined,
-            session.user.id
+            session.user.id,
+            adGroupId
         );
 
         return NextResponse.json({ audiences });
