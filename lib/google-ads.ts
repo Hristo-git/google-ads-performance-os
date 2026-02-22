@@ -1282,7 +1282,7 @@ export async function getListingGroups(
                     cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
                     roas: cost > 0 ? conversionValue / cost : null,
                     cpa: conversions > 0 ? cost / conversions : null,
-                    searchImpressionShare: row.metrics?.search_impression_share ?? null,
+                    searchImpressionShare: null,
                     searchLostISRank: null,
                     searchLostISBudget: null,
                 };
@@ -2754,8 +2754,7 @@ export async function getAudiencePerformance(
                     metrics.conversions,
                     metrics.conversions_value,
                     metrics.average_cpc,
-                    metrics.ctr,
-                    metrics.search_impression_share
+                    metrics.ctr
                 FROM ad_group_audience_view
                 WHERE campaign.status != 'REMOVED'
                 AND ad_group.status != 'REMOVED'
@@ -2779,8 +2778,7 @@ export async function getAudiencePerformance(
                     metrics.conversions,
                     metrics.conversions_value,
                     metrics.average_cpc,
-                    metrics.ctr,
-                    metrics.search_impression_share
+                    metrics.ctr
                 FROM campaign_audience_view
                 WHERE campaign.status != 'REMOVED'
                 ${dateFilter}
@@ -2894,7 +2892,7 @@ export async function getAudiencePerformance(
                     cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
                     roas: cost > 0 ? conversionValue / cost : null,
                     cpa: conversions > 0 ? cost / conversions : null,
-                    searchImpressionShare: row.metrics?.search_impression_share ?? null,
+                    searchImpressionShare: null,
                     searchLostISRank: null,
                     searchLostISBudget: null,
                 };
