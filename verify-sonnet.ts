@@ -1,6 +1,19 @@
-import anthropic from './lib/anthropic';
+import Anthropic from '@anthropic-ai/sdk';
+import * as dotenv from 'dotenv';
+import path from 'path';
+
+// Load .env.local
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 async function verifySonnet() {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+        console.error('❌ ERROR: ANTHROPIC_API_KEY not found in .env.local');
+        return;
+    }
+
+    const anthropic = new Anthropic({ apiKey });
+
     console.log("Testing Anthropic Connection...");
     try {
         const response = await anthropic.messages.create({

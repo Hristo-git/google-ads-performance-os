@@ -1,8 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { authOptions } from "@/lib/auth-options";
+import * as dotenv from 'dotenv';
+import path from 'path';
 
-// Hardcoded for testing script
-const apiKey = process.env.ANTHROPIC_API_KEY || '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';
+// Load .env.local
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
+const apiKey = process.env.ANTHROPIC_API_KEY;
+
+if (!apiKey) {
+    console.error('❌ ERROR: ANTHROPIC_API_KEY not found in .env.local');
+    process.exit(1);
+}
 
 const anthropic = new Anthropic({ apiKey });
 
