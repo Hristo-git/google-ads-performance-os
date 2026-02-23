@@ -51,7 +51,7 @@ export interface AnalysisContext {
     // New diagnostics
     assetPerformance: AssetPerformance[];
     changeEvents: ChangeEvent[];
-    conversionDiagnostics: ConversionAction[];
+    conversionDiagnostics: ConversionActionBreakdown[];
     pmaxProducts: PMaxProductPerformance[];
     // Core data for synthesis
     campaigns: any[];
