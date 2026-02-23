@@ -11,6 +11,7 @@ import {
     PlacementPerformance, DemographicPerformance, TimeAnalysisPerformance, AssetPerformance, AudiencePerformance
 } from "@/types/google-ads";
 import { ACCOUNTS, DEFAULT_ACCOUNT_ID } from "../config/accounts";
+import { fmtNum, fmtInt, fmtEuro, fmtPct, fmtX } from '@/lib/format';
 import { processNGrams } from "@/lib/n-gram";
 import AIAnalysisModal from "./AIAnalysisModal";
 import StrategicInsights from "./StrategicInsights";
@@ -105,7 +106,7 @@ const MetricCell = ({ value, format, previous, invertColor = false }: { value: n
             <span>{format(value)}</span>
             {delta !== null && Math.abs(delta) > 0.5 && (
                 <span className={`text-[10px] ${colorClass} flex items-center`}>
-                    {arrow} {Math.abs(delta).toFixed(0)}%
+                    {arrow} {fmtNum(Math.abs(delta), 0)}%
                 </span>
             )}
         </div>
@@ -130,28 +131,28 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                     <td className="px-4 py-3">
                         <span className="bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded italic">Total</span>
                     </td>
-                    <td className="px-4 py-3 text-right">{(metrics.impressions || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right">{(metrics.clicks || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right">€{metrics.cost?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
-                    <td className="px-4 py-3 text-right">{(metrics.conversions || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtEuro(metrics.cost || 0, 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
                     <td className="px-4 py-3 text-right">
                         {metrics.roas != null ? (
                             <span className={`font-medium ${metrics.roas >= 3 ? 'text-emerald-400' : metrics.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
-                                {metrics.roas.toFixed(2)}x
+                                {fmtX(metrics.roas)}
                             </span>
                         ) : <span className="text-slate-500">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                         {metrics.searchImpressionShare != null ? (
                             <span className={`font-medium ${getISColor(metrics.searchImpressionShare)}`}>
-                                {(metrics.searchImpressionShare * 100).toFixed(1)}%
+                                {fmtPct(metrics.searchImpressionShare * 100)}
                             </span>
                         ) : <span className="text-slate-500">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                         {metrics.searchLostISRank != null ? (
                             <span className={`font-medium ${metrics.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                {(metrics.searchLostISRank * 100).toFixed(1)}%
+                                {fmtPct(metrics.searchLostISRank * 100)}
                             </span>
                         ) : <span className="text-slate-500">—</span>}
                     </td>
@@ -178,30 +179,30 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
 
             {(layout === 'search' || layout === 'pmax' || layout === 'adgroup') && (
                 <>
-                    <td className="px-4 py-3 text-right">€{metrics.cost?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
-                    <td className="px-4 py-3 text-right">{(metrics.ctr * 100).toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-right">{fmtEuro(metrics.cost || 0, 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtPct(metrics.ctr * 100, 2)}</td>
                 </>
             )}
 
             {layout === 'pmax' && (
                 <>
-                    <td className="px-4 py-3 text-right">{(metrics.impressions || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right">{(metrics.clicks || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right">€{metrics.cost?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
-                    <td className="px-4 py-3 text-right">{(metrics.conversions || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right text-emerald-400 font-semibold">€{metrics.conversionValue?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || 0}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{(metrics.roas || 0).toFixed(2)}x</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtEuro(metrics.cost || 0, 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.conversions || 0)}</td>
+                    <td className="px-4 py-3 text-right text-emerald-400 font-semibold">{fmtEuro(metrics.conversionValue || 0, 0)}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{fmtX(metrics.roas || 0)}</td>
                     <td className="px-4 py-3 text-center">
                         {metrics.searchImpressionShare != null ? (
                             <span className={`font-medium ${getISColor(metrics.searchImpressionShare)}`}>
-                                {(metrics.searchImpressionShare * 100).toFixed(1)}%
+                                {fmtPct(metrics.searchImpressionShare * 100)}
                             </span>
                         ) : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
                         {metrics.searchLostISRank != null ? (
                             <span className={`font-medium ${metrics.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                {(metrics.searchLostISRank * 100).toFixed(1)}%
+                                {fmtPct(metrics.searchLostISRank * 100)}
                             </span>
                         ) : '—'}
                     </td>
@@ -222,12 +223,12 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
             {layout === 'search' && (
                 <>
                     <td className="px-4 py-3 text-right text-emerald-400">
-                        {metrics.searchImpressionShare ? `${(metrics.searchImpressionShare * 100).toFixed(1)}%` : '—'}
+                        {metrics.searchImpressionShare ? fmtPct(metrics.searchImpressionShare * 100) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-400">
-                        {metrics.searchLostISRank ? `${(metrics.searchLostISRank * 100).toFixed(1)}%` : '—'}
+                        {metrics.searchLostISRank ? fmtPct(metrics.searchLostISRank * 100) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right">{(metrics.avgQualityScore || 0).toFixed(1)}</td>
+                    <td className="px-4 py-3 text-right">{fmtNum(metrics.avgQualityScore || 0, 1)}</td>
                     <td className="px-4 py-3 text-right">
                         {metrics.adStrength ? (
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase ${getAdStrengthColor(metrics.adStrength)}`}>
@@ -241,21 +242,21 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
 
             {layout === 'adgroup' && (
                 <>
-                    <td className="px-4 py-3 text-right">{metrics.conversions?.toLocaleString('en-US') || 0}</td>
+                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
                     <td className="px-4 py-3 text-right text-slate-300">
                         {metrics.clicks > 0 && metrics.conversions > 0
-                            ? `${(metrics.conversions / metrics.clicks * 100).toFixed(2)}%`
+                            ? fmtPct(metrics.conversions / metrics.clicks * 100, 2)
                             : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-emerald-400">
-                        {metrics.conversionValue > 0 ? `€${metrics.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}
+                        {metrics.conversionValue > 0 ? fmtEuro(metrics.conversionValue, 0) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right">{metrics.roas?.toFixed(2) || 0}x</td>
+                    <td className="px-4 py-3 text-right">{fmtX(metrics.roas || 0)}</td>
                     <td className="px-4 py-3 text-right text-emerald-400">
-                        {metrics.searchImpressionShare ? `${(metrics.searchImpressionShare * 100).toFixed(1)}%` : '—'}
+                        {metrics.searchImpressionShare ? fmtPct(metrics.searchImpressionShare * 100) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-400">
-                        {metrics.searchLostISRank ? `${(metrics.searchLostISRank * 100).toFixed(1)}%` : '—'}
+                        {metrics.searchLostISRank ? fmtPct(metrics.searchLostISRank * 100) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                         {metrics.adStrength ? (
@@ -1486,8 +1487,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                     {cat} <span className="text-slate-500 text-[10px items-center]">{stats.count}</span>
                                                 </span>
                                                 <span className="text-slate-400 font-mono">
-                                                    {placementsMetricFilter === 'cost' ? `€${stats.value.toFixed(0)}` : stats.value.toLocaleString()}
-                                                    <span className="ml-1.5 text-slate-500">({pct.toFixed(1)}%)</span>
+                                                    {placementsMetricFilter === 'cost' ? fmtEuro(stats.value, 0) : fmtInt(stats.value)}
+                                                    <span className="ml-1.5 text-slate-500">({fmtPct(pct)})</span>
                                                 </span>
                                             </div>
                                             <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
@@ -1520,7 +1521,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 </div>
                                 <div className="mt-3 pt-3 border-t border-slate-800/50">
                                     <div className="text-lg font-bold text-white font-mono">
-                                        {placementsMetricFilter === 'cost' ? `€${p.cost.toFixed(1)}` : p[placementsMetricFilter].toLocaleString()}
+                                        {placementsMetricFilter === 'cost' ? fmtEuro(p.cost, 1) : fmtInt(p[placementsMetricFilter])}
                                     </div>
                                     <div className="text-[10px] text-slate-500 uppercase mt-0.5">Top Spender</div>
                                 </div>
@@ -1563,17 +1564,17 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                             </td>
                                             <td className="px-4 py-3.5 text-right">
                                                 <div className="flex flex-col items-end gap-1">
-                                                    <span className="text-xs font-mono text-slate-400">{share.toFixed(1)}%</span>
+                                                    <span className="text-xs font-mono text-slate-400">{fmtPct(share)}</span>
                                                     <div className="w-12 h-1 bg-slate-700 rounded-full overflow-hidden">
                                                         <div className="h-full bg-indigo-500/50" style={{ width: `${share}%` }}></div>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3.5 text-right font-mono text-xs">{p.impressions.toLocaleString()}</td>
-                                            <td className="px-4 py-3.5 text-right font-mono text-xs">{p.clicks.toLocaleString()}</td>
-                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-200">€{p.cost.toFixed(2)}</td>
-                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-400">{(p.ctr * 100).toFixed(2)}%</td>
-                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-emerald-400 font-medium">{p.conversions.toLocaleString()}</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs">{fmtInt(p.impressions)}</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs">{fmtInt(p.clicks)}</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-200">{fmtEuro(p.cost)}</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-400">{fmtPct(p.ctr * 100, 2)}</td>
+                                            <td className="px-4 py-3.5 text-right font-mono text-xs text-emerald-400 font-medium">{fmtNum(p.conversions)}</td>
                                             <td className="px-4 py-3.5 text-right">
                                                 <button
                                                     onClick={(e) => {
@@ -1659,18 +1660,18 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                         style={{ width: `${percentage}%` }}
                                     >
                                         <span className="text-[10px] font-bold text-white whitespace-nowrap drop-shadow-sm">
-                                            {demoMetricFilter === 'cost' ? `€${val.toFixed(2)}` : val.toLocaleString()}
+                                            {demoMetricFilter === 'cost' ? fmtEuro(val) : fmtInt(val)}
                                         </span>
                                     </div>
                                 </div>
                                 <div className="w-32 flex flex-col items-end gap-0.5">
                                     <div className="text-[11px] text-slate-300 font-mono tracking-tighter">
-                                        {d.impressions.toLocaleString()} <span className="text-slate-600">imp</span>
+                                        {fmtInt(d.impressions)} <span className="text-slate-600">imp</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         {roas > 0 && (
                                             <span className={`text-[10px] font-bold ${roas > 2 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                                {roas.toFixed(1)}x <span className="text-[8px] opacity-70">ROAS</span>
+                                                {fmtNum(roas, 1)}x <span className="text-[8px] opacity-70">ROAS</span>
                                             </span>
                                         )}
                                     </div>
@@ -1737,7 +1738,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             </svg>
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                                 <span className="text-lg font-black text-white leading-none">
-                                    {demoMetricFilter === 'cost' ? `€${totalVal.toFixed(0)}` : totalVal.toLocaleString()}
+                                    {demoMetricFilter === 'cost' ? fmtEuro(totalVal, 0) : fmtInt(totalVal)}
                                 </span>
                                 <span className="text-[8px] text-slate-500 uppercase tracking-tighter mt-1 font-bold">
                                     total {demoMetricFilter}
@@ -1760,10 +1761,10 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <span className="text-[11px] font-medium text-slate-500 w-8 text-right">
-                                                {percent.toFixed(0)}%
+                                                {fmtPct(percent, 0)}
                                             </span>
                                             <span className="text-[11px] font-bold text-slate-300 w-12 text-right">
-                                                {demoMetricFilter === 'cost' ? `€${val.toFixed(0)}` : val.toLocaleString()}
+                                                {demoMetricFilter === 'cost' ? fmtEuro(val, 0) : fmtInt(val)}
                                             </span>
                                         </div>
                                     </div>
@@ -1782,7 +1783,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                     <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">{d.dimension}</div>
                                     <div className="flex items-baseline gap-1.5">
                                         <span className="text-sm font-black text-slate-200">
-                                            {roas > 0 ? `${roas.toFixed(2)}x` : `${cvr.toFixed(1)}%`}
+                                            {roas > 0 ? fmtX(roas) : fmtPct(cvr)}
                                         </span>
                                         <span className="text-[8px] font-bold text-slate-600 uppercase">
                                             {roas > 0 ? 'ROAS' : 'Conv Rate'}
@@ -1886,12 +1887,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                 {items.sort((a, b) => b.cost - a.cost).map((d, i) => (
                                                     <tr key={i} className="hover:bg-slate-700/20 transition-colors">
                                                         <td className="px-6 py-3 font-medium text-slate-200">{d.dimension}</td>
-                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">{d.impressions.toLocaleString()}</td>
-                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">{d.clicks.toLocaleString()}</td>
-                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">€{d.cost.toFixed(2)}</td>
-                                                        <td className="px-6 py-3 text-right tabular-nums font-semibold text-emerald-400/80">{d.conversions.toLocaleString()}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">{fmtInt(d.impressions)}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">{fmtInt(d.clicks)}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums text-slate-400">{fmtEuro(d.cost)}</td>
+                                                        <td className="px-6 py-3 text-right tabular-nums font-semibold text-emerald-400/80">{fmtNum(d.conversions)}</td>
                                                         <td className="px-6 py-3 text-right tabular-nums text-slate-500">
-                                                            {d.clicks > 0 ? ((d.conversions / d.clicks) * 100).toFixed(1) : 0}%
+                                                            {d.clicks > 0 ? fmtPct((d.conversions / d.clicks) * 100) : '0%'}
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -1930,11 +1931,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             <tr key={i} className="hover:bg-slate-700/30 transition-colors">
                                 <td className="px-4 py-4">{a.audienceName}</td>
                                 <td className="px-4 py-4 text-xs text-slate-400 capitalize">{a.audienceType?.toLowerCase().replace(/_/g, ' ') || 'Other'}</td>
-                                <td className="px-4 py-4 text-right">{a.impressions.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">{a.clicks.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">€{a.cost.toFixed(2)}</td>
-                                <td className="px-4 py-4 text-right">{a.roas ? `${a.roas.toFixed(2)}x` : '—'}</td>
-                                <td className="px-4 py-4 text-right">{a.conversions.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">{fmtInt(a.impressions)}</td>
+                                <td className="px-4 py-4 text-right">{fmtInt(a.clicks)}</td>
+                                <td className="px-4 py-4 text-right">{fmtEuro(a.cost)}</td>
+                                <td className="px-4 py-4 text-right">{a.roas ? fmtX(a.roas) : '—'}</td>
+                                <td className="px-4 py-4 text-right">{fmtNum(a.conversions)}</td>
                             </tr>
                         ))
                     )}
@@ -1962,10 +1963,10 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         dgTimeAnalysis.map((t, i) => (
                             <tr key={i} className="hover:bg-slate-700/30 transition-colors">
                                 <td className="px-4 py-4">{t.period}:00</td>
-                                <td className="px-4 py-4 text-right">{t.impressions.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">{t.clicks.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">€{t.cost.toFixed(2)}</td>
-                                <td className="px-4 py-4 text-right">{t.conversions.toLocaleString()}</td>
+                                <td className="px-4 py-4 text-right">{fmtInt(t.impressions)}</td>
+                                <td className="px-4 py-4 text-right">{fmtInt(t.clicks)}</td>
+                                <td className="px-4 py-4 text-right">{fmtEuro(t.cost)}</td>
+                                <td className="px-4 py-4 text-right">{fmtNum(t.conversions)}</td>
                             </tr>
                         ))
                     )}
@@ -2024,8 +2025,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                         {(a.fieldType && ASSET_FIELD_TYPE_LABELS[a.fieldType]) || (a.type && ASSET_FIELD_TYPE_LABELS[a.type]) || a.fieldType || a.type || '—'}
                                     </span>
                                 </td>
-                                <td className="px-4 py-4 text-right">{a.impressions.toLocaleString()}</td>
-                                <td className="px-4 py-4 text-right">{(a.ctr * 100).toFixed(2)}%</td>
+                                <td className="px-4 py-4 text-right">{fmtInt(a.impressions)}</td>
+                                <td className="px-4 py-4 text-right">{fmtPct(a.ctr * 100, 2)}</td>
                                 <td className="px-4 py-4 text-right">
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] ${a.performanceLabel === 'EXCELLENT' ? 'bg-emerald-500/20 text-emerald-400' :
                                         a.performanceLabel === 'GOOD' ? 'bg-blue-500/20 text-blue-400' :
@@ -2063,38 +2064,38 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-slate-700/30 rounded-lg p-4">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Spend</div>
-                        <div className="text-xl font-bold text-white">€{camp.cost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-xl font-bold text-white">{fmtEuro(camp.cost, 0)}</div>
                     </div>
                     <div className="bg-slate-700/30 rounded-lg p-4">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">ROAS</div>
                         <div className={`text-xl font-bold ${camp.roas != null ? (camp.roas >= (camp.targetRoas || 3) ? 'text-emerald-400' : camp.roas >= 1 ? 'text-amber-400' : 'text-red-400') : 'text-slate-400'}`}>
-                            {camp.roas != null ? `${camp.roas.toFixed(2)}x` : '—'}
+                            {camp.roas != null ? fmtX(camp.roas) : '—'}
                         </div>
-                        {camp.targetRoas ? <div className="text-xs text-slate-500 mt-1">Target: {camp.targetRoas.toFixed(2)}x</div> : null}
+                        {camp.targetRoas ? <div className="text-xs text-slate-500 mt-1">Target: {fmtX(camp.targetRoas)}</div> : null}
                     </div>
                     <div className="bg-slate-700/30 rounded-lg p-4">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Conv. Value</div>
-                        <div className="text-xl font-bold text-emerald-400">€{(camp.conversionValue || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-xl font-bold text-emerald-400">{fmtEuro(camp.conversionValue || 0, 0)}</div>
                     </div>
                     <div className="bg-slate-700/30 rounded-lg p-4">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Conversions</div>
-                        <div className="text-xl font-bold text-white">{camp.conversions.toLocaleString()}</div>
+                        <div className="text-xl font-bold text-white">{fmtNum(camp.conversions)}</div>
                     </div>
                     <div className="bg-slate-700/30 rounded-lg p-4">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Impressions</div>
-                        <div className="text-xl font-bold text-white">{camp.impressions.toLocaleString()}</div>
+                        <div className="text-xl font-bold text-white">{fmtInt(camp.impressions)}</div>
                     </div>
                     <div className="bg-slate-700/30 rounded-lg p-4">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Clicks</div>
-                        <div className="text-xl font-bold text-white">{camp.clicks.toLocaleString()}</div>
+                        <div className="text-xl font-bold text-white">{fmtInt(camp.clicks)}</div>
                     </div>
                     <div className="bg-slate-700/30 rounded-lg p-4">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">CTR</div>
-                        <div className="text-xl font-bold text-white">{(camp.ctr * 100).toFixed(2)}%</div>
+                        <div className="text-xl font-bold text-white">{fmtPct(camp.ctr * 100, 2)}</div>
                     </div>
                     <div className="bg-slate-700/30 rounded-lg p-4">
                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Avg. CPC</div>
-                        <div className="text-xl font-bold text-white">€{camp.cpc.toFixed(2)}</div>
+                        <div className="text-xl font-bold text-white">{fmtEuro(camp.cpc)}</div>
                     </div>
                 </div>
 
@@ -2110,7 +2111,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         <div className="bg-slate-700/30 rounded-lg p-4">
                             <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Search IS</div>
                             <div className={`text-xl font-bold ${getISColor(camp.searchImpressionShare)}`}>
-                                {(camp.searchImpressionShare * 100).toFixed(1)}%
+                                {fmtPct(camp.searchImpressionShare * 100)}
                             </div>
                         </div>
                     )}
@@ -2118,7 +2119,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         <div className="bg-slate-700/30 rounded-lg p-4">
                             <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Lost IS (Rank)</div>
                             <div className={`text-xl font-bold ${camp.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-300'}`}>
-                                {(camp.searchLostISRank * 100).toFixed(1)}%
+                                {fmtPct(camp.searchLostISRank * 100)}
                             </div>
                         </div>
                     )}
@@ -2126,7 +2127,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         <div className="bg-slate-700/30 rounded-lg p-4">
                             <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Lost IS (Budget)</div>
                             <div className={`text-xl font-bold ${camp.searchLostISBudget > 0.15 ? 'text-amber-400' : 'text-slate-300'}`}>
-                                {(camp.searchLostISBudget * 100).toFixed(1)}%
+                                {fmtPct(camp.searchLostISBudget * 100)}
                             </div>
                         </div>
                     )}
@@ -2167,13 +2168,13 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                         <span className="text-sm text-white truncate group-hover:text-violet-300 transition-colors">{ag.name}</span>
                                     </div>
                                     <div className="flex items-center gap-5 text-xs text-slate-400 flex-shrink-0 ml-4">
-                                        <span>€{(ag.cost || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                        <span>{fmtEuro(ag.cost || 0, 0)}</span>
                                         {ag.roas != null && (
                                             <span className={`font-medium ${ag.roas >= 3 ? 'text-emerald-400' : ag.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
-                                                {ag.roas.toFixed(2)}x
+                                                {fmtX(ag.roas)}
                                             </span>
                                         )}
-                                        <span>{ag.conversions?.toFixed(1) || 0} conv.</span>
+                                        <span>{fmtNum(ag.conversions || 0, 1)} conv.</span>
                                         <span className="text-slate-600 group-hover:text-violet-400 transition-colors">→</span>
                                     </div>
                                 </button>
@@ -2623,29 +2624,29 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${(() => { const _c = navigation.level === 'adgroup' && campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = (_c as any)?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
                             <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-blue-100">Total Spend</p>
-                                <p className="text-2xl font-bold text-white mt-1">€{totalSpend.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                                <p className="text-2xl font-bold text-white mt-1">{fmtEuro(totalSpend, 0)}</p>
                             </div>
                             <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-emerald-100">Conversions</p>
-                                <p className="text-2xl font-bold text-white mt-1">{totalConversions.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                                <p className="text-2xl font-bold text-white mt-1">{fmtInt(totalConversions)}</p>
                             </div>
                             <div className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-purple-100">Conv. Value</p>
-                                <p className="text-2xl font-bold text-white mt-1">€{totalConversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                                <p className="text-2xl font-bold text-white mt-1">{fmtEuro(totalConversionValue, 0)}</p>
                             </div>
                             <div className={`rounded-xl bg-gradient-to-br p-5 shadow-lg ${totalROAS === 0 ? 'from-slate-600 to-slate-700' : 'from-pink-600 to-pink-700'}`}>
                                 <p className={`text-sm font-medium ${totalROAS === 0 ? 'text-slate-300' : 'text-pink-100'}`}>ROAS</p>
-                                <p className="text-2xl font-bold text-white mt-1">{totalROAS.toFixed(2)}x</p>
+                                <p className="text-2xl font-bold text-white mt-1">{fmtX(totalROAS)}</p>
                             </div>
                             <div className="rounded-xl bg-gradient-to-br from-violet-600 to-violet-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-violet-100">Clicks</p>
-                                <p className="text-2xl font-bold text-white mt-1">{totalClicks.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                                <p className="text-2xl font-bold text-white mt-1">{fmtInt(totalClicks)}</p>
                             </div>
                             {/* View-through Conv card — Display/Video/DG ad groups only */}
                             {navigation.level === 'adgroup' && (() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
                                 <div className="rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 p-5 shadow-lg">
                                     <p className="text-sm font-medium text-teal-100">View-through Conv.</p>
-                                    <p className="text-2xl font-bold text-white mt-1">{(currentAdGroup?.viewThroughConversions ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                                    <p className="text-2xl font-bold text-white mt-1">{fmtInt(currentAdGroup?.viewThroughConversions ?? 0)}</p>
                                     <p className="text-xs text-teal-200/70 mt-1">Saw ad, converted later</p>
                                 </div>
                             )}
@@ -2826,7 +2827,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <span className="text-xs cursor-help">
                                                                         IS:{' '}
                                                                         <span className={`font-semibold border-b border-dashed border-current ${getISColor(is)}`}>
-                                                                            {(is * 100).toFixed(1)}%
+                                                                            {fmtPct(is * 100)}
                                                                         </span>
                                                                     </span>
                                                                 </Tooltip>
@@ -2836,7 +2837,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <span className={`text-xs cursor-help ${lostRank > 0.3 ? 'text-red-400' : 'text-slate-300'}`}>
                                                                         Lost (Rank):{' '}
                                                                         <span className="font-semibold border-b border-dashed border-current">
-                                                                            {(lostRank * 100).toFixed(1)}%
+                                                                            {fmtPct(lostRank * 100)}
                                                                         </span>
                                                                     </span>
                                                                 </Tooltip>
@@ -2846,7 +2847,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <span className={`text-xs cursor-help ${lostBudget > 0.2 ? 'text-amber-400' : 'text-slate-400'}`}>
                                                                         Lost (Budget):{' '}
                                                                         <span className="font-semibold border-b border-dashed border-current">
-                                                                            {(lostBudget * 100).toFixed(1)}%
+                                                                            {fmtPct(lostBudget * 100)}
                                                                         </span>
                                                                     </span>
                                                                 </Tooltip>
@@ -2858,14 +2859,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 </span>
                                                             )}
                                                             <Tooltip text={targetRoas != null
-                                                                ? `This campaign targets ${targetRoas.toFixed(2)}x ROAS. If this is significantly above the actual achieved ROAS, Smart Bidding will skip many auctions to protect the target — causing high Lost IS (Rank) even with excellent creative quality.`
+                                                                ? `This campaign targets ${fmtX(targetRoas)} ROAS. If this is significantly above the actual achieved ROAS, Smart Bidding will skip many auctions to protect the target — causing high Lost IS (Rank) even with excellent creative quality.`
                                                                 : 'No Target ROAS is set. The campaign uses Maximize Conversion Value, bidding as high as profitable. High Lost IS (Rank) in this mode is usually due to competition, not bidding limits.'
                                                             }>
                                                                 <span className="text-xs cursor-help">
                                                                     Target ROAS:{' '}
                                                                     {targetRoas != null ? (
                                                                         <span className="font-semibold text-violet-400 border-b border-dashed border-violet-400/50">
-                                                                            {targetRoas.toFixed(2)}x
+                                                                            {fmtX(targetRoas)}
                                                                         </span>
                                                                     ) : (
                                                                         <span className="text-slate-500 border-b border-dashed border-slate-500/50">Not set</span>
@@ -3148,7 +3149,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <MetricCell
                                                                     value={item.cost}
                                                                     previous={item.previous?.cost}
-                                                                    format={(v) => `€${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+                                                                    format={(v) => fmtEuro(v, 0)}
                                                                     invertColor={true}
                                                                 />
                                                             </td>
@@ -3156,7 +3157,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <span className={`font-medium ${item.ctr >= 0.05 ? 'text-emerald-400' :
                                                                     item.ctr >= 0.02 ? 'text-amber-400' : 'text-red-400'
                                                                     }`}>
-                                                                    {(item.ctr * 100).toFixed(2)}%
+                                                                    {fmtPct(item.ctr * 100, 2)}
                                                                 </span>
                                                             </td>
                                                             {navigation.level === 'account' && (
@@ -3165,15 +3166,15 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <MetricCell
                                                                             value={item.conversions || 0}
                                                                             previous={item.previous?.conversions}
-                                                                            format={(v) => v.toLocaleString('en-US')}
+                                                                            format={(v) => fmtNum(v)}
                                                                         />
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right text-slate-400">
-                                                                        {item.clicks > 0 ? ((item.conversions || 0) / item.clicks * 100).toFixed(2) : '0.00'}%
+                                                                        {item.clicks > 0 ? fmtPct((item.conversions || 0) / item.clicks * 100, 2) : '0.00%'}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.conversionValue != null && item.conversionValue > 0 ? (
-                                                                            <span className="text-slate-200">€{item.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                                                            <span className="text-slate-200">{fmtEuro(item.conversionValue, 0)}</span>
                                                                         ) : (
                                                                             <span className="text-slate-500">—</span>
                                                                         )}
@@ -3182,7 +3183,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <div className="flex flex-col items-end">
                                                                             {item.roas != null ? (
                                                                                 <span className={`font-medium ${item.roas >= 3 ? 'text-emerald-400' : item.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
-                                                                                    {item.roas.toFixed(2)}x
+                                                                                    {fmtX(item.roas)}
                                                                                 </span>
                                                                             ) : (
                                                                                 <span className="text-slate-500">—</span>
@@ -3195,7 +3196,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                     const arrow = delta > 0 ? '↑' : '↓';
                                                                                     return (
                                                                                         <span className={`text-[10px] ${color} flex items-center`}>
-                                                                                            {arrow} {Math.abs(delta).toFixed(0)}%
+                                                                                            {arrow} {fmtNum(Math.abs(delta), 0)}%
                                                                                         </span>
                                                                                     );
                                                                                 })()
@@ -3205,11 +3206,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.searchLostISBudget != null && item.searchLostISBudget > 0.15 ? (
                                                                             <span className="text-red-400 font-medium">
-                                                                                {(item.searchLostISBudget * 100).toFixed(1)}%
+                                                                                {fmtPct(item.searchLostISBudget * 100)}
                                                                             </span>
                                                                         ) : item.searchLostISBudget != null ? (
                                                                             <span className="text-slate-400">
-                                                                                {(item.searchLostISBudget * 100).toFixed(1)}%
+                                                                                {fmtPct(item.searchLostISBudget * 100)}
                                                                             </span>
                                                                         ) : (
                                                                             <span className="text-slate-500">—</span>
@@ -3218,11 +3219,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.searchLostISRank != null && item.searchLostISRank > 0.15 ? (
                                                                             <span className="text-red-400 font-medium">
-                                                                                {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                                {fmtPct(item.searchLostISRank * 100)}
                                                                             </span>
                                                                         ) : item.searchLostISRank != null ? (
                                                                             <span className="text-slate-400">
-                                                                                {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                                {fmtPct(item.searchLostISRank * 100)}
                                                                             </span>
                                                                         ) : (
                                                                             <span className="text-slate-500">—</span>
@@ -3271,18 +3272,18 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 if (isPMax) return (
                                                                     <>
                                                                         <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
-                                                                            {((item as any).impressions ?? 0).toLocaleString()}
+                                                                            {fmtInt((item as any).impressions ?? 0)}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
-                                                                            {((item as any).clicks ?? 0).toLocaleString()}
+                                                                            {fmtInt((item as any).clicks ?? 0)}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
-                                                                            {((item as any).conversions ?? 0).toLocaleString()}
+                                                                            {fmtNum((item as any).conversions ?? 0)}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right">
                                                                             {(item as any).conversionValue > 0 ? (
                                                                                 <span className="text-emerald-400 font-mono text-xs font-semibold">
-                                                                                    €{((item as any).conversionValue as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                                                                    {fmtEuro((item as any).conversionValue as number, 0)}
                                                                                 </span>
                                                                             ) : (
                                                                                 <span className="text-slate-500 text-xs">—</span>
@@ -3293,7 +3294,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 <span className={`font-mono text-xs font-semibold ${(item as any).roas >= 3 ? 'text-emerald-400' :
                                                                                     (item as any).roas >= 1 ? 'text-amber-400' : 'text-red-400'
                                                                                     }`}>
-                                                                                    {((item as any).roas as number).toFixed(2)}x
+                                                                                    {fmtX((item as any).roas as number)}
                                                                                 </span>
                                                                             ) : (
                                                                                 <span className="text-slate-500 text-xs">—</span>
@@ -3304,7 +3305,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 const is = (item as any).searchImpressionShare ?? camp?.searchImpressionShare;
                                                                                 return is != null ? (
                                                                                     <span className={`font-mono text-xs font-medium ${getISColor(is)}`}>
-                                                                                        {(is * 100).toFixed(1)}%
+                                                                                        {fmtPct(is * 100)}
                                                                                     </span>
                                                                                 ) : (
                                                                                     <span className="text-slate-500 text-xs">—</span>
@@ -3316,7 +3317,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 const lost = (item as any).searchLostISRank ?? camp?.searchLostISRank;
                                                                                 return lost != null ? (
                                                                                     <span className={`font-mono text-xs font-medium ${lost > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                                        {(lost * 100).toFixed(1)}%
+                                                                                        {fmtPct(lost * 100)}
                                                                                     </span>
                                                                                 ) : (
                                                                                     <span className="text-slate-500 text-xs">—</span>
@@ -3353,7 +3354,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.relativeCtr != null ? (
                                                                             <span className={`font-medium ${item.relativeCtr >= 1 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                                                                {item.relativeCtr.toFixed(1)}x
+                                                                                {fmtX(item.relativeCtr)}
                                                                             </span>
                                                                         ) : (
                                                                             <span className="text-slate-500">—</span>
@@ -3366,26 +3367,26 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 return (
                                                                     <>
                                                                         <td className="px-4 py-4 text-right text-slate-300">
-                                                                            {(item.impressions || 0).toLocaleString()}
+                                                                            {fmtInt(item.impressions || 0)}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right text-slate-300">
-                                                                            {(item.clicks || 0).toLocaleString()}
+                                                                            {fmtInt(item.clicks || 0)}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right text-slate-300">
-                                                                            {(item.conversions || 0).toLocaleString()}
+                                                                            {fmtNum(item.conversions || 0, 1)}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right text-slate-400 text-xs">
-                                                                            {item.clicks > 0 ? `${(item.conversions / item.clicks * 100).toFixed(2)}%` : '—'}
+                                                                            {item.clicks > 0 ? fmtPct(item.conversions / item.clicks * 100, 2) : '—'}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right">
                                                                             {(item as any).conversionValue > 0 ? (
-                                                                                <span className="text-emerald-400 font-medium">€{((item as any).conversionValue as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                                                                <span className="text-emerald-400 font-medium">{fmtEuro((item as any).conversionValue as number, 0)}</span>
                                                                             ) : <span className="text-slate-500">—</span>}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right">
                                                                             {item.searchImpressionShare != null ? (
                                                                                 <span className={`font-medium ${getISColor(item.searchImpressionShare)}`}>
-                                                                                    {(item.searchImpressionShare * 100).toFixed(1)}%
+                                                                                    {fmtPct(item.searchImpressionShare * 100)}
                                                                                 </span>
                                                                             ) : (
                                                                                 <span className="text-slate-500">—</span>
@@ -3394,7 +3395,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <td className="px-4 py-4 text-right">
                                                                             {item.searchLostISRank != null ? (
                                                                                 <span className={`font-medium ${item.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                                    {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                                    {fmtPct(item.searchLostISRank * 100)}
                                                                                 </span>
                                                                             ) : (
                                                                                 <span className="text-slate-500">—</span>
@@ -3405,7 +3406,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 const budgetLost = (item as any).searchLostISBudget ?? camp?.searchLostISBudget;
                                                                                 return budgetLost != null ? (
                                                                                     <span className={`font-medium ${budgetLost > 0.15 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                                        {(budgetLost * 100).toFixed(1)}%
+                                                                                        {fmtPct(budgetLost * 100)}
                                                                                     </span>
                                                                                 ) : (
                                                                                     <span className="text-slate-500">—</span>
@@ -3416,12 +3417,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             {item.avgQualityScore !== null && item.avgQualityScore <= 6 ? (
                                                                                 <Tooltip text={getQSValueTip(item.avgQualityScore)}>
                                                                                     <span className={`font-medium ${getQSColor(item.avgQualityScore)} border-b border-dashed ${item.avgQualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>
-                                                                                        {item.avgQualityScore.toFixed(1)}
+                                                                                        {fmtNum(item.avgQualityScore, 1)}
                                                                                     </span>
                                                                                 </Tooltip>
                                                                             ) : (
                                                                                 <span className={`font-medium ${getQSColor(item.avgQualityScore)}`}>
-                                                                                    {item.avgQualityScore !== null ? item.avgQualityScore.toFixed(1) : '—'}
+                                                                                    {fmtNum(item.avgQualityScore, 1)}
                                                                                 </span>
                                                                             )}
                                                                             {item.keywordsWithLowQS > 0 && (
@@ -3464,29 +3465,29 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                             {navigation.level === 'adgroup' && (
                                                                 <>
                                                                     <td className="px-4 py-4 text-right text-slate-300">
-                                                                        {(item.impressions || 0).toLocaleString()}
+                                                                        {fmtInt(item.impressions || 0)}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right text-slate-300">
-                                                                        {(item.clicks || 0).toLocaleString()}
+                                                                        {fmtInt(item.clicks || 0)}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right text-slate-200 font-mono text-sm">
-                                                                        {(item.conversions || 0).toLocaleString()}
+                                                                        {fmtNum(item.conversions || 0, 1)}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right text-slate-400 text-xs">
-                                                                        {item.clicks > 0 ? `${(item.conversions / item.clicks * 100).toFixed(2)}%` : '—'}
+                                                                        {item.clicks > 0 ? fmtPct(item.conversions / item.clicks * 100, 2) : '—'}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {(item as any).conversionValue > 0 ? (
-                                                                            <span className="text-emerald-400 font-medium">€{((item as any).conversionValue as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                                                            <span className="text-emerald-400 font-medium">{fmtEuro((item as any).conversionValue as number, 0)}</span>
                                                                         ) : <span className="text-slate-500">—</span>}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right text-slate-200 font-mono text-sm">
-                                                                        {item.roas != null ? `${item.roas.toFixed(2)}x` : '—'}
+                                                                        {fmtX(item.roas)}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.searchImpressionShare != null ? (
                                                                             <span className={`font-medium ${getISColor(item.searchImpressionShare)}`}>
-                                                                                {(item.searchImpressionShare * 100).toFixed(1)}%
+                                                                                {fmtPct(item.searchImpressionShare * 100)}
                                                                             </span>
                                                                         ) : (
                                                                             <span className="text-slate-500">—</span>
@@ -3495,7 +3496,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.searchLostISRank != null ? (
                                                                             <span className={`font-medium ${item.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                                {(item.searchLostISRank * 100).toFixed(1)}%
+                                                                                {fmtPct(item.searchLostISRank * 100)}
                                                                             </span>
                                                                         ) : (
                                                                             <span className="text-slate-500">—</span>
@@ -3596,12 +3597,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <tr key={i} className="hover:bg-slate-700/30 transition-colors">
                                                                             <td className="px-4 py-3 text-slate-200">{a.audienceName}</td>
                                                                             <td className="px-4 py-3"><span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded">{a.audienceType || 'AUDIENCE'}</span></td>
-                                                                            <td className="px-4 py-3 text-right">{a.impressions.toLocaleString()}</td>
-                                                                            <td className="px-4 py-3 text-right">{a.clicks.toLocaleString()}</td>
-                                                                            <td className="px-4 py-3 text-right">€{a.cost.toFixed(2)}</td>
-                                                                            <td className="px-4 py-3 text-right">{a.conversions.toFixed(1)}</td>
-                                                                            <td className="px-4 py-3 text-right">€{a.conversionValue.toFixed(2)}</td>
-                                                                            <td className="px-4 py-3 text-right">{a.roas != null ? a.roas.toFixed(2) : '—'}</td>
+                                                                            <td className="px-4 py-3 text-right">{fmtInt(a.impressions)}</td>
+                                                                            <td className="px-4 py-3 text-right">{fmtInt(a.clicks)}</td>
+                                                                            <td className="px-4 py-3 text-right">{fmtEuro(a.cost)}</td>
+                                                                            <td className="px-4 py-3 text-right">{fmtNum(a.conversions, 1)}</td>
+                                                                            <td className="px-4 py-3 text-right">{fmtEuro(a.conversionValue)}</td>
+                                                                            <td className="px-4 py-3 text-right">{fmtX(a.roas)}</td>
                                                                         </tr>
                                                                     ))}
                                                                 </tbody>
@@ -3633,10 +3634,10 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             {displayDemographics.filter(d => d.type === 'AGE').map((d, i) => (
                                                                                 <tr key={i} className="hover:bg-slate-700/30 transition-colors">
                                                                                     <td className="px-4 py-3 text-slate-200">{d.dimension}</td>
-                                                                                    <td className="px-4 py-3 text-right">{d.impressions.toLocaleString()}</td>
-                                                                                    <td className="px-4 py-3 text-right">{d.clicks.toLocaleString()}</td>
-                                                                                    <td className="px-4 py-3 text-right">€{d.cost.toFixed(2)}</td>
-                                                                                    <td className="px-4 py-3 text-right">{d.conversions.toFixed(1)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{fmtInt(d.impressions)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{fmtInt(d.clicks)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{fmtEuro(d.cost)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{fmtNum(d.conversions, 1)}</td>
                                                                                 </tr>
                                                                             ))}
                                                                         </tbody>
@@ -3658,10 +3659,10 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             {displayDemographics.filter(d => d.type === 'GENDER').map((d, i) => (
                                                                                 <tr key={i} className="hover:bg-slate-700/30 transition-colors">
                                                                                     <td className="px-4 py-3 text-slate-200">{d.dimension}</td>
-                                                                                    <td className="px-4 py-3 text-right">{d.impressions.toLocaleString()}</td>
-                                                                                    <td className="px-4 py-3 text-right">{d.clicks.toLocaleString()}</td>
-                                                                                    <td className="px-4 py-3 text-right">€{d.cost.toFixed(2)}</td>
-                                                                                    <td className="px-4 py-3 text-right">{d.conversions.toFixed(1)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{fmtInt(d.impressions)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{fmtInt(d.clicks)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{fmtEuro(d.cost)}</td>
+                                                                                    <td className="px-4 py-3 text-right">{fmtNum(d.conversions, 1)}</td>
                                                                                 </tr>
                                                                             ))}
                                                                         </tbody>
@@ -3778,28 +3779,28 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${lg.type === 'SUBDIVISION' ? 'bg-violet-500/20 text-violet-400' : 'bg-slate-600/50 text-slate-400'
                                                                             }`}>{lg.type}</span>
                                                                     </td>
-                                                                    <td className="px-4 py-3 text-right text-slate-300">{lg.impressions.toLocaleString()}</td>
-                                                                    <td className="px-4 py-3 text-right text-slate-300">{lg.clicks.toLocaleString()}</td>
-                                                                    <td className="px-4 py-3 text-right text-slate-200">€{lg.cost.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                                                                    <td className="px-4 py-3 text-right text-slate-300">{lg.conversions.toFixed(2)}</td>
+                                                                    <td className="px-4 py-3 text-right text-slate-300">{fmtInt(lg.impressions)}</td>
+                                                                    <td className="px-4 py-3 text-right text-slate-300">{fmtInt(lg.clicks)}</td>
+                                                                    <td className="px-4 py-3 text-right text-slate-200">{fmtEuro(lg.cost)}</td>
+                                                                    <td className="px-4 py-3 text-right text-slate-300">{fmtNum(lg.conversions)}</td>
                                                                     <td className="px-4 py-3 text-right">
                                                                         {lg.roas != null ? (
                                                                             <span className={`font-medium ${lg.roas >= 3 ? 'text-emerald-400' : lg.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
-                                                                                {lg.roas.toFixed(2)}x
+                                                                                {fmtX(lg.roas)}
                                                                             </span>
                                                                         ) : <span className="text-slate-500">—</span>}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-right">
                                                                         {lg.searchImpressionShare != null ? (
                                                                             <span className={`font-medium ${getISColor(lg.searchImpressionShare)}`}>
-                                                                                {(lg.searchImpressionShare * 100).toFixed(1)}%
+                                                                                {fmtPct(lg.searchImpressionShare * 100)}
                                                                             </span>
                                                                         ) : <span className="text-slate-500">—</span>}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-right">
                                                                         {lg.searchLostISRank != null ? (
                                                                             <span className={`font-medium ${lg.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                                {(lg.searchLostISRank * 100).toFixed(1)}%
+                                                                                {fmtPct(lg.searchLostISRank * 100)}
                                                                             </span>
                                                                         ) : <span className="text-slate-500">—</span>}
                                                                     </td>
@@ -3984,22 +3985,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             <td className="px-4 py-2 text-slate-300 text-xs">
                                                                                 Ad Group: {currentAdGroup.name} (All)
                                                                             </td>
-                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">€{currentAdGroup.cost.toFixed(2)}</td>
-                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.clicks.toLocaleString()}</td>
-                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.conversions.toFixed(1)}</td>
-                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.cpa != null ? `€${currentAdGroup.cpa.toFixed(2)}` : '—'}</td>
+                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{fmtEuro(currentAdGroup.cost)}</td>
+                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{fmtInt(currentAdGroup.clicks)}</td>
+                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{fmtNum(currentAdGroup.conversions, 1)}</td>
+                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.cpa != null ? fmtEuro(currentAdGroup.cpa) : '—'}</td>
                                                                             <td className="px-4 py-2 text-right">
                                                                                 {currentAdGroup.searchImpressionShare != null ? (
                                                                                     <span className={`font-bold ${getISColor(currentAdGroup.searchImpressionShare)}`}>
-                                                                                        {(currentAdGroup.searchImpressionShare * 100).toFixed(1)}%
+                                                                                        {fmtPct(currentAdGroup.searchImpressionShare * 100)}
                                                                                     </span>
                                                                                 ) : '—'}
                                                                             </td>
                                                                             <td className="px-4 py-2 text-right text-slate-400 text-xs">
-                                                                                {currentAdGroup.searchLostISRank != null ? `${(currentAdGroup.searchLostISRank * 100).toFixed(1)}%` : '—'}
+                                                                                {currentAdGroup.searchLostISRank != null ? fmtPct(currentAdGroup.searchLostISRank * 100) : '—'}
                                                                             </td>
                                                                             <td className="px-4 py-2 text-center text-slate-300 font-bold">
-                                                                                {currentAdGroup.avgQualityScore?.toFixed(1) || '—'}
+                                                                                {fmtNum(currentAdGroup.avgQualityScore, 1)}
                                                                             </td>
                                                                             <td colSpan={3}></td>
                                                                         </tr>
@@ -4011,21 +4012,21 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 {kw.text}
                                                                             </td>
                                                                             <td className="px-4 py-3 text-right text-slate-300 text-sm">
-                                                                                {kw.cost > 0 ? `€${kw.cost.toFixed(2)}` : <span className="text-slate-600">—</span>}
+                                                                                {kw.cost > 0 ? fmtEuro(kw.cost) : <span className="text-slate-600">—</span>}
                                                                             </td>
                                                                             <td className="px-4 py-3 text-right text-slate-300 text-sm">
-                                                                                {kw.clicks > 0 ? kw.clicks.toLocaleString() : <span className="text-slate-600">—</span>}
+                                                                                {kw.clicks > 0 ? fmtInt(kw.clicks) : <span className="text-slate-600">—</span>}
                                                                             </td>
                                                                             <td className="px-4 py-3 text-right text-slate-300 text-sm">
-                                                                                {kw.conversions != null ? (kw.conversions === 0 ? '0' : kw.conversions.toFixed(1)) : <span className="text-slate-600">—</span>}
+                                                                                {kw.conversions != null ? (kw.conversions === 0 ? '0' : fmtNum(kw.conversions, 1)) : <span className="text-slate-600">—</span>}
                                                                             </td>
                                                                             <td className="px-4 py-3 text-right text-slate-300 text-sm">
-                                                                                {kw.conversions > 0 && kw.cost > 0 ? `€${(kw.cost / kw.conversions).toFixed(2)}` : <span className="text-slate-600">—</span>}
+                                                                                {kw.conversions > 0 && kw.cost > 0 ? fmtEuro(kw.cost / kw.conversions) : <span className="text-slate-600">—</span>}
                                                                             </td>
                                                                             <td className="px-4 py-3 text-right">
                                                                                 {kw.searchImpressionShare != null ? (
                                                                                     <span className={`font-medium ${getISColor(kw.searchImpressionShare)}`}>
-                                                                                        {(kw.searchImpressionShare * 100).toFixed(1)}%
+                                                                                        {fmtPct(kw.searchImpressionShare * 100)}
                                                                                     </span>
                                                                                 ) : (
                                                                                     <span className="text-slate-500 text-xs">—</span>
@@ -4034,7 +4035,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             <td className="px-4 py-3 text-right">
                                                                                 {kw.searchLostISRank != null ? (
                                                                                     <span className={`font-medium text-sm ${kw.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                                                        {(kw.searchLostISRank * 100).toFixed(1)}%
+                                                                                        {fmtPct(kw.searchLostISRank * 100)}
                                                                                     </span>
                                                                                 ) : (
                                                                                     <span className="text-slate-500 text-xs">—</span>
@@ -4170,12 +4171,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             <span className="text-xs text-slate-500">{typeLabel}</span>
                                                                             {/* Metrics row */}
                                                                             <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-                                                                                <span>Impr: <strong className="text-slate-200">{adImpr.toLocaleString()}</strong></span>
-                                                                                <span>Clicks: <strong className="text-slate-200">{adClicks.toLocaleString()}</strong></span>
-                                                                                <span>CTR: <strong className="text-slate-200">{(adCtr * 100).toFixed(2)}%</strong></span>
-                                                                                <span>Cost: <strong className="text-slate-200">€{adCost.toFixed(2)}</strong></span>
-                                                                                <span>Conv: <strong className="text-slate-200">{adConv === 0 ? '0' : adConv.toFixed(1)}</strong></span>
-                                                                                <span>ROAS: <strong className={adRoas ? 'text-emerald-400' : 'text-slate-400'}>{adRoas != null ? adRoas.toFixed(2) + 'x' : '—'}</strong></span>
+                                                                                <span>Impr: <strong className="text-slate-200">{fmtInt(adImpr)}</strong></span>
+                                                                                <span>Clicks: <strong className="text-slate-200">{fmtInt(adClicks)}</strong></span>
+                                                                                <span>CTR: <strong className="text-slate-200">{fmtPct(adCtr * 100, 2)}</strong></span>
+                                                                                <span>Cost: <strong className="text-slate-200">{fmtEuro(adCost)}</strong></span>
+                                                                                <span>Conv: <strong className="text-slate-200">{adConv === 0 ? '0' : fmtNum(adConv, 1)}</strong></span>
+                                                                                <span>ROAS: <strong className={adRoas ? 'text-emerald-400' : 'text-slate-400'}>{fmtX(adRoas)}</strong></span>
                                                                             </div>
                                                                         </div>
                                                                         {/* Headlines */}
@@ -4438,24 +4439,24 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                         ) : null;
                                                                                     })()}
                                                                                 </td>
-                                                                                <td className="px-4 py-3 text-right">{term.clicks.toLocaleString()}</td>
-                                                                                <td className="px-4 py-3 text-right">{term.impressions.toLocaleString()}</td>
+                                                                                <td className="px-4 py-3 text-right">{fmtInt(term.clicks)}</td>
+                                                                                <td className="px-4 py-3 text-right">{fmtInt(term.impressions)}</td>
                                                                                 <td className="px-4 py-3 text-right">
                                                                                     <span className={term.ctr >= 0.05 ? 'text-emerald-400' : ''}>
-                                                                                        {(term.ctr * 100).toFixed(2)}%
+                                                                                        {fmtPct(term.ctr * 100, 2)}
                                                                                     </span>
                                                                                 </td>
-                                                                                <td className="px-4 py-3 text-right">€{term.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                                                <td className="px-4 py-3 text-right">{fmtEuro(term.cost)}</td>
                                                                                 <td className="px-4 py-3 text-right">
                                                                                     {term.conversions > 0 ? (
-                                                                                        <span className="text-white font-medium">{term.conversions.toFixed(1)}</span>
+                                                                                        <span className="text-white font-medium">{fmtNum(term.conversions, 1)}</span>
                                                                                     ) : (
                                                                                         <span className="text-slate-600">0</span>
                                                                                     )}
                                                                                 </td>
                                                                                 <td className="px-4 py-3 text-right">
                                                                                     {term.conversions > 0 ? (
-                                                                                        `€${(term.cost / term.conversions).toFixed(2)}`
+                                                                                        fmtEuro(term.cost / term.conversions)
                                                                                     ) : (
                                                                                         <span className="text-slate-600">—</span>
                                                                                     )}
@@ -4463,22 +4464,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 <td className="px-4 py-3 text-right">
                                                                                     {term.cost > 0 ? (
                                                                                         <span className={`font-medium ${term.conversionValue / term.cost >= 4 ? 'text-emerald-400' : term.conversionValue / term.cost < 1 ? 'text-red-400' : 'text-amber-400'}`}>
-                                                                                            {(term.conversionValue / term.cost).toFixed(2)}x
+                                                                                            {fmtX(term.conversionValue / term.cost)}
                                                                                         </span>
                                                                                     ) : (
                                                                                         <span className="text-slate-600">—</span>
                                                                                     )}
                                                                                 </td>
                                                                                 <td className="px-4 py-3 text-right text-slate-400 text-xs">
-                                                                                    {term.clicks > 0 ? `${((term.conversionRate || (term.conversions / term.clicks)) * 100).toFixed(2)}%` : '—'}
+                                                                                    {term.clicks > 0 ? fmtPct((term.conversionRate || (term.conversions / term.clicks)) * 100, 2) : '—'}
                                                                                 </td>
                                                                                 <td className="px-4 py-3 text-right">
                                                                                     {term.conversionValue > 0 ? (
-                                                                                        <span className="text-emerald-400 text-xs">€{term.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                                                                                        <span className="text-emerald-400 text-xs">{fmtEuro(term.conversionValue)}</span>
                                                                                     ) : <span className="text-slate-600">—</span>}
                                                                                 </td>
                                                                                 <td className="px-4 py-3 text-right text-slate-300 text-xs">
-                                                                                    {term.averageCpc > 0 ? `€${term.averageCpc.toFixed(2)}` : '—'}
+                                                                                    {term.averageCpc > 0 ? fmtEuro(term.averageCpc) : '—'}
                                                                                 </td>
                                                                             </tr>
                                                                         ))}
@@ -4541,23 +4542,23 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         </span>
                                                                     </td>
                                                                     <td className="px-4 py-3 text-right text-slate-300 text-xs">
-                                                                        {lg.impressions > 0 ? lg.impressions.toLocaleString() : '—'}
+                                                                        {lg.impressions > 0 ? fmtInt(lg.impressions) : '—'}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-right text-slate-300 text-xs">
-                                                                        {lg.clicks > 0 ? lg.clicks.toLocaleString() : '—'}
+                                                                        {lg.clicks > 0 ? fmtInt(lg.clicks) : '—'}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-right text-slate-300 text-xs">
-                                                                        {lg.cost > 0 ? `€${lg.cost.toFixed(2)}` : '—'}
+                                                                        {lg.cost > 0 ? fmtEuro(lg.cost) : '—'}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-right text-sm">
                                                                         {lg.conversionValue > 0 ? (
-                                                                            <span className="text-emerald-400">€{lg.conversionValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                                                                            <span className="text-emerald-400">{fmtEuro(lg.conversionValue)}</span>
                                                                         ) : '—'}
                                                                     </td>
                                                                     <td className="px-4 py-3 text-right text-sm">
                                                                         {lg.roas != null ? (
                                                                             <span className={lg.roas >= 2 ? 'text-emerald-400 font-semibold' : lg.roas >= 1 ? 'text-amber-400' : 'text-red-400'}>
-                                                                                {lg.roas.toFixed(2)}x
+                                                                                {fmtX(lg.roas)}
                                                                             </span>
                                                                         ) : '—'}
                                                                     </td>

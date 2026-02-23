@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { ArrowUpDown, ChevronUp, ChevronDown, Users, Search, X } from "lucide-react";
+import { fmtInt, fmtNum, fmtEuro, fmtPct, fmtX } from '@/lib/format';
 
 interface AudiencePerformance {
     campaignId: string;
@@ -121,10 +122,6 @@ export default function AudiencesTab({
             setSortOrder('desc');
         }
     };
-
-    const formatCurrency = (val: number) => `€${val.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const formatPercent = (val: number | null) => val !== null ? `${(val * 100).toFixed(1)}%` : '—';
-    const formatNumber = (val: number) => val.toLocaleString('de-DE');
 
     const getRoasColor = (roas: number | null) => {
         if (roas === null) return 'text-slate-500';
@@ -373,26 +370,26 @@ export default function AudiencesTab({
                                             {audience.campaignName}
                                         </div>
                                     </td>
-                                    <td className="text-right text-slate-400">{formatNumber(audience.impressions)}</td>
-                                    <td className="text-right text-slate-400">{formatNumber(audience.clicks)}</td>
-                                    <td className="text-right text-slate-300">{formatCurrency(audience.cost)}</td>
-                                    <td className="text-right text-slate-300">{audience.conversions.toFixed(1)}</td>
-                                    <td className="text-right text-slate-300">{formatCurrency(audience.conversionValue)}</td>
+                                    <td className="text-right text-slate-400">{fmtInt(audience.impressions)}</td>
+                                    <td className="text-right text-slate-400">{fmtInt(audience.clicks)}</td>
+                                    <td className="text-right text-slate-300">{fmtEuro(audience.cost)}</td>
+                                    <td className="text-right text-slate-300">{fmtNum(audience.conversions, 1)}</td>
+                                    <td className="text-right text-slate-300">{fmtEuro(audience.conversionValue)}</td>
                                     <td className={`text-right font-medium ${getRoasColor(audience.roas)}`}>
-                                        {audience.roas ? audience.roas.toFixed(2) : '—'}
+                                        {fmtX(audience.roas)}
                                     </td>
                                     <td className={`text-right font-medium ${getISColor(audience.searchImpressionShare)}`}>
-                                        {formatPercent(audience.searchImpressionShare)}
+                                        {audience.searchImpressionShare != null ? fmtPct(audience.searchImpressionShare * 100, 1) : '—'}
                                     </td>
                                     <td className="text-right">
                                         {audience.searchLostISRank != null ? (
                                             <span className={`font-medium ${audience.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                {formatPercent(audience.searchLostISRank)}
+                                                {fmtPct(audience.searchLostISRank * 100, 1)}
                                             </span>
                                         ) : <span className="text-slate-500">—</span>}
                                     </td>
                                     <td className="text-right text-slate-300 pr-2">
-                                        {audience.cpa ? formatCurrency(audience.cpa) : '—'}
+                                        {audience.cpa ? fmtEuro(audience.cpa) : '—'}
                                     </td>
                                 </tr>
                             ))}
@@ -418,14 +415,14 @@ export default function AudiencesTab({
                     <div className="bg-slate-700/30 rounded-lg p-3 text-center">
                         <div className="text-lg font-bold text-slate-200">
                             {/* Total Spend */}
-                            {formatCurrency(sortedAudiences.reduce((sum, a) => sum + a.cost, 0))}
+                            {fmtEuro(sortedAudiences.reduce((sum, a) => sum + a.cost, 0))}
                         </div>
                         <div className="text-[10px] text-slate-400">{language === 'en' ? 'Total Spend' : 'Общ разход'}</div>
                     </div>
                     <div className="bg-slate-700/30 rounded-lg p-3 text-center">
                         <div className="text-lg font-bold text-slate-200">
                             {/* Total Conversions */}
-                            {sortedAudiences.reduce((sum, a) => sum + a.conversions, 0).toFixed(0)}
+                            {fmtInt(sortedAudiences.reduce((sum, a) => sum + a.conversions, 0))}
                         </div>
                         <div className="text-[10px] text-slate-400">{language === 'en' ? 'Conversions' : 'Конверсии'}</div>
                     </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
-import { Layers, TrendingUp, TrendingDown, MinusCircle, Check, BarChart2, Circle } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Layers, TrendingUp, TrendingDown, MinusCircle, Check, BarChart2, Circle, X, Maximize2 } from 'lucide-react';
 import { buildNGrams, type NGram } from '@/lib/account-health';
+import { fmtNum, fmtInt, fmtEuro, fmtX } from '@/lib/format';
 
 interface NGramInsightsProps {
     searchTerms: any[];
@@ -28,8 +29,7 @@ function roasClass(roas: number | null): string {
 }
 
 function roasText(roas: number | null) {
-    if (!roas) return '—';
-    return `${roas.toFixed(1)}x`;
+    return fmtX(roas);
 }
 
 type TabType     = 'winning' | 'wasteful';
@@ -39,17 +39,21 @@ type SortKey     = 'conversions' | 'roas' | 'cost' | 'cpa' | 'termCount';
 type ViewDisplay = 'table' | 'bubble';
 
 // ---------- Bubble chart ----------
-function BubbleChart({ data, typeFilter }: { data: (NGram & { gramType: string })[]; typeFilter: TypeFilter }) {
+function BubbleChart({ data, typeFilter, fullscreen = false }: { data: (NGram & { gramType: string })[]; typeFilter: TypeFilter; fullscreen?: boolean }) {
     const [hovered, setHovered] = useState<string | null>(null);
-    const W = 700, H = 320, PAD = 44;
 
-    const visible = data.filter(g => g.cost > 0 || g.conversions > 0).slice(0, 40);
+    const W   = fullscreen ? 1500 : 700;
+    const H   = fullscreen ? 680  : 320;
+    const PAD = fullscreen ? 68   : 44;
+    const MIN_R = fullscreen ? 10 : 6;
+    const MAX_R = fullscreen ? 52 : 28;
+
+    const visible = data.filter(g => g.cost > 0 || g.conversions > 0).slice(0, fullscreen ? 60 : 40);
     if (!visible.length) return <div className="p-8 text-center text-slate-500 italic">Няма данни за bubble chart.</div>;
 
     const maxConv  = Math.max(...visible.map(g => g.conversions), 1);
     const maxRoas  = Math.max(...visible.map(g => g.roas ?? 0), 1);
     const maxCost  = Math.max(...visible.map(g => g.cost), 1);
-    const MIN_R = 6, MAX_R = 28;
 
     const typeColor: Record<string, string> = {
         'Brand':     '#8b5cf6',
@@ -57,64 +61,77 @@ function BubbleChart({ data, typeFilter }: { data: (NGram & { gramType: string }
         'Dimension': '#f59e0b',
     };
 
-    const x  = (g: NGram) => PAD + ((g.conversions / maxConv) ** 0.6) * (W - 2 * PAD);
-    const y  = (g: NGram) => H - PAD - (((g.roas ?? 0) / maxRoas) ** 0.7) * (H - 2 * PAD);
-    const r  = (g: NGram) => MIN_R + ((g.cost / maxCost) ** 0.5) * (MAX_R - MIN_R);
+    const xPos = (g: NGram) => PAD + ((g.conversions / maxConv) ** 0.6) * (W - 2 * PAD);
+    const yPos = (g: NGram) => H - PAD - (((g.roas ?? 0) / maxRoas) ** 0.7) * (H - 2 * PAD);
+    const rPos = (g: NGram) => MIN_R + ((g.cost / maxCost) ** 0.5) * (MAX_R - MIN_R);
+
+    const fz = {
+        axis:    fullscreen ? 13 : 8,
+        label:   fullscreen ? 12 : 7,
+        hover:   fullscreen ? 14 : 8.5,
+        hover2:  fullscreen ? 12 : 7.5,
+        tooltip: fullscreen ? 160 : 110,
+        tooltipH: fullscreen ? 72 : 54,
+    };
 
     return (
         <div className="relative w-full overflow-x-auto px-4 pb-2 pt-2">
             {/* Legend */}
-            <div className="flex items-center gap-4 mb-2 text-xs text-slate-400">
+            <div className={`flex items-center gap-4 mb-3 ${fullscreen ? 'text-sm' : 'text-xs'} text-slate-400`}>
                 {Object.entries(typeColor).map(([t, c]) => (
-                    <span key={t} className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: c }} />
+                    <span key={t} className="flex items-center gap-1.5">
+                        <span className={`${fullscreen ? 'w-3 h-3' : 'w-2 h-2'} rounded-full inline-block`} style={{ backgroundColor: c }} />
                         {t}
                     </span>
                 ))}
                 <span className="ml-auto opacity-50">Размер = Spend · X = Conv · Y = ROAS</span>
             </div>
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 400, height: 260 }}>
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={fullscreen ? { height: 'calc(100vh - 200px)' } : { minWidth: 400, height: 260 }}>
                 {/* Grid */}
                 {[0.25, 0.5, 0.75, 1].map(t => (
                     <g key={t}>
                         <line x1={PAD} y1={H - PAD - t * (H - 2 * PAD)} x2={W - PAD} y2={H - PAD - t * (H - 2 * PAD)}
-                            stroke="#1e293b" strokeWidth="1" />
-                        <text x={PAD - 4} y={H - PAD - t * (H - 2 * PAD) + 3} fill="#475569" fontSize="8" textAnchor="end">
-                            {(maxRoas * t).toFixed(0)}x
+                            stroke="#1e293b" strokeWidth={fullscreen ? 1.5 : 1} />
+                        <text x={PAD - 6} y={H - PAD - t * (H - 2 * PAD) + 4} fill="#475569" fontSize={fz.axis} textAnchor="end">
+                            {fmtX(maxRoas * t)}
                         </text>
                     </g>
                 ))}
-                <text x={W / 2} y={H - 6} fill="#475569" fontSize="8" textAnchor="middle">Conversions →</text>
-                <text x={8} y={H / 2} fill="#475569" fontSize="8" textAnchor="middle" transform={`rotate(-90,8,${H / 2})`}>ROAS →</text>
+                <text x={W / 2} y={H - 8} fill="#475569" fontSize={fz.axis} textAnchor="middle">Conversions →</text>
+                <text x={12} y={H / 2} fill="#475569" fontSize={fz.axis} textAnchor="middle" transform={`rotate(-90,12,${H / 2})`}>ROAS →</text>
 
                 {/* Bubbles */}
                 {visible.map((g) => {
                     const gAny = g as any;
                     const color = typeColor[gAny.gramType] ?? '#64748b';
                     const isH = hovered === g.gram;
+                    const cx = xPos(g), cy = yPos(g), rv = rPos(g);
+                    // Clamp tooltip so it doesn't go off right edge
+                    const tipX = cx + rv + 6 + fz.tooltip > W - 10 ? cx - rv - fz.tooltip - 10 : cx + rv + 6;
+                    const tipY = Math.max(cy - 32, 8);
                     return (
                         <g key={g.gram} onMouseEnter={() => setHovered(g.gram)} onMouseLeave={() => setHovered(null)}
                             style={{ cursor: 'pointer' }}>
                             <circle
-                                cx={x(g)} cy={y(g)} r={r(g)}
+                                cx={cx} cy={cy} r={rv}
                                 fill={color} fillOpacity={isH ? 0.9 : 0.45}
-                                stroke={color} strokeWidth={isH ? 2 : 0.5} strokeOpacity={0.8}
+                                stroke={color} strokeWidth={isH ? (fullscreen ? 3 : 2) : 0.5} strokeOpacity={0.8}
                             />
-                            {(r(g) > 14 || isH) && (
-                                <text cx={x(g)} cy={y(g)} x={x(g)} y={y(g) + 3}
-                                    fill="white" fontSize={isH ? 9 : 7} textAnchor="middle" fontWeight="bold"
+                            {(rv > (fullscreen ? 18 : 14) || isH) && (
+                                <text x={cx} y={cy + 4}
+                                    fill="white" fontSize={isH ? fz.hover : fz.label} textAnchor="middle" fontWeight="bold"
                                     style={{ pointerEvents: 'none' }}>
-                                    {g.gram.length > 8 ? g.gram.slice(0, 7) + '…' : g.gram}
+                                    {g.gram.length > (fullscreen ? 12 : 8) ? g.gram.slice(0, fullscreen ? 11 : 7) + '…' : g.gram}
                                 </text>
                             )}
                             {isH && (
                                 <g>
-                                    <rect x={x(g) + r(g) + 4} y={y(g) - 28} width={110} height={54} rx="4"
-                                        fill="#0f172a" stroke={color} strokeWidth="0.5" strokeOpacity={0.6} />
-                                    <text x={x(g) + r(g) + 9} y={y(g) - 16} fill="white" fontSize="8.5" fontWeight="bold">{g.gram}</text>
-                                    <text x={x(g) + r(g) + 9} y={y(g) - 5} fill="#94a3b8" fontSize="7.5">Conv: {g.conversions} · ROAS: {roasText(g.roas)}</text>
-                                    <text x={x(g) + r(g) + 9} y={y(g) + 6} fill="#94a3b8" fontSize="7.5">Spend: €{g.cost.toFixed(0)} · {g.termCount} terms</text>
-                                    <text x={x(g) + r(g) + 9} y={y(g) + 17} fill={color} fontSize="7.5" fontWeight="bold">{gAny.gramType}</text>
+                                    <rect x={tipX} y={tipY} width={fz.tooltip} height={fz.tooltipH} rx="5"
+                                        fill="#0f172a" stroke={color} strokeWidth="1" strokeOpacity={0.7} />
+                                    <text x={tipX + 10} y={tipY + 18} fill="white" fontSize={fz.hover} fontWeight="bold">{g.gram}</text>
+                                    <text x={tipX + 10} y={tipY + 33} fill="#94a3b8" fontSize={fz.hover2}>Conv: {g.conversions} · ROAS: {roasText(g.roas)}</text>
+                                    <text x={tipX + 10} y={tipY + 47} fill="#94a3b8" fontSize={fz.hover2}>Spend: {fmtEuro(g.cost, 0)} · {g.termCount} terms</text>
+                                    <text x={tipX + 10} y={tipY + 61} fill={color} fontSize={fz.hover2} fontWeight="bold">{gAny.gramType}</text>
                                 </g>
                             )}
                         </g>
@@ -127,12 +144,21 @@ function BubbleChart({ data, typeFilter }: { data: (NGram & { gramType: string }
 
 // ---------- Main component ----------
 export default function NGramInsights({ searchTerms, loading }: NGramInsightsProps) {
-    const [activeTab, setActiveTab] = useState<TabType>('winning');
-    const [nSize,     setNSize]     = useState<SizeFilter>(0);
-    const [typeFilter,setTypeFilter]= useState<TypeFilter>('all');
-    const [sortKey,   setSortKey]   = useState<SortKey>('conversions');
-    const [viewMode,  setViewMode]  = useState<ViewDisplay>('table');
-    const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+    const [activeTab,       setActiveTab]       = useState<TabType>('winning');
+    const [nSize,           setNSize]           = useState<SizeFilter>(0);
+    const [typeFilter,      setTypeFilter]      = useState<TypeFilter>('all');
+    const [sortKey,         setSortKey]         = useState<SortKey>('conversions');
+    const [viewMode,        setViewMode]        = useState<ViewDisplay>('table');
+    const [confirmed,       setConfirmed]       = useState<Set<string>>(new Set());
+    const [bubbleFullscreen,setBubbleFullscreen]= useState(false);
+
+    // ESC key closes fullscreen
+    useEffect(() => {
+        if (!bubbleFullscreen) return;
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setBubbleFullscreen(false); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [bubbleFullscreen]);
 
     // ---- Build + classify all n-grams ----
     const allNGrams = useMemo(() => {
@@ -200,10 +226,10 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
             const topConv = kpi.top?.conversions ?? 0;
             const totalConv = allNGrams.reduce((s, g) => s + g.conversions, 0) / 3; // approx unique
             const pct = totalConv > 0 ? Math.round((topConv / totalConv) * 100) : 0;
-            return `Top pattern "${kpi.top?.gram}" drives ${topConv} conversions. Brand terms represent ${kpi.brandPct}% of spend (€${kpi.brandSpend.toFixed(0)}) vs Non-brand €${kpi.nonBrandSpend.toFixed(0)}.`;
+            return `Top pattern "${kpi.top?.gram}" drives ${topConv} conversions. Brand terms represent ${kpi.brandPct}% of spend (${fmtEuro(kpi.brandSpend, 0)}) vs Non-brand ${fmtEuro(kpi.nonBrandSpend, 0)}.`;
         } else {
             const wasted = tableData.reduce((s, g) => s + g.cost, 0);
-            return `${tableData.length} patterns wasted €${wasted.toFixed(0)} with 0 conversions. Add the highest-spend ones as negatives to recover budget.`;
+            return `${tableData.length} patterns wasted ${fmtEuro(wasted, 0)} with 0 conversions. Add the highest-spend ones as negatives to recover budget.`;
         }
     }, [activeTab, kpi, tableData, allNGrams]);
 
@@ -252,9 +278,9 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'table' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
                         <BarChart2 className="w-3.5 h-3.5" /> Table
                     </button>
-                    <button onClick={() => setViewMode('bubble')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'bubble' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
-                        <Circle className="w-3.5 h-3.5" /> Bubble
+                    <button onClick={() => { setViewMode('bubble'); setBubbleFullscreen(true); }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'bubble' ? 'bg-violet-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
+                        <Maximize2 className="w-3.5 h-3.5" /> Bubble
                     </button>
                 </div>
             </div>
@@ -274,12 +300,12 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                     <div className="bg-slate-900/70 px-4 py-3">
                         <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">Brand vs Non-brand</p>
                         <p className="text-lg font-black text-violet-400 mt-1">{kpi.brandPct}% <span className="text-slate-400 font-normal text-sm">brand</span></p>
-                        <p className="text-sm text-slate-400 mt-0.5">€{kpi.brandSpend.toFixed(0)} vs €{kpi.nonBrandSpend.toFixed(0)}</p>
+                        <p className="text-sm text-slate-400 mt-0.5">{fmtEuro(kpi.brandSpend, 0)} vs {fmtEuro(kpi.nonBrandSpend, 0)}</p>
                     </div>
                     {/* Avg ROAS */}
                     <div className="bg-slate-900/70 px-4 py-3">
                         <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">Avg ROAS</p>
-                        <p className="text-lg font-black text-emerald-400 mt-1">{kpi.avgRoas.toFixed(1)}x</p>
+                        <p className="text-lg font-black text-emerald-400 mt-1">{fmtX(kpi.avgRoas)}</p>
                         <p className="text-sm text-slate-400 mt-0.5">across {kpi.roasCount} patterns</p>
                     </div>
                     {/* Opportunity */}
@@ -380,19 +406,19 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                                             <td className="px-4 py-3 font-bold text-slate-200">{g.gram}</td>
                                             <td className="px-3 py-3">{nBadge(g.n)}</td>
                                             <td className="px-3 py-3">{typeBadge(gAny.gramType)}</td>
-                                            <td className="px-3 py-3 text-right text-slate-400 tabular-nums">{g.termCount.toLocaleString()}</td>
+                                            <td className="px-3 py-3 text-right text-slate-400 tabular-nums">{fmtInt(g.termCount)}</td>
                                             <td className="px-4 py-3 min-w-[140px]">
                                                 <div className="flex items-center gap-2">
                                                     <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden" style={{ minWidth: 60 }}>
                                                         <div className="h-full rounded-full bg-indigo-500/60"
                                                             style={{ width: `${spendShare}%` }} />
                                                     </div>
-                                                    <span className="text-slate-300 tabular-nums text-sm">€{g.cost.toFixed(0)}</span>
+                                                    <span className="text-slate-300 tabular-nums text-sm">{fmtEuro(g.cost, 0)}</span>
                                                 </div>
                                             </td>
                                             <td className="px-3 py-3 text-right">
                                                 <span className={g.conversions > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
-                                                    {g.conversions > 0 ? g.conversions.toFixed(1) : '—'}
+                                                    {g.conversions > 0 ? fmtNum(g.conversions, 1) : '—'}
                                                 </span>
                                             </td>
                                             <td className="px-3 py-3 text-right">
@@ -401,7 +427,7 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                                                 </span>
                                             </td>
                                             <td className="px-3 py-3 text-right text-slate-400 tabular-nums">
-                                                {cpa ? `€${cpa.toFixed(1)}` : '—'}
+                                                {cpa ? fmtEuro(cpa, 1) : '—'}
                                             </td>
                                             {activeTab === 'wasteful' && (
                                                 <td className="px-3 py-3">
@@ -443,6 +469,58 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                 <span>{allNGrams.length} total patterns · {tableData.length} показани</span>
                 <span>1W = unigram · 2W = bigram · 3W = trigram</span>
             </div>
+
+            {/* ── Bubble Fullscreen Overlay ─────────────────── */}
+            {bubbleFullscreen && (
+                <div className="fixed inset-0 z-[9999] bg-slate-950/97 backdrop-blur-md flex flex-col" style={{ backdropFilter: 'blur(8px)' }}>
+                    {/* Overlay header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/80 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-violet-500/10 text-violet-400 rounded-lg">
+                                <Circle className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h2 className="text-white font-black text-lg leading-none">N-Gram Bubble Chart</h2>
+                                <p className="text-slate-400 text-sm mt-0.5">X = Conversions · Y = ROAS · Размер = Spend</p>
+                            </div>
+                        </div>
+                        {/* Filters in overlay header */}
+                        <div className="flex items-center gap-3 text-sm">
+                            <span className="text-slate-500">Размер:</span>
+                            {([0, 1, 2, 3] as SizeFilter[]).map(s => (
+                                <button key={s} onClick={() => setNSize(s)}
+                                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${nSize === s ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300 bg-slate-800'}`}>
+                                    {s === 0 ? 'ALL' : `${s}W`}
+                                </button>
+                            ))}
+                            <div className="w-px h-5 bg-slate-700 mx-1" />
+                            <span className="text-slate-500">Тип:</span>
+                            {(['all', 'Brand', 'Non-brand', 'Dimension'] as TypeFilter[]).map(t => (
+                                <button key={t} onClick={() => setTypeFilter(t)}
+                                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${typeFilter === t
+                                        ? t === 'Brand' ? 'bg-violet-600 text-white' : t === 'Non-brand' ? 'bg-slate-600 text-white' : t === 'Dimension' ? 'bg-amber-600 text-white' : 'bg-slate-600 text-white'
+                                        : 'text-slate-500 hover:text-slate-300 bg-slate-800'}`}>
+                                    {t === 'all' ? 'All' : t}
+                                </button>
+                            ))}
+                            <div className="w-px h-5 bg-slate-700 mx-1" />
+                            <button
+                                onClick={() => { setBubbleFullscreen(false); setViewMode('table'); }}
+                                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-lg text-sm font-bold transition-all">
+                                <X className="w-4 h-4" /> Затвори
+                            </button>
+                        </div>
+                    </div>
+                    {/* Chart fills remaining height */}
+                    <div className="flex-1 flex flex-col justify-center px-6 pb-4 min-h-0">
+                        <BubbleChart data={tableData as any} typeFilter={typeFilter} fullscreen />
+                    </div>
+                    {/* ESC hint */}
+                    <div className="shrink-0 px-6 pb-3 text-xs text-slate-700 text-center">
+                        Натисни ESC за затваряне · {tableData.length} patterns
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

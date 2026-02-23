@@ -1,64 +1,72 @@
 
-import { GoogleAdsApi } from 'google-ads-api';
+import { GoogleAdsApi, enums } from "google-ads-api";
 import * as dotenv from 'dotenv';
-import { resolve } from 'path';
+import path from 'path';
 
-// Load environment variables from .env.local
-const envPath = resolve(process.cwd(), '.env.local');
-dotenv.config({ path: envPath });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
-async function debugDisplayNameSelection() {
-    console.log("Starting Display Name Selection Debug...");
+async function checkAccount(client: GoogleAdsApi, refresh_token: string, customer_id: string, name: string) {
+    console.log(`\n🔍 Checking account: ${name} (${customer_id})...`);
+    const customer = client.Customer({
+        customer_id, refresh_token,
+        login_customer_id: "3151945525"
+    });
 
-    const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
-    const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_ADS_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
-    const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || process.env.GOOGLE_ADS_CUSTOMER_ID;
+    try {
+        console.log("  Checking ad_group_audience_view...");
+        const results = await customer.query(`
+            SELECT
+                ad_group_criterion.display_name,
+                metrics.impressions
+            FROM ad_group_audience_view
+            WHERE segments.date DURING LAST_30_DAYS
+            AND metrics.impressions > 0
+            LIMIT 5
+        `);
+        console.log(`  ✅ Ad Group Audiences: ${results.length}`);
 
-    // Videnov.BG - EURO (Active Account)
-    const customerId = "5334827744";
+        console.log("  Checking campaign_audience_view...");
+        const campaignResults = await customer.query(`
+            SELECT
+                campaign_criterion.display_name,
+                metrics.impressions
+            FROM campaign_audience_view
+            WHERE segments.date DURING LAST_30_DAYS
+            AND metrics.impressions > 0
+            LIMIT 5
+        `);
+        console.log(`  ✅ Campaign Audiences: ${campaignResults.length}`);
 
-    if (!refreshToken || !clientId || !clientSecret || !developerToken) {
+        if (results.length === 0 && campaignResults.length === 0) {
+            console.log("  Checking raw ad_group_criterion (no metrics filter)...");
+            const raw = await customer.query(`
+                SELECT ad_group_criterion.id, ad_group_criterion.type 
+                FROM ad_group_criterion 
+                WHERE ad_group_criterion.type IN ('USER_LIST', 'USER_INTEREST', 'CUSTOM_AUDIENCE', 'COMBINED_AUDIENCE')
+                LIMIT 5
+            `);
+            console.log(`  Found ${raw.length} audience-type criteria totals.`);
+        }
+    } catch (e: any) {
+        console.error(`  ❌ Failed: ${e.message}`);
+    }
+}
+
+async function main() {
+    const client_id = process.env.GOOGLE_CLIENT_ID;
+    const client_secret = process.env.GOOGLE_CLIENT_SECRET;
+    const developer_token = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+    const refresh_token = process.env.GOOGLE_ADS_REFRESH_TOKEN;
+
+    if (!client_id || !client_secret || !developer_token || !refresh_token) {
         console.error("Missing env vars");
         return;
     }
 
-    const client = new GoogleAdsApi({
-        client_id: clientId,
-        client_secret: clientSecret,
-        developer_token: developerToken,
-    });
+    const client = new GoogleAdsApi({ client_id, client_secret, developer_token });
 
-    const customer = client.Customer({
-        customer_id: customerId,
-        login_customer_id: loginCustomerId?.replace(/-/g, ""),
-        refresh_token: refreshToken,
-    });
-
-    const PERIOD = "LAST_30_DAYS";
-
-    try {
-        console.log(`\n=== Testing ad_group_criterion.display_name in ad_group_audience_view ===`);
-        const adGroupResults = await customer.query(`
-                SELECT
-                    ad_group_criterion.criterion_id,
-                    ad_group_criterion.type,
-                    ad_group_criterion.display_name, 
-                    metrics.impressions
-                FROM ad_group_audience_view
-                WHERE segments.date DURING ${PERIOD}
-                LIMIT 5
-        `);
-        console.log(`Results: ${adGroupResults.length}`);
-        if (adGroupResults.length > 0) {
-            console.log("Sample Row:", JSON.stringify(adGroupResults[0], null, 2));
-        }
-
-    } catch (e: any) {
-        console.error("Query Failed:", e.message || e);
-        if (e.errors) console.error(JSON.stringify(e.errors, null, 2));
-    }
+    await checkAccount(client, refresh_token, "5334827744", "Videnov.BG - EURO");
+    await checkAccount(client, refresh_token, "8749402256", "Videnov.BG");
 }
 
-debugDisplayNameSelection();
+main();

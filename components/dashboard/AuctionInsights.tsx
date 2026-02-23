@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, TrendingUp } from 'lucide-react';
+import { fmtPct } from '@/lib/format';
 
 interface AuctionInsightsRow {
     domain: string;
@@ -135,12 +136,12 @@ export function AuctionInsights({ customerId, dateRange, campaignIds }: AuctionI
                         {data.map((row, idx) => (
                             <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
                                 <td className="px-6 py-4 font-medium text-slate-200">{row.domain}</td>
-                                <td className="px-6 py-4 text-right text-slate-300">{(row.impressionShare * 100).toFixed(1)}%</td>
-                                <td className="px-6 py-4 text-right text-slate-300">{(row.overlapRate * 100).toFixed(1)}%</td>
-                                <td className="px-6 py-4 text-right text-slate-300">{(row.outrankingShare * 100).toFixed(1)}%</td>
-                                <td className="px-6 py-4 text-right text-slate-300">{(row.positionAboveRate * 100).toFixed(1)}%</td>
-                                <td className="px-6 py-4 text-right text-slate-300">{(row.topRate * 100).toFixed(1)}%</td>
-                                <td className="px-6 py-4 text-right text-slate-300">{(row.absTopRate * 100).toFixed(1)}%</td>
+                                <td className="px-6 py-4 text-right text-slate-300">{fmtPct(row.impressionShare * 100, 1)}</td>
+                                <td className="px-6 py-4 text-right text-slate-300">{fmtPct(row.overlapRate * 100, 1)}</td>
+                                <td className="px-6 py-4 text-right text-slate-300">{fmtPct(row.outrankingShare * 100, 1)}</td>
+                                <td className="px-6 py-4 text-right text-slate-300">{fmtPct(row.positionAboveRate * 100, 1)}</td>
+                                <td className="px-6 py-4 text-right text-slate-300">{fmtPct(row.topRate * 100, 1)}</td>
+                                <td className="px-6 py-4 text-right text-slate-300">{fmtPct(row.absTopRate * 100, 1)}</td>
                             </tr>
                         ))}
                     </tbody>

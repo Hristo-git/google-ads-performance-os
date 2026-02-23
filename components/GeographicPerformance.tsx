@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { fmtInt, fmtNum, fmtEuro, fmtPct, fmtX } from '@/lib/format';
 
 interface GeoData {
     campaignId: string;
@@ -285,14 +286,14 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                             )}
                         </div>
                         <div className="text-lg font-bold text-white">
-                            &euro;{region.cost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                            {fmtEuro(region.cost, 0)}
                         </div>
                         <div className="flex items-center justify-between mt-1">
                             <span className="text-xs text-slate-500">
-                                {totalCost > 0 ? ((region.cost / totalCost) * 100).toFixed(1) : 0}% of spend
+                                {totalCost > 0 ? fmtNum((region.cost / totalCost) * 100, 1) : 0}% of spend
                             </span>
                             <span className={`text-xs font-medium ${getRoasColor(region.roas)}`}>
-                                {region.roas !== null ? `${region.roas.toFixed(2)}x` : '\u2014'}
+                                {fmtX(region.roas)}
                             </span>
                         </div>
                     </div>
@@ -402,25 +403,25 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                                         </td>
                                     )}
                                     <td className="px-4 py-3 text-right text-slate-300">
-                                        {item.impressions.toLocaleString('en-US')}
+                                        {fmtInt(item.impressions)}
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-300">
-                                        {item.clicks.toLocaleString('en-US')}
+                                        {fmtInt(item.clicks)}
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-400">
-                                        {(item.ctr * 100).toFixed(2)}%
+                                        {fmtPct(item.ctr * 100, 2)}
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-200">
-                                        &euro;{item.cost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                        {fmtEuro(item.cost, 0)}
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-200">
-                                        {item.conversions.toLocaleString('en-US', { maximumFractionDigits: 1 })}
+                                        {fmtNum(item.conversions, 1)}
                                     </td>
                                     <td className={`px-4 py-3 text-right font-medium ${getRoasColor(item.roas)}`}>
-                                        {item.roas !== null ? `${item.roas.toFixed(2)}x` : '\u2014'}
+                                        {fmtX(item.roas)}
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-300">
-                                        {item.cpa !== null ? `\u20AC${item.cpa.toFixed(2)}` : '\u2014'}
+                                        {item.cpa !== null ? fmtEuro(item.cpa) : '—'}
                                     </td>
                                 </tr>
                             ))}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { fmtInt, fmtEuro, fmtPct, fmtNum } from '@/lib/format';
 
 interface SearchTermRow {
     searchTerm: string;
@@ -327,7 +328,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                 <div className="rounded-lg p-3 bg-red-500/10 border border-red-500/20">
                     <div className="text-xs text-red-400 font-medium">Wasted Spend ({periodDays}d)</div>
                     <div className="text-xl font-bold text-white mt-1">
-                        &euro;{totalWastedCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                        {fmtEuro(totalWastedCost, 0)}
                     </div>
                     <div className="text-xs text-red-400/60 mt-0.5">
                         {wastefulTerms.filter(t => t.conversions === 0).length} terms ({minClicks}+ clicks, 0 conv.)
@@ -337,10 +338,10 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                 <div className="rounded-lg p-3 bg-amber-500/10 border border-amber-500/20">
                     <div className="text-xs text-amber-400 font-medium">Est. Monthly Waste</div>
                     <div className="text-xl font-bold text-white mt-1">
-                        &euro;{totalMonthlyWaste.toLocaleString('en-US', { maximumFractionDigits: 0 })}/mo
+                        {fmtEuro(totalMonthlyWaste, 0)}/mo
                     </div>
                     <div className="text-xs text-amber-400/60 mt-0.5">
-                        Avg CPA: &euro;{avgCPA.toFixed(1)}
+                        Avg CPA: {fmtEuro(avgCPA, 1)}
                     </div>
                 </div>
                 <div className="rounded-lg p-3 bg-red-500/10 border border-red-500/20 cursor-pointer hover:border-red-400/40 transition-colors"
@@ -393,7 +394,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
             {/* Info Banner */}
             <div className="rounded-lg bg-slate-800 border border-slate-700 p-3 text-xs text-slate-400">
                 <span className="text-slate-300 font-medium">How confidence works:</span>{' '}
-                <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span> High</span> = spent 2x+ CPA (&euro;{(avgCPA * 2).toFixed(0)}+) with 0 conversions and below-average CTR.{' '}
+                <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span> High</span> = spent 2x+ CPA ({fmtEuro(avgCPA * 2, 0)}+) with 0 conversions and below-average CTR.{' '}
                 <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span> Medium</span> = spent 1x CPA or 5+ clicks with normal CTR.{' '}
                 <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span> Low / Review</span> = few clicks, high CTR (likely relevant), or short period — review before adding.
                 <br className="mt-1" />
@@ -408,8 +409,8 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                             {selected.size} terms selected
                         </span>
                         <span className="text-slate-400 text-xs">
-                            Savings: <span className="text-emerald-400 font-bold">&euro;{selectedMonthlySavings.toFixed(0)}/mo</span>
-                            {' '}(&euro;{selectedCost.toFixed(0)} in period)
+                            Savings: <span className="text-emerald-400 font-bold">{fmtEuro(selectedMonthlySavings, 0)}/mo</span>
+                            {' '}({fmtEuro(selectedCost, 0)} in period)
                         </span>
                     </div>
                     <div className="flex gap-2">
@@ -635,30 +636,30 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                                             </span>
                                         </td>
                                         <td className="px-3 py-2.5 text-right text-slate-400 text-xs">
-                                            {item.impressions.toLocaleString()}
+                                            {fmtInt(item.impressions)}
                                         </td>
                                         <td className="px-3 py-2.5 text-right text-slate-300">
-                                            {item.clicks.toLocaleString()}
+                                            {fmtInt(item.clicks)}
                                         </td>
                                         <td className="px-3 py-2.5 text-right">
                                             <span className={`text-xs font-medium ${item.ctr > avgCTR * 1.2 ? 'text-emerald-400' : item.ctr > avgCTR * 0.8 ? 'text-slate-300' : 'text-slate-500'}`}>
-                                                {(item.ctr * 100).toFixed(1)}%
+                                                {fmtPct(item.ctr * 100, 1)}
                                             </span>
                                         </td>
                                         <td className="px-3 py-2.5 text-right text-red-400 font-medium">
-                                            &euro;{item.cost.toFixed(2)}
+                                            {fmtEuro(item.cost)}
                                         </td>
                                         <td className="px-3 py-2.5 text-right text-slate-400">
-                                            &euro;{item.cpc.toFixed(2)}
+                                            {fmtEuro(item.cpc)}
                                         </td>
                                         <td className={`px-3 py-2.5 text-right font-medium ${hasConv ? 'text-emerald-400' : 'text-slate-600'}`}>
-                                            {item.conversions > 0 ? item.conversions.toFixed(1) : item.conversions}
+                                            {item.conversions > 0 ? fmtNum(item.conversions, 1) : item.conversions}
                                         </td>
                                         <td className={`px-3 py-2.5 text-right text-xs ${item.conversionValue > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
-                                            {item.conversionValue > 0 ? `\u20AC${item.conversionValue.toFixed(2)}` : '\u2014'}
+                                            {item.conversionValue > 0 ? fmtEuro(item.conversionValue) : '—'}
                                         </td>
                                         <td className="px-3 py-2.5 text-right text-amber-400 text-xs">
-                                            &euro;{item.monthlyCost.toFixed(1)}/mo
+                                            {fmtEuro(item.monthlyCost, 1)}/mo
                                         </td>
                                         <td className="px-3 py-2.5 text-slate-400 text-xs max-w-[160px]">
                                             <span className="truncate block" title={item.campaigns.join(', ')}>

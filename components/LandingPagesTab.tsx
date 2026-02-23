@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { fmtNum, fmtEuro, fmtPct, fmtX } from '@/lib/format';
 
 interface LandingPage {
     landingPageUrl: string;
@@ -103,9 +104,6 @@ export default function LandingPagesTab({
             setSortOrder('desc');
         }
     };
-
-    const formatCurrency = (val: number) => `€${val.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const formatPercent = (val: number | null) => val !== null ? `${(val * 100).toFixed(1)}%` : '—';
 
     const getExperienceColor = (exp: string | null) => {
         if (!exp) return 'text-slate-500';
@@ -263,16 +261,16 @@ export default function LandingPagesTab({
                                             {extractPath(page.landingPageUrl)}
                                         </a>
                                     </td>
-                                    <td className="text-right text-slate-300">{formatCurrency(page.cost)}</td>
-                                    <td className="text-right text-slate-300">{page.conversions.toFixed(1)}</td>
+                                    <td className="text-right text-slate-300">{fmtEuro(page.cost)}</td>
+                                    <td className="text-right text-slate-300">{fmtNum(page.conversions, 1)}</td>
                                     <td className={`text-right font-medium ${getRoasColor(page.roas)}`}>
-                                        {page.roas ? page.roas.toFixed(2) : '—'}
+                                        {fmtX(page.roas)}
                                     </td>
                                     <td className={`text-right font-medium ${getExperienceColor(page.landingPageExperience)}`}>
                                         {getExperienceLabel(page.landingPageExperience)}
                                     </td>
                                     <td className={`text-right ${getMobileColor(page.mobileFriendlyClicksPercentage)}`}>
-                                        {formatPercent(page.mobileFriendlyClicksPercentage)}
+                                        {page.mobileFriendlyClicksPercentage != null ? fmtPct(page.mobileFriendlyClicksPercentage * 100, 1) : '—'}
                                     </td>
                                 </tr>
                             ))}

@@ -13,6 +13,7 @@ import NegativeKeywordMiner from "./NegativeKeywordMiner";
 import AudiencesTab from "./AudiencesTab";
 import ReactMarkdown from 'react-markdown';
 import { Campaign, AdGroup, NavigationState, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
+import { fmtNum, fmtPct } from '@/lib/format';
 
 interface StrategicInsightsProps {
     campaigns: Campaign[];
@@ -384,7 +385,7 @@ export default function StrategicInsights({
                                             <span className="text-white font-medium">{c.name}</span>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-red-400 font-bold">
-                                                    {(c.searchLostISRank! * 100).toFixed(1)}% Lost IS
+                                                    {fmtPct(c.searchLostISRank! * 100, 1)} Lost IS
                                                 </span>
                                                 {onNavigate && <span className="text-slate-500 group-hover:text-slate-300 transition-colors">&rarr;</span>}
                                             </div>
@@ -419,7 +420,7 @@ export default function StrategicInsights({
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-amber-400 font-bold">
-                                                            QS: {ag.avgQualityScore?.toFixed(1)}
+                                                            QS: {fmtNum(ag.avgQualityScore, 1)}
                                                         </span>
                                                         {onNavigate && <span className="text-slate-500 group-hover:text-slate-300 transition-colors">&rarr;</span>}
                                                     </div>

@@ -174,7 +174,7 @@ export interface ConversionAction {
     name: string;
     type: string;
     status: string;
-    category: string;
+    conversionCategory: string; // Changed from category
     ownerCustomer?: string;
     includeInConversionsMetric: boolean;
     allConversions: number;
@@ -465,6 +465,16 @@ export interface TimeAnalysisPerformance {
     conversions: number;
     conversionValue: number;
     roas?: number | null;
+}
+
+export interface ConversionActionTrend {
+    date: string;
+    campaignId: string;
+    campaignName: string;
+    conversionAction: string;
+    conversionCategory: string;
+    conversions: number;
+    conversionValue: number;
 }
 
 

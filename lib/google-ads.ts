@@ -342,6 +342,58 @@ export function mapMatchType(type: any): string {
     return MAP[type] || MAP[Number(type)] || 'UNKNOWN';
 }
 
+export function mapSearchTermMatchType(type: any): string {
+    const MAP: Record<number | string, string> = {
+        0: 'UNSPECIFIED',
+        1: 'UNKNOWN',
+        2: 'BROAD',
+        3: 'EXACT',
+        4: 'PHRASE',
+        5: 'NEAR_EXACT',
+        6: 'NEAR_PHRASE'
+    };
+    if (typeof type === 'string' && isNaN(Number(type))) return type;
+    const mapped = MAP[type] || MAP[Number(type)] || 'UNKNOWN';
+
+    // Convert to readable format
+    if (mapped === 'NEAR_EXACT') return 'Exact (Close Variant)';
+    if (mapped === 'NEAR_PHRASE') return 'Phrase (Close Variant)';
+
+    // Capitalize first letter for others
+    return mapped.charAt(0) + mapped.slice(1).toLowerCase();
+}
+
+export function mapConversionCategory(category: any): string {
+    const MAP: Record<number | string, string> = {
+        0: 'UNSPECIFIED',
+        1: 'UNKNOWN',
+        2: 'DEFAULT',
+        3: 'PAGE_VIEW',
+        4: 'PURCHASE',
+        5: 'SIGNUP',
+        6: 'LEAD',
+        7: 'DOWNLOAD',
+        8: 'ADD_TO_CART',
+        9: 'BEGIN_CHECKOUT',
+        10: 'SUBSCRIBE_PAID',
+        11: 'PHONE_CALL_LEAD',
+        12: 'IMPORTED_LEAD',
+        13: 'SUBMIT_LEAD_FORM',
+        14: 'BOOK_APPOINTMENT',
+        15: 'REQUEST_QUOTE',
+        16: 'GET_DIRECTIONS',
+        17: 'OUTBOUND_CLICK',
+        18: 'CONTACT',
+        19: 'ENGAGEMENT',
+        20: 'STORE_VISIT',
+        21: 'STORE_SALE',
+        22: 'QUALIFIED_LEAD',
+        23: 'CONVERTED_LEAD'
+    };
+    if (typeof category === 'string' && isNaN(Number(category))) return category;
+    return MAP[category] || MAP[Number(category)] || 'UNKNOWN';
+}
+
 export function mapQSComponent(score: any): string {
     const MAP: Record<number | string, string> = {
         0: 'UNSPECIFIED', 1: 'UNKNOWN', 2: 'BELOW_AVERAGE', 3: 'AVERAGE', 4: 'ABOVE_AVERAGE'
@@ -482,28 +534,39 @@ customer_client.id,
 }
 
 export async function resolveCustomerAccountId(refreshToken: string, requestedId?: string): Promise<string> {
-    // If a specific ID is requested, use it
-    if (requestedId) return requestedId;
-
-    // Otherwise, find the first valid client account
     const customers = await getAccessibleCustomers(refreshToken);
+    const cleanRequestedId = requestedId?.replace(/-/g, '');
+
+    // 1. If we have a requested ID, check if it's a valid client account
+    if (cleanRequestedId) {
+        const match = customers.find(c => c.id === cleanRequestedId);
+        if (match && !match.isManager) {
+            return match.id;
+        }
+        // If it was found but is a manager, we continue to resolve to a client
+    }
+
+    // 2. Find the first valid client account in the hierarchy
+    // Sort by level or simply pick the first non-manager one
     const clientAccount = customers.find(c => !c.isManager);
 
     if (clientAccount) {
-        console.log(`[GoogleAds] Auto-resolved client account: ${clientAccount.name} (${clientAccount.id})`);
+        if (cleanRequestedId && cleanRequestedId !== clientAccount.id) {
+            console.log(`[GoogleAds] Requested ID ${cleanRequestedId} is a Manager. Redirecting to client account: ${clientAccount.name} (${clientAccount.id})`);
+        } else {
+            console.log(`[GoogleAds] Auto-resolved client account: ${clientAccount.name} (${clientAccount.id})`);
+        }
         return clientAccount.id;
     }
 
-    // If no client account found, we might be in an edge case. 
-    // Fallback to the env var if it's NOT the MCC (unlikely if we are here), or throw helpful error.
-    const envId = process.env.GOOGLE_ADS_CUSTOMER_ID;
+    // 3. Fallback to process.env if somehow not caught in the list (unlikely)
+    const envId = process.env.GOOGLE_ADS_CUSTOMER_ID?.replace(/-/g, '');
     if (envId) {
-        // Check if envId is actually one of the accessible client accounts
-        const isClient = customers.some(c => c.id === envId.replace(/-/g, '') && !c.isManager);
+        const isClient = customers.some(c => c.id === envId && !c.isManager);
         if (isClient) return envId;
     }
 
-    throw new Error("No valid client account found. The default account is a Manager Account, and no accessible client accounts were detected.");
+    throw new Error("No valid client account found. The account hierarchy only contains Manager Accounts.");
 }
 
 export async function getAccountInfo(refreshToken: string, customerId?: string) {
@@ -1764,7 +1827,9 @@ export async function getConversionActionTrends(
     try {
         const result = await customer.query(`
 SELECT
-segments.date,
+    segments.date,
+    campaign.id,
+    campaign.name,
     segments.conversion_action_name,
     segments.conversion_action_category,
     metrics.conversions,
@@ -1777,8 +1842,11 @@ segments.date,
 
         return result.map((row) => ({
             date: row.segments?.date || "",
+            campaignId: row.campaign?.id?.toString() || "",
+            campaignName: row.campaign?.name || "",
             conversionAction: row.segments?.conversion_action_name || "Unknown",
-            actionCategory: String(row.segments?.conversion_action_category) || "UNKNOWN",
+            conversionCategory: mapConversionCategory(row.segments?.conversion_action_category),
+            actionCategory: mapConversionCategory(row.segments?.conversion_action_category), // Legacy compatibility / Lint fix
             conversions: Number(row.metrics?.conversions) || 0,
             conversionValue: Number(row.metrics?.conversions_value) || 0,
         }));
@@ -2742,8 +2810,7 @@ export async function getAudiencePerformance(
                     metrics.conversions,
                     metrics.conversions_value,
                     metrics.average_cpc,
-                    metrics.ctr,
-                    metrics.search_impression_share
+                    metrics.ctr
                 FROM ad_group_audience_view
                 WHERE campaign.status != 'REMOVED'
                 AND ad_group.status != 'REMOVED'
@@ -2767,8 +2834,7 @@ export async function getAudiencePerformance(
                     metrics.conversions,
                     metrics.conversions_value,
                     metrics.average_cpc,
-                    metrics.ctr,
-                    metrics.search_impression_share
+                    metrics.ctr
                 FROM campaign_audience_view
                 WHERE campaign.status != 'REMOVED'
                 ${dateFilter}
@@ -3144,44 +3210,41 @@ export async function getConversionActionsList(
     refreshToken: string,
     customerId?: string,
     dateRange?: DateRange
-): Promise<ConversionAction[]> {
+): Promise<ConversionActionBreakdown[]> {
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
     const dateFilter = getDateFilter(dateRange);
 
     try {
         const query = `
 SELECT
-conversion_action.id,
-    conversion_action.name,
-    conversion_action.type,
-    conversion_action.status,
-    conversion_action.category,
-    conversion_action.owner_customer,
-    conversion_action.include_in_conversions_metric,
+    campaign.id,
+    campaign.name,
+    segments.conversion_action,
+    segments.conversion_action_name,
+    segments.conversion_action_category,
     metrics.all_conversions,
     metrics.view_through_conversions,
     metrics.all_conversions_value
-            FROM conversion_action
-            WHERE conversion_action.status = 'ENABLED'
-            ${dateFilter}
+FROM campaign
+WHERE campaign.status != 'REMOVED'
+${dateFilter}
+AND metrics.all_conversions > 0
 `;
 
         const result = await customer.query(query);
 
         return result.map((row) => ({
-            id: row.conversion_action?.id?.toString() || "",
-            name: row.conversion_action?.name || "",
-            type: String(row.conversion_action?.type || "UNKNOWN"),
-            status: String(row.conversion_action?.status || "UNKNOWN"),
-            category: String(row.conversion_action?.category || "UNKNOWN"),
-            ownerCustomer: row.conversion_action?.owner_customer || "",
-            includeInConversionsMetric: row.conversion_action?.include_in_conversions_metric || false,
+            campaignId: row.campaign?.id?.toString() || "",
+            campaignName: row.campaign?.name || "",
+            conversionAction: row.segments?.conversion_action_name || row.segments?.conversion_action || "Unknown",
+            conversionCategory: mapConversionCategory(row.segments?.conversion_action_category),
+            conversions: Number(row.metrics?.all_conversions) || 0,
+            conversionValue: Number(row.metrics?.all_conversions_value) || 0,
             allConversions: Number(row.metrics?.all_conversions) || 0,
-            viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
-            value: Number(row.metrics?.all_conversions_value) || 0,
+            allConversionValue: Number(row.metrics?.all_conversions_value) || 0,
         }));
     } catch (error: unknown) {
-        logApiError("getConversionActions", error);
+        logApiError("getConversionActionsList", error);
         return [];
     }
 }

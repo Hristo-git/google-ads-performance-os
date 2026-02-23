@@ -1,4 +1,5 @@
 import React from 'react';
+import { fmtEuro, fmtPct } from '@/lib/format';
 
 interface StrategicBreakdownProps {
     strategicBreakdown: any;
@@ -36,10 +37,18 @@ const StrategicBreakdown: React.FC<StrategicBreakdownProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {Object.entries(strategicBreakdown).map(([key, data]: [string, any]) => (
                     data.spend > 0 && (
-                        <button
+                        <div
                             key={key}
+                            role="button"
+                            tabIndex={0}
                             onClick={() => onCategorySelect(key)}
-                            className={`rounded-lg p-3 transition-all duration-200 border text-left relative overflow-hidden ${categoryFilter === key
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    onCategorySelect(key);
+                                }
+                            }}
+                            className={`rounded-lg p-3 transition-all duration-200 border text-left relative overflow-hidden cursor-pointer ${categoryFilter === key
                                 ? 'ring-2 ring-white shadow-lg transform scale-105'
                                 : 'hover:scale-105 hover:shadow-lg'
                                 } ${key.startsWith('pmax') ? 'bg-purple-500/10 border-purple-500/30' :
@@ -69,8 +78,8 @@ const StrategicBreakdown: React.FC<StrategicBreakdownProps> = ({
                                                         key === 'brand' ? 'Brand' :
                                                             'Other'}
                             </div>
-                            <div className="text-lg font-bold text-white">{data.percentage.toFixed(1)}%</div>
-                            <div className="text-xs text-slate-400">€{data.spend.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+                            <div className="text-lg font-bold text-white">{fmtPct(data.percentage, 1)}</div>
+                            <div className="text-xs text-slate-400">{fmtEuro(data.spend, 0)}</div>
                             <div className="text-xs text-slate-500 mb-2">{data.campaigns} camp.</div>
                             <button
                                 onClick={(e) => {
@@ -84,7 +93,7 @@ const StrategicBreakdown: React.FC<StrategicBreakdownProps> = ({
                                 </svg>
                                 Analyze
                             </button>
-                        </button>
+                        </div>
                     )
                 ))}
             </div>

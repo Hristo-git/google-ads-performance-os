@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getGoogleAdsCustomer, resolveCustomerAccountId } from "@/lib/google-ads";
+import { getGoogleAdsCustomer, resolveCustomerAccountId, mapSearchTermMatchType } from "@/lib/google-ads";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth-options";
 
@@ -66,6 +66,8 @@ export async function GET(request: Request) {
                 campaign.name,
                 search_term_view.search_term,
                 search_term_view.status,
+                segments.device,
+                segments.search_term_match_type,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
@@ -88,6 +90,8 @@ export async function GET(request: Request) {
                 ad_group.name,
                 search_term_view.search_term,
                 search_term_view.status,
+                segments.device,
+                segments.search_term_match_type,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
@@ -171,6 +175,8 @@ export async function GET(request: Request) {
                 adGroupName: row.ad_group?.name || '',
                 searchTerm: row.search_term_view.search_term,
                 searchTermStatus: String(row.search_term_view?.status) || 'NONE',
+                matchType: mapSearchTermMatchType(row.segments?.search_term_match_type),
+                device: getDeviceName(row.segments?.device),
                 impressions: Number(row.metrics?.impressions) || 0,
                 clicks: Number(row.metrics?.clicks) || 0,
                 cost: Number(row.metrics?.cost_micros) / 1000000 || 0,
@@ -187,6 +193,7 @@ export async function GET(request: Request) {
                 adGroupName: '',
                 searchTerm: `[PMax Insight] ${row.campaign_search_term_insight.category_label}`,
                 searchTermStatus: 'NONE',
+                matchType: 'PMax',
                 date: '',
                 device: 'CROSS_DEVICE',
                 impressions: Number(row.metrics?.impressions) || 0,

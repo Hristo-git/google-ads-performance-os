@@ -3,6 +3,7 @@
 import { SearchTerm } from "@/types/google-ads";
 import { useState } from "react";
 import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
+import { fmtInt, fmtEuro, fmtPct, fmtNum } from '@/lib/format';
 
 interface EnhancedSearchTermsProps {
     data: SearchTerm[];
@@ -306,6 +307,7 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                                     {sortBy === 'conversions' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
                                 </button>
                             </th>
+                            <th className="text-left py-3 px-2 text-slate-400 font-semibold">Match Type</th>
                             <th className="text-right p-0">
                                 <button
                                     className="flex items-center gap-1 hover:text-slate-300 transition-colors w-full justify-end py-3 px-2"
@@ -333,14 +335,15 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                                 Total ({processedData.length})
                             </td>
                             {!groupByTerm && <td className="py-3 px-2 text-center">-</td>}
-                            <td className="py-3 px-2 text-right font-mono text-xs">{totals.impressions.toLocaleString()}</td>
-                            <td className="py-3 px-2 text-right font-mono text-xs">{totals.clicks.toLocaleString()}</td>
-                            <td className="py-3 px-2 text-right font-mono text-xs">{(totalCtr * 100).toFixed(2)}%</td>
-                            <td className="py-3 px-2 text-right font-mono text-xs">€{totalAvgCpc.toFixed(2)}</td>
-                            <td className="py-3 px-2 text-right font-mono text-xs">€{totals.cost.toFixed(2)}</td>
-                            <td className="py-3 px-2 text-right font-mono text-xs text-green-400">{totals.conversions.toFixed(1)}</td>
-                            <td className="py-3 px-2 text-right font-mono text-xs">{(totalConvRate * 100).toFixed(2)}%</td>
-                            <td className="py-3 px-2 text-right font-mono text-xs text-emerald-400">€{totals.conversionValue.toFixed(2)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{fmtInt(totals.impressions)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{fmtInt(totals.clicks)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{fmtPct(totalCtr * 100, 2)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{fmtEuro(totalAvgCpc)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{fmtEuro(totals.cost)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs text-green-400">{fmtNum(totals.conversions, 1)}</td>
+                            <td className="py-3 px-2 text-left">-</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs">{fmtPct(totalConvRate * 100, 2)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-xs text-emerald-400">{fmtEuro(totals.conversionValue)}</td>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/50">
@@ -374,28 +377,38 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                                     </td>
                                 )}
                                 <td className="py-2.5 px-2 text-right text-slate-300 font-mono text-xs">
-                                    {item.impressions.toLocaleString()}
+                                    {fmtInt(item.impressions)}
                                 </td>
                                 <td className="py-2.5 px-2 text-right text-slate-300 font-mono text-xs">
-                                    {item.clicks.toLocaleString()}
+                                    {fmtInt(item.clicks)}
                                 </td>
                                 <td className="py-2.5 px-2 text-right text-slate-300 font-mono text-xs">
-                                    {(item.ctr * 100).toFixed(2)}%
+                                    {fmtPct(item.ctr * 100, 2)}
                                 </td>
                                 <td className="py-2.5 px-2 text-right text-slate-300 font-mono text-xs">
-                                    €{item.averageCpc.toFixed(2)}
+                                    {fmtEuro(item.averageCpc)}
                                 </td>
                                 <td className="py-2.5 px-2 text-right font-semibold text-white font-mono text-xs">
-                                    €{item.cost.toFixed(2)}
+                                    {fmtEuro(item.cost)}
                                 </td>
                                 <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${item.conversions > 0 ? 'text-green-400' : 'text-slate-600'}`}>
-                                    {item.conversions.toFixed(1)}
+                                    {fmtNum(item.conversions, 1)}
+                                </td>
+                                <td className="py-2.5 px-2 text-left">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${item.matchType === 'Exact' || item.matchType?.includes('Exact') ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                                            item.matchType === 'Phrase' || item.matchType?.includes('Phrase') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                item.matchType === 'Broad' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                                    item.matchType === 'PMax' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                                                        'bg-slate-700 text-slate-400 border-slate-600'
+                                        }`}>
+                                        {item.matchType || 'Unknown'}
+                                    </span>
                                 </td>
                                 <td className="py-2.5 px-2 text-right text-slate-300 font-mono text-xs">
-                                    {(item.conversionRate * 100).toFixed(2)}%
+                                    {fmtPct(item.conversionRate * 100, 2)}
                                 </td>
                                 <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${item.conversionValue > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
-                                    €{item.conversionValue.toFixed(2)}
+                                    {fmtEuro(item.conversionValue)}
                                 </td>
                             </tr>
                         ))}

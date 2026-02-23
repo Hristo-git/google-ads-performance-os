@@ -1,6 +1,7 @@
 "use client";
 
 import { DeviceBreakdown as DeviceBreakdownType } from "@/types/google-ads";
+import { fmtNum, fmtEuro, fmtPct, fmtX } from '@/lib/format';
 
 interface DeviceBreakdownProps {
     data: DeviceBreakdownType[];
@@ -78,7 +79,7 @@ export default function DeviceBreakdown({ data, campaignName }: DeviceBreakdownP
                     Device Performance{campaignName ? ` - ${campaignName}` : ''}
                 </h3>
                 <div className="text-xs text-slate-400">
-                    Total: €{totalCost.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                    Total: {fmtEuro(totalCost)}
                 </div>
             </div>
 
@@ -99,30 +100,30 @@ export default function DeviceBreakdown({ data, campaignName }: DeviceBreakdownP
                                 <span className="text-2xl">{getDeviceIcon(item.device)}</span>
                                 <div>
                                     <div className="font-semibold">{item.device}</div>
-                                    <div className="text-xs opacity-75">{costShare.toFixed(1)}% of spend</div>
+                                    <div className="text-xs opacity-75">{fmtPct(costShare, 1)} of spend</div>
                                 </div>
                             </div>
 
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
                                     <span className="opacity-75">Cost:</span>
-                                    <span className="font-semibold">€{item.cost.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                                    <span className="font-semibold">{fmtEuro(item.cost)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="opacity-75">Conversions:</span>
-                                    <span className="font-semibold">{item.conversions.toFixed(1)}</span>
+                                    <span className="font-semibold">{fmtNum(item.conversions, 1)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="opacity-75">CTR:</span>
-                                    <span className="font-semibold">{ctr.toFixed(2)}%</span>
+                                    <span className="font-semibold">{fmtPct(ctr, 2)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="opacity-75">Conv Rate:</span>
-                                    <span className="font-semibold">{convRate.toFixed(2)}%</span>
+                                    <span className="font-semibold">{fmtPct(convRate, 2)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="opacity-75">ROAS:</span>
-                                    <span className="font-semibold">{roas.toFixed(2)}x</span>
+                                    <span className="font-semibold">{fmtX(roas)}</span>
                                 </div>
                             </div>
 
@@ -132,13 +133,13 @@ export default function DeviceBreakdown({ data, campaignName }: DeviceBreakdownP
                                     {item.crossDeviceConversions > 0 && (
                                         <div className="flex justify-between">
                                             <span>Cross-Device:</span>
-                                            <span>{item.crossDeviceConversions.toFixed(1)}</span>
+                                            <span>{fmtNum(item.crossDeviceConversions, 1)}</span>
                                         </div>
                                     )}
                                     {item.viewThroughConversions > 0 && (
                                         <div className="flex justify-between">
                                             <span>View-Through:</span>
-                                            <span>{item.viewThroughConversions.toFixed(1)}</span>
+                                            <span>{fmtNum(item.viewThroughConversions, 1)}</span>
                                         </div>
                                     )}
                                 </div>
@@ -165,11 +166,11 @@ export default function DeviceBreakdown({ data, campaignName }: DeviceBreakdownP
                                             }`}
                                         style={{ width: `${costShare}%` }}
                                     >
-                                        {costShare > 10 && <span className="text-white">{costShare.toFixed(1)}%</span>}
+                                        {costShare > 10 && <span className="text-white">{fmtPct(costShare, 1)}</span>}
                                     </div>
                                 </div>
                                 <div className="w-24 text-right text-xs text-slate-300">
-                                    €{item.cost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                    {fmtEuro(item.cost, 0)}
                                 </div>
                             </div>
                         );

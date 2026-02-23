@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { fmtPct } from '@/lib/format';
 
 interface AuctionInsight {
     campaignId: string;
@@ -77,11 +78,6 @@ export default function CompetitorsWidget({
             .sort((a, b) => (b.impressionShare || 0) - (a.impressionShare || 0))
             .slice(0, 10);
     }, [insights]);
-
-    const formatPercent = (val: number | null) => {
-        if (val === null || val === undefined) return '—';
-        return `${(val * 100).toFixed(1)}%`;
-    };
 
     const getCompetitorColor = (outrankingShare: number | null, positionAbove: number | null) => {
         const threat = (positionAbove || 0) - (outrankingShare || 0);
@@ -177,18 +173,18 @@ export default function CompetitorsWidget({
                                     {insight.competitor}
                                 </td>
                                 <td className="text-right text-slate-300">
-                                    {formatPercent(insight.impressionShare)}
+                                    {insight.impressionShare != null ? fmtPct(insight.impressionShare * 100, 1) : '—'}
                                 </td>
                                 <td className="text-right text-slate-400">
-                                    {formatPercent(insight.overlapRate)}
+                                    {insight.overlapRate != null ? fmtPct(insight.overlapRate * 100, 1) : '—'}
                                 </td>
                                 {expanded && (
                                     <>
                                         <td className="text-right text-slate-400">
-                                            {formatPercent(insight.outrankingShare)}
+                                            {insight.outrankingShare != null ? fmtPct(insight.outrankingShare * 100, 1) : '—'}
                                         </td>
                                         <td className="text-right text-slate-400">
-                                            {formatPercent(insight.topOfPageRate)}
+                                            {insight.topOfPageRate != null ? fmtPct(insight.topOfPageRate * 100, 1) : '—'}
                                         </td>
                                     </>
                                 )}

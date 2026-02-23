@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { deleteReport } from "@/lib/pinecone";
+import { deleteReport as deletePineconeReport } from "@/lib/pinecone";
+import { deleteReport as deleteSupabaseReport } from "@/lib/supabase";
 
 export async function DELETE(
     request: Request,
@@ -25,10 +26,22 @@ export async function DELETE(
             return NextResponse.json({ error: "Missing report ID" }, { status: 400 });
         }
 
-        const success = await deleteReport(id);
+        // Delete from both Supabase (SQL) and Pinecone (vector search)
+        const [sqlSuccess, vectorSuccess] = await Promise.allSettled([
+            deleteSupabaseReport(id),
+            deletePineconeReport(id),
+        ]);
 
-        if (!success) {
-            return NextResponse.json({ error: "Failed to delete report" }, { status: 500 });
+        const sqlOk = sqlSuccess.status === 'fulfilled' && sqlSuccess.value;
+        if (!sqlOk) {
+            const reason = sqlSuccess.status === 'rejected' ? sqlSuccess.reason : 'Delete returned false';
+            console.error('[DELETE] Supabase delete failed:', reason);
+            return NextResponse.json({ error: "Failed to delete report from database" }, { status: 500 });
+        }
+
+        if (vectorSuccess.status === 'rejected') {
+            // Non-fatal — Pinecone failure should not block the user
+            console.error('[DELETE] Pinecone delete failed (non-fatal):', vectorSuccess.reason);
         }
 
         return NextResponse.json({ success: true, deletedId: id });

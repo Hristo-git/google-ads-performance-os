@@ -454,8 +454,8 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                             console.error('[DEBUG] Save process crashed:', pAllError);
                         }
 
-                        // Send status message to client as a plain text block at the end
-                        controller.enqueue(encoder.encode(`\n\n---\nDEBUG_STATUS: ${saveStatus}\nREPORT_ID: ${reportId}\nCUSTOMER_ID: ${data.customerId || 'unknown'}`));
+                        // Log status server-side only (never send debug text to client stream)
+                        console.log(`[DEBUG] SAVE_STATUS=${saveStatus} REPORT_ID=${reportId} CUSTOMER_ID=${data.customerId || 'unknown'}`);
 
                         // Close stream
                         controller.close();

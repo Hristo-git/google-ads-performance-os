@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { fmtNum, fmtInt, fmtEuro } from '@/lib/format';
 
 interface HourData {
     campaignId: string;
@@ -225,13 +226,13 @@ export default function DayHourHeatmap({
                                     metric === 'cpa' ? h.cpa : metric === 'conversions' ? h.conversions : h.roas,
                                     hourMin, hourMax, metric === 'cpa'
                                 )} rounded p-2 text-center transition-all hover:scale-105`}
-                                title={`${String(h.hour).padStart(2, '0')}:00 - ROAS: ${h.roas?.toFixed(2) || '—'}, Conv: ${h.conversions.toFixed(1)}`}
+                                title={`${String(h.hour).padStart(2, '0')}:00 - ROAS: ${fmtNum(h.roas, 2)}, Conv: ${fmtNum(h.conversions, 1)}`}
                             >
                                 <div className="text-[9px] text-slate-400">{String(h.hour).padStart(2, '0')}</div>
                                 <div className="text-xs font-bold text-slate-200">
-                                    {metric === 'cpa' ? (h.cpa?.toFixed(0) || '—') :
-                                        metric === 'conversions' ? h.conversions.toFixed(0) :
-                                            (h.roas?.toFixed(1) || '—')}
+                                    {metric === 'cpa' ? fmtInt(h.cpa) :
+                                        metric === 'conversions' ? fmtInt(h.conversions) :
+                                            fmtNum(h.roas, 1)}
                                 </div>
                             </div>
                         ))}
@@ -244,13 +245,13 @@ export default function DayHourHeatmap({
                                     metric === 'cpa' ? h.cpa : metric === 'conversions' ? h.conversions : h.roas,
                                     hourMin, hourMax, metric === 'cpa'
                                 )} rounded p-2 text-center transition-all hover:scale-105`}
-                                title={`${String(h.hour).padStart(2, '0')}:00 - ROAS: ${h.roas?.toFixed(2) || '—'}, Conv: ${h.conversions.toFixed(1)}`}
+                                title={`${String(h.hour).padStart(2, '0')}:00 - ROAS: ${fmtNum(h.roas, 2)}, Conv: ${fmtNum(h.conversions, 1)}`}
                             >
                                 <div className="text-[9px] text-slate-400">{String(h.hour).padStart(2, '0')}</div>
                                 <div className="text-xs font-bold text-slate-200">
-                                    {metric === 'cpa' ? (h.cpa?.toFixed(0) || '—') :
-                                        metric === 'conversions' ? h.conversions.toFixed(0) :
-                                            (h.roas?.toFixed(1) || '—')}
+                                    {metric === 'cpa' ? fmtInt(h.cpa) :
+                                        metric === 'conversions' ? fmtInt(h.conversions) :
+                                            fmtNum(h.roas, 1)}
                                 </div>
                             </div>
                         ))}
@@ -265,16 +266,16 @@ export default function DayHourHeatmap({
                                 metric === 'cpa' ? d.cpa : metric === 'conversions' ? d.conversions : d.roas,
                                 dayMin, dayMax, metric === 'cpa'
                             )} rounded p-3 text-center transition-all hover:scale-105`}
-                            title={`${d.day} - ROAS: ${d.roas?.toFixed(2) || '—'}, Conv: ${d.conversions.toFixed(1)}, CPA: €${d.cpa?.toFixed(2) || '—'}`}
+                            title={`${d.day} - ROAS: ${fmtNum(d.roas, 2)}, Conv: ${fmtNum(d.conversions, 1)}, CPA: ${fmtEuro(d.cpa)}`}
                         >
                             <div className="text-xs text-slate-300 font-medium">{DAY_LABELS[language][d.day]}</div>
                             <div className="text-lg font-bold text-slate-100 mt-1">
-                                {metric === 'cpa' ? `€${d.cpa?.toFixed(0) || '—'}` :
-                                    metric === 'conversions' ? d.conversions.toFixed(0) :
-                                        (d.roas?.toFixed(1) || '—')}
+                                {metric === 'cpa' ? fmtEuro(d.cpa, 0) :
+                                    metric === 'conversions' ? fmtInt(d.conversions) :
+                                        fmtNum(d.roas, 1)}
                             </div>
                             <div className="text-[10px] text-slate-400 mt-0.5">
-                                €{d.cost.toFixed(0)} {language === 'en' ? 'spent' : 'разход'}
+                                {fmtEuro(d.cost, 0)} {language === 'en' ? 'spent' : 'разход'}
                             </div>
                         </div>
                     ))}

@@ -347,6 +347,13 @@ export default function AIReportsHub({
                 });
             }
 
+            // Detect server-side errors sent through the stream (e.g. Anthropic 401, 429, 500)
+            // Server encodes these as "\n\n[ERROR: <message>]" at end of stream
+            const streamErrorMatch = analysis.match(/\n\n\[ERROR:\s*([\s\S]*?)\]\s*$/);
+            if (streamErrorMatch) {
+                throw new Error(streamErrorMatch[1].trim());
+            }
+
             // Successfully finished - move to completed state in store
             if (analysis) {
                 const finalReport: GeneratedReport = {
@@ -474,7 +481,8 @@ export default function AIReportsHub({
         if (!currentReport?.analysis) return { executive: '', technical: '', hasTwo: false, todoList: [] };
 
         const jsonMatch = currentReport.analysis.match(/```json\s*([\s\S]*?)\s*```/);
-        let cleanAnalysis = currentReport.analysis;
+        // Strip debug footer injected by older server versions (never visible to users)
+        let cleanAnalysis = currentReport.analysis.replace(/\n\n---\nDEBUG_STATUS:[\s\S]*$/, '').trim();
         let todos: any[] = [];
 
         if (jsonMatch) {
@@ -483,7 +491,7 @@ export default function AIReportsHub({
                 if (parsed.todos && Array.isArray(parsed.todos)) {
                     todos = parsed.todos;
                 }
-                cleanAnalysis = currentReport.analysis.replace(/```json[\s\S]*?```/, '').trim();
+                cleanAnalysis = cleanAnalysis.replace(/```json[\s\S]*?```/, '').trim();
             } catch (e) {
                 console.error("Failed to parse To-Do list", e);
             }

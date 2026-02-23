@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { fmtInt, fmtNum, fmtEuro } from '@/lib/format';
 
 interface ConversionAction {
     campaignId: string;
@@ -261,14 +262,14 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
                             {CATEGORY_LABELS[cat.category] || cat.category}
                         </div>
                         <div className="text-lg font-bold text-white">
-                            {cat.conversions.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                            {fmtInt(cat.conversions)}
                         </div>
                         <div className="text-xs opacity-70">
-                            {totalConversions > 0 ? ((cat.conversions / totalConversions) * 100).toFixed(1) : 0}%
+                            {totalConversions > 0 ? fmtNum((cat.conversions / totalConversions) * 100, 1) : 0}%
                         </div>
                         {cat.value > 0 && (
                             <div className="text-xs mt-1 text-slate-400">
-                                &euro;{cat.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                {fmtEuro(cat.value, 0)}
                             </div>
                         )}
                     </div>
@@ -299,14 +300,14 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
                 <div className="flex items-center gap-6">
                     <div>
                         <span className="text-xs text-slate-500 uppercase">Total Conversions</span>
-                        <p className="text-lg font-bold text-white">{totalConversions.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                        <p className="text-lg font-bold text-white">{fmtInt(totalConversions)}</p>
                     </div>
                     <div>
                         <span className="text-xs text-slate-500 uppercase">Total Value</span>
-                        <p className="text-lg font-bold text-white">&euro;{totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                        <p className="text-lg font-bold text-white">{fmtEuro(totalValue, 0)}</p>
                     </div>
                     <div>
-                        <span className="text-xs text-slate-500 uppercase">Actions</span>
+                        <span className="text-xs text-slate-500 uppercase">Tracked Actions</span>
                         <p className="text-lg font-bold text-white">{aggregated.length}</p>
                     </div>
                 </div>
@@ -338,7 +339,7 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">% of Total</th>
-                                <th className="px-4 py-3 text-right font-medium">Campaigns</th>
+                                <th className="px-4 py-3 text-right font-medium">Active Campaigns</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-700">
@@ -351,13 +352,13 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-200">
-                                        {item.conversions.toLocaleString('en-US', { maximumFractionDigits: 1 })}
+                                        {fmtNum(item.conversions, 1)}
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-200">
-                                        &euro;{item.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                        {fmtEuro(item.value, 0)}
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-400">
-                                        {totalConversions > 0 ? ((item.conversions / totalConversions) * 100).toFixed(1) : 0}%
+                                        {totalConversions > 0 ? fmtNum((item.conversions / totalConversions) * 100, 1) : 0}%
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-400">
                                         {item.campaignCount}
