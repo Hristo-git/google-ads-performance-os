@@ -1208,6 +1208,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             dataToAnalyze.category = category;
         }
 
+        setAnalysis("");
+        setShowAIModal(true);
         setAnalyzing(true);
         try {
             // --- Enrich with N-Gram Analysis (Account/Campaign Level) ---
