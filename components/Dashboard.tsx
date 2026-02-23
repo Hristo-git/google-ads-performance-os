@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
@@ -718,6 +718,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [pmaxView, setPmaxView] = useState<'summary' | 'asset_groups'>('summary');
     const [pmaxListingGroups, setPmaxListingGroups] = useState<any[]>([]);
     const [auditSnapshotDate, setAuditSnapshotDate] = useState<string | null>(null);
+    const lastHealthRef = useRef<string | null>(null);
 
     // Search Terms implementation state
     const [searchTermSortBy, setSearchTermSortBy] = useState<string>('cost');
@@ -1133,6 +1134,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         const fetchHealthData = async () => {
             if ((navigation.view !== 'diagnostics' && navigation.view !== 'ngrams') || !selectedAccountId) return;
 
+            const cacheKey = `${selectedAccountId}_${dateRange.start}_${dateRange.end}`;
+            if (lastHealthRef.current === cacheKey && healthData !== null) {
+                console.log(`[fetchHealthData] Skipping fetch, already have data for: ${cacheKey}`);
+                return;
+            }
+
             console.log(`[fetchHealthData] Fetching for customer: ${selectedAccountId}`, dateRange);
             setLoadingHealth(true);
             try {
@@ -1150,6 +1157,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 const data = await response.json();
                 console.log(`[fetchHealthData] Received:`, data);
                 setHealthData(data);
+                lastHealthRef.current = cacheKey;
             } catch (err) {
                 console.error("Error fetching health data:", err);
             } finally {
@@ -1161,33 +1169,49 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     }, [navigation.view, selectedAccountId, dateRange]);
 
 
-    const runAnalysis = async (analysisType?: 'account-overview' | 'category' | 'campaign' | 'adgroup', category?: string, model?: string) => {
+    const runAnalysis = async (analysisType?: 'account-overview' | 'category' | 'campaign' | 'adgroup' | 'ngrams', category?: string, model?: string) => {
         let dataToAnalyze: any = getAnalysisContext();
         if (!dataToAnalyze) return;
+
+        let finalAnalysisType: 'account-overview' | 'category' | 'campaign' | 'adgroup' | 'ngrams' | undefined = analysisType;
+        if (!finalAnalysisType) {
+            if (navigation.view === 'ngrams') {
+                finalAnalysisType = 'ngrams';
+            } else {
+                finalAnalysisType = navigation.level === 'account' ? 'account-overview' : navigation.level;
+            }
+        }
 
         // Add language, analysis type, customerId, and dateRange to analysis data
         dataToAnalyze.language = language;
         dataToAnalyze.customerId = selectedAccountId;
-        dataToAnalyze.analysisType = analysisType || (navigation.level === 'account' ? 'account-overview' : navigation.level);
+        dataToAnalyze.analysisType = finalAnalysisType;
         dataToAnalyze.dateRange = dateRange;
         if (model) dataToAnalyze.model = model;
 
         // If category-specific analysis, filter campaigns by category
-        if (analysisType === 'category' && category) {
+        // Only do this for standard campaign categories (brand, pmax, search_nonbrand etc.)
+        const SPECIAL_CATEGORIES = ['Placements', 'Demographics', 'Audiences', 'Time Analysis', 'Assets'];
+        if (finalAnalysisType === 'category' && category && !SPECIAL_CATEGORIES.includes(category)) {
             const filteredCampaigns = campaigns.filter(c => getCampaignCategory(c) === category);
             dataToAnalyze = {
+                ...dataToAnalyze,
                 campaigns: enrichWithSmartBidding(filteredCampaigns),
                 strategicBreakdown,
                 level: 'strategic_category',
                 category,
                 language
             };
+        } else if (finalAnalysisType === 'category' && category && SPECIAL_CATEGORIES.includes(category)) {
+            // For special contextual categories, keep full context but flag the category for the backend
+            dataToAnalyze.analysisType = 'category';
+            dataToAnalyze.category = category;
         }
 
         setAnalyzing(true);
         try {
             // --- Enrich with N-Gram Analysis (Account/Campaign Level) ---
-            if (navigation.level === 'account' || navigation.level === 'campaign') {
+            if (navigation.level === 'account' || navigation.level === 'campaign' || finalAnalysisType === 'ngrams') {
                 try {
                     setLoadingMessage("Fetching search terms for N-Gram analysis...");
                     const queryParams = `?customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}&aggregate=true`;
@@ -1195,6 +1219,10 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                     if (stRes.ok) {
                         const stData = await stRes.json();
                         if (stData.searchTerms && stData.searchTerms.length > 0) {
+                            if (finalAnalysisType === 'ngrams') {
+                                // For n-grams specific analysis, pass the raw search terms so API can format them
+                                dataToAnalyze.searchTerms = stData.searchTerms;
+                            }
                             const nGramResult = processNGrams(stData.searchTerms);
                             dataToAnalyze = {
                                 ...dataToAnalyze,
@@ -1319,6 +1347,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                     adGroups,
                     keywords: trimmedKeywords,
                     ads,
+                    assets,
+                    pmaxAssets,
+                    placements: displayPlacements.length > 0 ? displayPlacements : dgPlacements,
+                    demographics: displayDemographics.length > 0 ? displayDemographics : dgDemographics,
+                    audiences: displayAudiences.length > 0 ? displayAudiences : dgAudiences,
+                    timeAnalysis: dgTimeAnalysis,
                     negativeKeywords,
                     deviceData: deviceBreakdown,
                     strategicBreakdown,
@@ -1338,14 +1372,40 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                         adGroups: campaignAdGroups,
                         pmaxSearchInsights: pmaxData.searchInsights || [],
                         pmaxAssetGroupDetails: pmaxData.assetGroupDetails || [],
+                        pmaxAssets,
+                        assets,
+                        placements: displayPlacements.length > 0 ? displayPlacements : dgPlacements,
+                        demographics: displayDemographics.length > 0 ? displayDemographics : dgDemographics,
+                        audiences: displayAudiences.length > 0 ? displayAudiences : dgAudiences,
+                        timeAnalysis: dgTimeAnalysis,
                         level: 'campaign'
                     };
                 }
 
-                return { campaign: enrichWithSmartBidding(campaign ? [campaign] : [])[0], adGroups: campaignAdGroups, level: 'campaign' };
+                return {
+                    campaign: enrichWithSmartBidding(campaign ? [campaign] : [])[0],
+                    adGroups: campaignAdGroups,
+                    assets,
+                    placements: displayPlacements.length > 0 ? displayPlacements : dgPlacements,
+                    demographics: displayDemographics.length > 0 ? displayDemographics : dgDemographics,
+                    audiences: displayAudiences.length > 0 ? displayAudiences : dgAudiences,
+                    timeAnalysis: dgTimeAnalysis,
+                    level: 'campaign'
+                };
             case 'adgroup':
                 const adGroup = adGroups.find(ag => ag.id === navigation.adGroupId);
-                return { adGroup, negativeKeywords, keywords, ads, level: 'adgroup' };
+                return {
+                    adGroup,
+                    negativeKeywords,
+                    keywords,
+                    ads,
+                    assets: displayAdAssets.length > 0 ? displayAdAssets : dgAssets,
+                    placements: displayPlacements.length > 0 ? displayPlacements : dgPlacements,
+                    demographics: displayDemographics.length > 0 ? displayDemographics : dgDemographics,
+                    audiences: displayAudiences.length > 0 ? displayAudiences : dgAudiences,
+                    timeAnalysis: dgTimeAnalysis,
+                    level: 'adgroup'
+                };
             default:
                 return null;
         }
@@ -1456,6 +1516,20 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
         return (
             <div className="space-y-6">
+                <div className="flex justify-between items-center bg-violet-900/10 p-4 border border-violet-500/20 rounded-xl">
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">Placement Analysis</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Explore AI-driven insights for these placements.</p>
+                    </div>
+                    <button
+                        onClick={() => runAnalysis('category', 'Placements')}
+                        className="flex items-center gap-2 bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white px-3 py-1.5 rounded-lg border border-violet-500/30 transition-all text-xs font-semibold shadow-sm hover:shadow-violet-500/25"
+                    >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        Analyze Placements
+                    </button>
+                </div>
+
                 {/* Visual Summary */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     {/* Category Distribution */}
@@ -1800,6 +1874,20 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         return (
             <div className="space-y-8 max-w-6xl mx-auto p-4">
                 {/* Header Toggles */}
+                <div className="flex justify-between items-center bg-violet-900/10 p-4 border border-violet-500/20 rounded-xl mb-4">
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">Demographics Analysis</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Explore AI-driven insights for your audience segments.</p>
+                    </div>
+                    <button
+                        onClick={() => runAnalysis('category', 'Demographics')}
+                        className="flex items-center gap-2 bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white px-3 py-1.5 rounded-lg border border-violet-500/30 transition-all text-xs font-semibold shadow-sm hover:shadow-violet-500/25"
+                    >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        Analyze Demographics
+                    </button>
+                </div>
+
                 <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-800/40 p-2 rounded-2xl border border-slate-700/40 gap-4 mb-2">
                     <div className="flex bg-slate-900/40 p-1 rounded-xl border border-slate-700/30">
                         {(['cost', 'conversions', 'clicks'] as const).map(m => (
@@ -1910,137 +1998,182 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     };
 
     const renderDGAudiences = () => (
-        <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                    <tr>
-                        <th className="px-4 py-3 font-medium">Audience</th>
-                        <th className="px-4 py-3 font-medium">Type</th>
-                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
-                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
-                        <th className="px-4 py-3 text-right font-medium">Cost</th>
-                        <th className="px-4 py-3 text-right font-medium">ROAS</th>
-                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700 text-slate-300">
-                    {dgAudiences.length === 0 ? (
-                        <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500 italic">No audience data found.</td></tr>
-                    ) : (
-                        dgAudiences.map((a, i) => (
-                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
-                                <td className="px-4 py-4">{a.audienceName}</td>
-                                <td className="px-4 py-4 text-xs text-slate-400 capitalize">{a.audienceType?.toLowerCase().replace(/_/g, ' ') || 'Other'}</td>
-                                <td className="px-4 py-4 text-right">{fmtInt(a.impressions)}</td>
-                                <td className="px-4 py-4 text-right">{fmtInt(a.clicks)}</td>
-                                <td className="px-4 py-4 text-right">{fmtEuro(a.cost)}</td>
-                                <td className="px-4 py-4 text-right">{a.roas ? fmtX(a.roas) : '—'}</td>
-                                <td className="px-4 py-4 text-right">{fmtNum(a.conversions)}</td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
+        <div className="space-y-4">
+            <div className="flex justify-between items-center bg-violet-900/10 p-4 border border-violet-500/20 rounded-xl">
+                <div>
+                    <h3 className="text-sm font-semibold text-white">Audience Analysis</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Explore AI-driven insights for these audience segments.</p>
+                </div>
+                <button
+                    onClick={() => runAnalysis('category', 'Audiences')}
+                    className="flex items-center gap-2 bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white px-3 py-1.5 rounded-lg border border-violet-500/30 transition-all text-xs font-semibold shadow-sm hover:shadow-violet-500/25"
+                >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    Analyze Audiences
+                </button>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                        <tr>
+                            <th className="px-4 py-3 font-medium">Audience</th>
+                            <th className="px-4 py-3 font-medium">Type</th>
+                            <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                            <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                            <th className="px-4 py-3 text-right font-medium">Cost</th>
+                            <th className="px-4 py-3 text-right font-medium">ROAS</th>
+                            <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700 text-slate-300">
+                        {dgAudiences.length === 0 ? (
+                            <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500 italic">No audience data found.</td></tr>
+                        ) : (
+                            dgAudiences.map((a, i) => (
+                                <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                    <td className="px-4 py-4">{a.audienceName}</td>
+                                    <td className="px-4 py-4 text-xs text-slate-400 capitalize">{a.audienceType?.toLowerCase().replace(/_/g, ' ') || 'Other'}</td>
+                                    <td className="px-4 py-4 text-right">{fmtInt(a.impressions)}</td>
+                                    <td className="px-4 py-4 text-right">{fmtInt(a.clicks)}</td>
+                                    <td className="px-4 py-4 text-right">{fmtEuro(a.cost)}</td>
+                                    <td className="px-4 py-4 text-right">{a.roas ? fmtX(a.roas) : '—'}</td>
+                                    <td className="px-4 py-4 text-right">{fmtNum(a.conversions)}</td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 
     const renderDGTimeAnalysis = () => (
-        <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                    <tr>
-                        <th className="px-4 py-3 font-medium">Hour of Day</th>
-                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
-                        <th className="px-4 py-3 text-right font-medium">Clicks</th>
-                        <th className="px-4 py-3 text-right font-medium">Cost</th>
-                        <th className="px-4 py-3 text-right font-medium">Conv.</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700 text-slate-300">
-                    {dgTimeAnalysis.length === 0 ? (
-                        <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 italic">No time analysis data found.</td></tr>
-                    ) : (
-                        dgTimeAnalysis.map((t, i) => (
-                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
-                                <td className="px-4 py-4">{t.period}:00</td>
-                                <td className="px-4 py-4 text-right">{fmtInt(t.impressions)}</td>
-                                <td className="px-4 py-4 text-right">{fmtInt(t.clicks)}</td>
-                                <td className="px-4 py-4 text-right">{fmtEuro(t.cost)}</td>
-                                <td className="px-4 py-4 text-right">{fmtNum(t.conversions)}</td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
+        <div className="space-y-4">
+            <div className="flex justify-between items-center bg-violet-900/10 p-4 border border-violet-500/20 rounded-xl">
+                <div>
+                    <h3 className="text-sm font-semibold text-white">Time Analysis</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Explore AI-driven insights for time of day performance.</p>
+                </div>
+                <button
+                    onClick={() => runAnalysis('category', 'Time Analysis')}
+                    className="flex items-center gap-2 bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white px-3 py-1.5 rounded-lg border border-violet-500/30 transition-all text-xs font-semibold shadow-sm hover:shadow-violet-500/25"
+                >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    Analyze Time
+                </button>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                        <tr>
+                            <th className="px-4 py-3 font-medium">Hour of Day</th>
+                            <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                            <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                            <th className="px-4 py-3 text-right font-medium">Cost</th>
+                            <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700 text-slate-300">
+                        {dgTimeAnalysis.length === 0 ? (
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 italic">No time analysis data found.</td></tr>
+                        ) : (
+                            dgTimeAnalysis.map((t, i) => (
+                                <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                    <td className="px-4 py-4">{t.period}:00</td>
+                                    <td className="px-4 py-4 text-right">{fmtInt(t.impressions)}</td>
+                                    <td className="px-4 py-4 text-right">{fmtInt(t.clicks)}</td>
+                                    <td className="px-4 py-4 text-right">{fmtEuro(t.cost)}</td>
+                                    <td className="px-4 py-4 text-right">{fmtNum(t.conversions)}</td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 
     const renderDGAssets = () => (
-        <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
-                    <tr>
-                        <th className="px-4 py-3 font-medium">Asset</th>
-                        <th className="px-4 py-3 font-medium">Type</th>
-                        <th className="px-4 py-3 text-right font-medium">Impr.</th>
-                        <th className="px-4 py-3 text-right font-medium">CTR</th>
-                        <th className="px-4 py-3 text-right font-medium">Perf. Label</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700 text-slate-300">
-                    {dgAssets.length === 0 ? (
-                        <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 italic">No asset data found.</td></tr>
-                    ) : (
-                        dgAssets.map((a, i) => (
-                            <tr key={i} className="hover:bg-slate-700/30 transition-colors">
-                                <td className="px-4 py-4 max-w-sm">
-                                    {a.imageUrl ? (
-                                        <div className="flex items-center gap-3">
-                                            <img
-                                                src={a.imageUrl}
-                                                alt={a.name || 'Asset preview'}
-                                                className="w-12 h-12 object-cover rounded border border-slate-700 flex-shrink-0"
-                                                loading="lazy"
-                                            />
-                                            <span className="text-slate-300 text-xs truncate">{a.name || 'Image'}</span>
-                                        </div>
-                                    ) : a.youtubeVideoId ? (
-                                        <div className="flex items-center gap-3">
-                                            <img
-                                                src={`https://img.youtube.com/vi/${a.youtubeVideoId}/default.jpg`}
-                                                alt={a.name || 'Video preview'}
-                                                className="w-16 h-12 object-cover rounded border border-slate-700 flex-shrink-0"
-                                                loading="lazy"
-                                            />
-                                            <span className="text-slate-300 text-xs truncate">{a.name || a.youtubeVideoId}</span>
-                                        </div>
-                                    ) : (
-                                        <div className="truncate" title={a.text || a.name || a.id}>
-                                            {a.text || a.name || a.id}
-                                        </div>
-                                    )}
-                                </td>
-                                <td className="px-4 py-4 text-xs text-slate-400">
-                                    <span className="bg-slate-700/50 px-2 py-1 rounded border border-slate-600/50">
-                                        {(a.fieldType && ASSET_FIELD_TYPE_LABELS[a.fieldType]) || (a.type && ASSET_FIELD_TYPE_LABELS[a.type]) || a.fieldType || a.type || '—'}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-4 text-right">{fmtInt(a.impressions)}</td>
-                                <td className="px-4 py-4 text-right">{fmtPct(a.ctr * 100, 2)}</td>
-                                <td className="px-4 py-4 text-right">
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${a.performanceLabel === 'EXCELLENT' ? 'bg-emerald-500/20 text-emerald-400' :
-                                        a.performanceLabel === 'GOOD' ? 'bg-blue-500/20 text-blue-400' :
-                                            a.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400' :
-                                                'bg-slate-700 text-slate-400'
-                                        }`}>
-                                        {a.performanceLabel || 'PENDING'}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
+        <div className="space-y-4">
+            <div className="flex justify-between items-center bg-violet-900/10 p-4 border border-violet-500/20 rounded-xl">
+                <div>
+                    <h3 className="text-sm font-semibold text-white">Assets Analysis</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Explore AI-driven insights for your ad assets.</p>
+                </div>
+                <button
+                    onClick={() => runAnalysis('category', 'Assets')}
+                    className="flex items-center gap-2 bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white px-3 py-1.5 rounded-lg border border-violet-500/30 transition-all text-xs font-semibold shadow-sm hover:shadow-violet-500/25"
+                >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    Analyze Assets
+                </button>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                        <tr>
+                            <th className="px-4 py-3 font-medium">Asset</th>
+                            <th className="px-4 py-3 font-medium">Type</th>
+                            <th className="px-4 py-3 text-right font-medium">Impr.</th>
+                            <th className="px-4 py-3 text-right font-medium">CTR</th>
+                            <th className="px-4 py-3 text-right font-medium">Perf. Label</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700 text-slate-300">
+                        {dgAssets.length === 0 ? (
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 italic">No asset data found.</td></tr>
+                        ) : (
+                            dgAssets.map((a, i) => (
+                                <tr key={i} className="hover:bg-slate-700/30 transition-colors">
+                                    <td className="px-4 py-4 max-w-sm">
+                                        {a.imageUrl ? (
+                                            <div className="flex items-center gap-3">
+                                                <img
+                                                    src={a.imageUrl}
+                                                    alt={a.name || 'Asset preview'}
+                                                    className="w-12 h-12 object-cover rounded border border-slate-700 flex-shrink-0"
+                                                    loading="lazy"
+                                                />
+                                                <span className="text-slate-300 text-xs truncate">{a.name || 'Image'}</span>
+                                            </div>
+                                        ) : a.youtubeVideoId ? (
+                                            <div className="flex items-center gap-3">
+                                                <img
+                                                    src={`https://img.youtube.com/vi/${a.youtubeVideoId}/default.jpg`}
+                                                    alt={a.name || 'Video preview'}
+                                                    className="w-16 h-12 object-cover rounded border border-slate-700 flex-shrink-0"
+                                                    loading="lazy"
+                                                />
+                                                <span className="text-slate-300 text-xs truncate">{a.name || a.youtubeVideoId}</span>
+                                            </div>
+                                        ) : (
+                                            <div className="truncate" title={a.text || a.name || a.id}>
+                                                {a.text || a.name || a.id}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-4 text-xs text-slate-400">
+                                        <span className="bg-slate-700/50 px-2 py-1 rounded border border-slate-600/50">
+                                            {(a.fieldType && ASSET_FIELD_TYPE_LABELS[a.fieldType]) || (a.type && ASSET_FIELD_TYPE_LABELS[a.type]) || a.fieldType || a.type || '—'}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-4 text-right">{fmtInt(a.impressions)}</td>
+                                    <td className="px-4 py-4 text-right">{fmtPct(a.ctr * 100, 2)}</td>
+                                    <td className="px-4 py-4 text-right">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] ${a.performanceLabel === 'EXCELLENT' ? 'bg-emerald-500/20 text-emerald-400' :
+                                            a.performanceLabel === 'GOOD' ? 'bg-blue-500/20 text-blue-400' :
+                                                a.performanceLabel === 'LOW' ? 'bg-red-500/20 text-red-400' :
+                                                    'bg-slate-700 text-slate-400'
+                                            }`}>
+                                            {a.performanceLabel || 'PENDING'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 
@@ -2060,6 +2193,19 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
         return (
             <div className="p-6 space-y-6">
+                <div className="flex justify-between items-center bg-violet-900/10 p-4 border border-violet-500/20 rounded-xl">
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">Campaign AI Insights</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Get a deep performance analysis for this PMax campaign.</p>
+                    </div>
+                    <button
+                        onClick={() => runAnalysis('campaign')}
+                        className="flex items-center gap-2 bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white px-3 py-1.5 rounded-lg border border-violet-500/30 transition-all text-xs font-semibold shadow-sm hover:shadow-violet-500/25"
+                    >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        Analyze Campaign
+                    </button>
+                </div>
                 {/* KPI Row 1 */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-slate-700/30 rounded-lg p-4">
@@ -2350,20 +2496,20 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 {navigation.view === 'insights' ? 'Strategic Insights' :
                                     navigation.view === 'reports' ? 'AI Reports' :
                                         navigation.view === 'diagnostics' ? 'Diagnostics' :
-                                        navigation.view === 'ngrams' ? 'N-Grams' :
-                                            navigation.level === 'campaign' ? (
-                                                (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
-                                                    campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
-                                                    ? 'Asset Groups'
-                                                    : 'Ad Groups'
-                                            ) :
-                                                navigation.level === 'adgroup' ? (
+                                            navigation.view === 'ngrams' ? 'N-Grams' :
+                                                navigation.level === 'campaign' ? (
                                                     (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
                                                         campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
-                                                        ? 'Asset Group Details'
-                                                        : 'Ad Group Details'
+                                                        ? 'Asset Groups'
+                                                        : 'Ad Groups'
                                                 ) :
-                                                    'All Campaigns'}
+                                                    navigation.level === 'adgroup' ? (
+                                                        (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
+                                                            campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
+                                                            ? 'Asset Group Details'
+                                                            : 'Ad Group Details'
+                                                    ) :
+                                                        'All Campaigns'}
                             </h1>
                         </div>
                         <div className="flex items-center gap-3">
@@ -3574,7 +3720,16 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <h2 className="font-semibold text-white">Audiences</h2>
                                                                 <p className="text-xs text-slate-400 mt-0.5">Audience segments targeted in this ad group</p>
                                                             </div>
-                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{displayAudiences.length} audiences</span>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{displayAudiences.length} audiences</span>
+                                                                <button
+                                                                    onClick={() => runAnalysis('category', 'Audiences')}
+                                                                    className="flex items-center gap-2 bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white px-3 py-1.5 rounded-lg border border-violet-500/30 transition-all text-[11px] font-semibold"
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                                    Analyze
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                         <div className="overflow-x-auto">
                                                             <table className="w-full text-left text-sm">
@@ -3613,9 +3768,18 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                     {/* Demographics */}
                                                     {displayDemographics.length > 0 && (
                                                         <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
-                                                            <div className="px-6 py-4 border-b border-slate-700">
-                                                                <h2 className="font-semibold text-white">Demographics</h2>
-                                                                <p className="text-xs text-slate-400 mt-0.5">Age and gender breakdown for this ad group</p>
+                                                            <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                                <div>
+                                                                    <h2 className="font-semibold text-white">Demographics</h2>
+                                                                    <p className="text-xs text-slate-400 mt-0.5">Age and gender breakdown for this ad group</p>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => runAnalysis('category', 'Demographics')}
+                                                                    className="flex items-center gap-2 bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white px-3 py-1.5 rounded-lg border border-violet-500/30 transition-all text-[11px] font-semibold"
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                                    Analyze
+                                                                </button>
                                                             </div>
                                                             <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-700">
                                                                 {/* Age */}

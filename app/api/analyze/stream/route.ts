@@ -59,7 +59,78 @@ function buildPrompt(data: any): string {
         return getAdGroupAnalysisPrompt(data, language);
     }
 
+    if (analysisType === 'ngrams') {
+        const topWinning = data.nGramAnalysis?.topWinning || [];
+        const topWasteful = data.nGramAnalysis?.topWasteful || [];
+
+        const ngramBlock = `=== TOP WINNING N-GRAMS (High Volume & Good CPA/ROAS) ===
+${topWinning.map((ng: any) => `- "${ng.gram}": €${ng.cost.toFixed(2)} spend | ${ng.conversions.toFixed(1)} conv | CPA: €${ng.cpa.toFixed(2)} | ROAS: ${ng.roas.toFixed(2)}x`).join('\n')}
+
+=== TOP WASTEFUL N-GRAMS (High Spend & No/Low Conversions) ===
+${topWasteful.map((ng: any) => `- "${ng.gram}": €${ng.cost.toFixed(2)} spend | ${ng.conversions.toFixed(1)} conv | CPA: €${ng.cpa === Infinity ? 'N/A' : ng.cpa.toFixed(2)} | ROAS: ${ng.roas.toFixed(2)}x`).join('\n')}`;
+
+        return `${languageInstruction}
+
+=== N-GRAMS ANALYSIS MISSION ===
+Produce BOTH an Executive Summary and a Technical Analysis based exclusively on the N-Grams data below.
+
+${ngramBlock}
+
+=== ANALYSIS REQUIREMENTS ===
+1. Analyze the winning N-Grams and suggest expansion opportunities (e.g. creating new dedicated ad groups or broad match keyword combinations).
+2. Analyze the wasteful N-Grams and provide a concrete list of negative keywords to add immediately.
+3. Identify underlying themes in what works and what doesn't.
+4. Calculate potential savings if the wasteful N-Grams are excluded.
+
+MANDATORY CLOSING SECTIONS (DO NOT OMIT):
+Your Document 2 MUST end with these three sections from the output format:
+- Section 8: Scaling Scenarios (A/B/C — Conservative, Balanced, Aggressive)
+- Section 9: Decision Requests (3-5 concrete decisions for management to approve)
+- Section 10: Definition of Done (4-6 measurable success criteria for next 30 days)
+The report is INCOMPLETE without these sections. Include them BEFORE the JSON block.
+
+At the end, provide a JSON block wrapped in \`\`\`json tags:
+{ "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
+    }
+
     if (analysisType === 'category' && category) {
+        // Special categories (contextual data)
+        const SPECIAL_CATEGORIES = ['Placements', 'Demographics', 'Audiences', 'Time Analysis', 'Assets'];
+        if (SPECIAL_CATEGORIES.includes(category)) {
+            let categorySpecificData = "";
+            let specificMission = "";
+
+            if (category === 'Placements') {
+                const placements = data.placements || [];
+                categorySpecificData = `=== PLACEMENTS DATA (${placements.length} items) ===\n` +
+                    placements.slice(0, 100).map((p: any) => `- ${p.placement || p.url}: €${(p.cost || 0).toFixed(2)} spend | ${p.conversions || 0} conv | ${p.clicks || 0} clicks | CTR: ${(p.ctr * 100).toFixed(2)}%`).join('\n');
+                specificMission = "Identify high-waste placements (high spend, low conversion) for exclusion, and find high-performing sites for potentially adding as managed placements.";
+            } else if (category === 'Demographics') {
+                const demographics = data.demographics || [];
+                categorySpecificData = `=== DEMOGRAPHIC DATA ===\n` +
+                    demographics.map((d: any) => `- ${d.type} (${d.range}): €${(d.cost || 0).toFixed(2)} spend | ${d.conversions || 0} conv | ROAS: ${d.roas || 0}x`).join('\n');
+                specificMission = "Analyze performance skews across age and gender. Identify segments with disproportionately high waste or exceptional ROAS for bid adjustments.";
+            } else if (category === 'Audiences') {
+                const audiences = data.audiences || [];
+                categorySpecificData = `=== AUDIENCE DATA ===\n` +
+                    audiences.map((a: any) => `- ${a.audience || a.name}: €${(a.cost || 0).toFixed(2)} spend | ${a.conversions || 0} conv | CTR: ${(a.ctr * 100).toFixed(2)}% | ROAS: ${a.roas || 0}x`).join('\n');
+                specificMission = "Identify the most profitable audience segments and those that are wasting budget. Suggest expansion into similar segments or tightening targeting.";
+            } else if (category === 'Time Analysis') {
+                const timeData = data.timeAnalysis || [];
+                categorySpecificData = `=== TIME ANALYSIS DATA ===\n` +
+                    timeData.map((t: any) => `- Hour ${t.period}:00: €${(t.cost || 0).toFixed(2)} spend | ${t.conversions || 0} conv | Clicks: ${t.clicks}`).join('\n');
+                specificMission = "Analyze performance by hour of day. Identify peak efficiency windows and periods of high waste. Suggest ad scheduling (dayparting) adjustments.";
+            } else if (category === 'Assets') {
+                const assets = (data.assets || []).concat(data.pmaxAssets || []);
+                categorySpecificData = `=== ASSETS & CREATIVE DATA ===\n` +
+                    assets.slice(0, 50).map((a: any) => `- ${a.type} [${a.performanceLabel || 'PENDING'}]: "${a.text || a.url || 'Media Asset'}" | Impr: ${a.impressions || 0} | CTR: ${((a.ctr || 0) * 100).toFixed(2)}%`).join('\n');
+                specificMission = "Evaluate creative effectiveness. Identify 'Low' performing assets for replacement and 'Best' assets for scaling. Check for message-to-market fit.";
+            }
+
+            return `${languageInstruction}\n\n${dataInventory}\n\n=== SPECIALIZED ANALYSIS: ${category.toUpperCase()} ===\nMISSION: ${specificMission}\n\n${categorySpecificData}\n\n=== REQUIREMENTS ===\n1. Deep dive into the provided ${category} data.\n2. Identify 3-5 high-impact actionable optimizations.\n3. Quantify potential improvements or savings.\n\nAt the end, provide a JSON block wrapped in \`\`\`json tags:\n{ "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
+        }
+
+        // Standard campaign categories (Brand, PMax etc.)
         const campaigns = enrichCampaignData(data.campaigns || []);
         const categoryLabels: Record<string, string> = {
             pmax_aon: 'Performance Max (AON)', pmax_sale: 'Performance Max (Sale)',
@@ -159,7 +230,8 @@ export async function POST(request: Request) {
             (data.level === 'campaign' && (data.adGroups?.length > 0 || data.assetGroups?.length > 0)) ||
             (data.level === 'adgroup' && data.adGroup) ||
             (data.level === 'strategic_category' && data.campaigns?.length > 0) ||
-            (data.analysisType === 'category' && data.campaigns?.length > 0);
+            (data.analysisType === 'category' && data.campaigns?.length > 0) ||
+            (data.analysisType === 'ngrams' && data.nGramAnalysis);
 
         if (!hasData) {
             return new Response(JSON.stringify({ error: "No data available to analyze" }), {
@@ -184,12 +256,13 @@ export async function POST(request: Request) {
         // Model selection (allow override for A/B testing)
         const ALLOWED_MODELS: Record<string, string> = {
             'opus-4.6': 'claude-opus-4-6',
+            'sonnet-4.6': 'claude-sonnet-4-6',
             'sonnet-4.5': 'claude-sonnet-4-5-20250929',
             'haiku-4.5': 'claude-haiku-4-5-20251001',
         };
         const requestedModel = data.model ? ALLOWED_MODELS[data.model] : undefined;
-        const modelId = requestedModel || 'claude-sonnet-4-5-20250929';
-        const modelLabel = Object.entries(ALLOWED_MODELS).find(([, v]) => v === modelId)?.[0] || 'opus-4.6';
+        const modelId = requestedModel || 'claude-sonnet-4-6';
+        const modelLabel = Object.entries(ALLOWED_MODELS).find(([, v]) => v === modelId)?.[0] || 'sonnet-4.6';
 
         // Stream from Anthropic
         const stream = anthropic.messages.stream({
@@ -228,7 +301,6 @@ export async function POST(request: Request) {
 
                         const reportTitle = `[${modelLabel}] ${contextLabel} Analysis${periodLabel} - ${new Date().toLocaleDateString('bg-BG')}`;
                         const reportId = `insight_${data.level}_${data.analysisType || 'gen'}_${Date.now()}`;
-
                         await Promise.all([
                             // Save to SQL (Reliable History)
                             saveReport({

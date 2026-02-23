@@ -435,10 +435,20 @@ export async function POST(request: Request) {
 LANGUAGE CONSTRAINT:
 ${isEn ? "Your entire response MUST be in English." : "Целият ти отговор ТРЯБВА да бъде на български език."}`;
 
-        console.log(`[AI Analysis] Level: ${data.level}, Prompt: ${finalPrompt.length} chars, Language: ${language}, Version: V3 (Enforced)`);
+        // Model selection (allow override for A/B testing)
+        const ALLOWED_MODELS: Record<string, string> = {
+            'opus-4.6': 'claude-opus-4-6',
+            'sonnet-4.6': 'claude-sonnet-4-6',
+            'sonnet-4.5': 'claude-sonnet-4-5-20250929',
+            'haiku-4.5': 'claude-haiku-4-5-20251001',
+        };
+        const requestedModel = data.model ? ALLOWED_MODELS[data.model] : undefined;
+        const modelId = requestedModel || 'claude-sonnet-4-6';
+
+        console.log(`[AI Analysis] Level: ${data.level}, Prompt: ${finalPrompt.length} chars, Language: ${language}, Model: ${modelId}, Version: V3 (Enforced)`);
 
         const response = await anthropic.messages.create({
-            model: "claude-sonnet-4-5-20250929",
+            model: modelId,
             max_tokens: 20000,
             ...(systemPrompt ? { system: systemPrompt } : {}),
             messages: [
@@ -503,7 +513,7 @@ ${analysis}
 Изведи подобрения анализ в същата структура и формат, но с по-дълбоки прозрения и по-action-able препоръки.`;
 
             const secondPassResponse = await anthropic.messages.create({
-                model: "claude-sonnet-4-5-20250929",
+                model: modelId,
                 max_tokens: 20000,
                 ...(systemPrompt ? { system: systemPrompt } : {}),
                 messages: [

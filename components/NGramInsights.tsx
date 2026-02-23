@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Layers, TrendingUp, TrendingDown, MinusCircle, Check, BarChart2, Circle, X, Maximize2 } from 'lucide-react';
+import { Layers, TrendingUp, TrendingDown, MinusCircle, Check, BarChart2, Circle, X, Maximize2, Loader2, ChevronUp, ChevronDown, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildNGrams, type NGram } from '@/lib/account-health';
 import { fmtNum, fmtInt, fmtEuro, fmtX } from '@/lib/format';
 
@@ -23,8 +23,8 @@ function classifyGram(gram: string): 'Brand' | 'Non-brand' | 'Dimension' {
 function roasClass(roas: number | null): string {
     if (!roas) return 'text-slate-500 bg-slate-700/30';
     if (roas >= 15) return 'text-emerald-400 bg-emerald-400/10';
-    if (roas >= 8)  return 'text-cyan-400   bg-cyan-400/10';
-    if (roas >= 3)  return 'text-amber-400  bg-amber-400/10';
+    if (roas >= 8) return 'text-cyan-400   bg-cyan-400/10';
+    if (roas >= 3) return 'text-amber-400  bg-amber-400/10';
     return 'text-red-400 bg-red-400/10';
 }
 
@@ -32,31 +32,31 @@ function roasText(roas: number | null) {
     return fmtX(roas);
 }
 
-type TabType     = 'winning' | 'wasteful';
-type SizeFilter  = 0 | 1 | 2 | 3;
-type TypeFilter  = 'all' | 'Brand' | 'Non-brand' | 'Dimension';
-type SortKey     = 'conversions' | 'roas' | 'cost' | 'cpa' | 'termCount';
+type TabType = 'winning' | 'wasteful';
+type SizeFilter = 0 | 1 | 2 | 3;
+type TypeFilter = 'all' | 'Brand' | 'Non-brand' | 'Dimension';
+type SortKey = 'conversions' | 'roas' | 'cost' | 'cpa' | 'termCount';
 type ViewDisplay = 'table' | 'bubble';
 
 // ---------- Bubble chart ----------
 function BubbleChart({ data, typeFilter, fullscreen = false }: { data: (NGram & { gramType: string })[]; typeFilter: TypeFilter; fullscreen?: boolean }) {
     const [hovered, setHovered] = useState<string | null>(null);
 
-    const W   = fullscreen ? 1500 : 700;
-    const H   = fullscreen ? 680  : 320;
-    const PAD = fullscreen ? 68   : 44;
+    const W = fullscreen ? 1500 : 700;
+    const H = fullscreen ? 680 : 320;
+    const PAD = fullscreen ? 68 : 44;
     const MIN_R = fullscreen ? 10 : 6;
     const MAX_R = fullscreen ? 52 : 28;
 
     const visible = data.filter(g => g.cost > 0 || g.conversions > 0).slice(0, fullscreen ? 60 : 40);
     if (!visible.length) return <div className="p-8 text-center text-slate-500 italic">Няма данни за bubble chart.</div>;
 
-    const maxConv  = Math.max(...visible.map(g => g.conversions), 1);
-    const maxRoas  = Math.max(...visible.map(g => g.roas ?? 0), 1);
-    const maxCost  = Math.max(...visible.map(g => g.cost), 1);
+    const maxConv = Math.max(...visible.map(g => g.conversions), 1);
+    const maxRoas = Math.max(...visible.map(g => g.roas ?? 0), 1);
+    const maxCost = Math.max(...visible.map(g => g.cost), 1);
 
     const typeColor: Record<string, string> = {
-        'Brand':     '#8b5cf6',
+        'Brand': '#8b5cf6',
         'Non-brand': '#10b981',
         'Dimension': '#f59e0b',
     };
@@ -66,10 +66,10 @@ function BubbleChart({ data, typeFilter, fullscreen = false }: { data: (NGram & 
     const rPos = (g: NGram) => MIN_R + ((g.cost / maxCost) ** 0.5) * (MAX_R - MIN_R);
 
     const fz = {
-        axis:    fullscreen ? 13 : 8,
-        label:   fullscreen ? 12 : 7,
-        hover:   fullscreen ? 14 : 8.5,
-        hover2:  fullscreen ? 12 : 7.5,
+        axis: fullscreen ? 13 : 8,
+        label: fullscreen ? 12 : 7,
+        hover: fullscreen ? 14 : 8.5,
+        hover2: fullscreen ? 12 : 7.5,
         tooltip: fullscreen ? 160 : 110,
         tooltipH: fullscreen ? 72 : 54,
     };
@@ -144,13 +144,45 @@ function BubbleChart({ data, typeFilter, fullscreen = false }: { data: (NGram & 
 
 // ---------- Main component ----------
 export default function NGramInsights({ searchTerms, loading }: NGramInsightsProps) {
-    const [activeTab,       setActiveTab]       = useState<TabType>('winning');
-    const [nSize,           setNSize]           = useState<SizeFilter>(0);
-    const [typeFilter,      setTypeFilter]      = useState<TypeFilter>('all');
-    const [sortKey,         setSortKey]         = useState<SortKey>('conversions');
-    const [viewMode,        setViewMode]        = useState<ViewDisplay>('table');
-    const [confirmed,       setConfirmed]       = useState<Set<string>>(new Set());
-    const [bubbleFullscreen,setBubbleFullscreen]= useState(false);
+    const [activeTab, setActiveTab] = useState<TabType>('winning');
+    const [nSize, setNSize] = useState<SizeFilter>(0);
+    const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+    const [sortKey, setSortKey] = useState<SortKey>('conversions');
+    const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [viewMode, setViewMode] = useState<ViewDisplay>('table');
+    const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+    const [bubbleFullscreen, setBubbleFullscreen] = useState(false);
+    const ITEMS_PER_PAGE = 50;
+
+    // Reset page when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, nSize, typeFilter, sortKey, sortDir, searchTerm]);
+
+    const SortHeader = ({ label, field, right = false }: { label: string, field: SortKey, right?: boolean }) => {
+        const isActive = sortKey === field;
+        return (
+            <th className={`px-3 py-3 cursor-pointer select-none group hover:bg-slate-800/50 transition-colors ${right ? 'text-right' : 'text-left'}`}
+                onClick={() => {
+                    if (isActive) {
+                        setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+                    } else {
+                        setSortKey(field);
+                        setSortDir('desc');
+                    }
+                }}>
+                <div className={`flex items-center gap-1.5 ${right ? 'justify-end' : ''} ${isActive ? 'text-slate-300' : 'text-slate-500 group-hover:text-slate-400'}`}>
+                    {label}
+                    <div className="flex flex-col opacity-50 space-y-[0px]">
+                        <ChevronUp className={`w-3 h-3 -mb-1 ${isActive && sortDir === 'asc' ? 'text-violet-400 opacity-100' : ''}`} />
+                        <ChevronDown className={`w-3 h-3 ${isActive && sortDir === 'desc' ? 'text-violet-400 opacity-100' : ''}`} />
+                    </div>
+                </div>
+            </th>
+        );
+    };
 
     // ESC key closes fullscreen
     useEffect(() => {
@@ -173,15 +205,15 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
     const kpi = useMemo(() => {
         if (!allNGrams.length) return null;
         const winning = allNGrams.filter(g => g.conversions > 0);
-        const top     = [...winning].sort((a, b) => b.conversions - a.conversions)[0];
+        const top = [...winning].sort((a, b) => b.conversions - a.conversions)[0];
 
-        const brandSpend    = allNGrams.filter(g => (g as any).gramType === 'Brand').reduce((s, g) => s + g.cost, 0);
+        const brandSpend = allNGrams.filter(g => (g as any).gramType === 'Brand').reduce((s, g) => s + g.cost, 0);
         const nonBrandSpend = allNGrams.filter(g => (g as any).gramType === 'Non-brand').reduce((s, g) => s + g.cost, 0);
-        const totalSpend    = brandSpend + nonBrandSpend || 1;
-        const brandPct      = Math.round((brandSpend / totalSpend) * 100);
+        const totalSpend = brandSpend + nonBrandSpend || 1;
+        const brandPct = Math.round((brandSpend / totalSpend) * 100);
 
-        const roasGrams     = winning.filter(g => g.roas);
-        const avgRoas       = roasGrams.length
+        const roasGrams = winning.filter(g => g.roas);
+        const avgRoas = roasGrams.length
             ? roasGrams.reduce((s, g) => s + (g.roas ?? 0), 0) / roasGrams.length
             : 0;
 
@@ -205,16 +237,35 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
             data = data.filter(g => g.conversions === 0 && g.cost > 2);
         }
 
+        if (searchTerm.trim()) {
+            const lowerSearch = searchTerm.toLowerCase();
+            data = data.filter(g => g.gram.includes(lowerSearch));
+        }
+
         return [...data].sort((a, b) => {
+            let valA: number, valB: number;
             if (sortKey === 'cpa') {
-                const ca = a.conversions > 0 ? a.cost / a.conversions : Infinity;
-                const cb = b.conversions > 0 ? b.cost / b.conversions : Infinity;
-                return ca - cb;
+                valA = a.conversions > 0 ? a.cost / a.conversions : Infinity;
+                valB = b.conversions > 0 ? b.cost / b.conversions : Infinity;
+            } else if (sortKey === 'roas') {
+                valA = a.roas ?? -Infinity;
+                valB = b.roas ?? -Infinity;
+            } else {
+                valA = a[sortKey] as number;
+                valB = b[sortKey] as number;
             }
-            if (sortKey === 'roas') return (b.roas ?? 0) - (a.roas ?? 0);
-            return (b[sortKey] as number) - (a[sortKey] as number);
-        }).slice(0, 50);
-    }, [allNGrams, activeTab, nSize, typeFilter, sortKey]);
+
+            if (valA < valB) return sortDir === 'desc' ? 1 : -1;
+            if (valA > valB) return sortDir === 'desc' ? -1 : 1;
+            return 0;
+        });
+    }, [allNGrams, activeTab, nSize, typeFilter, sortKey, sortDir, searchTerm]);
+
+    const totalPages = Math.max(1, Math.ceil(tableData.length / ITEMS_PER_PAGE));
+    const paginatedData = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return tableData.slice(start, start + ITEMS_PER_PAGE);
+    }, [tableData, currentPage]);
 
     // ---- Spend share ----
     const maxSpend = useMemo(() => Math.max(...tableData.map(g => g.cost), 1), [tableData]);
@@ -226,7 +277,7 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
             const topConv = kpi.top?.conversions ?? 0;
             const totalConv = allNGrams.reduce((s, g) => s + g.conversions, 0) / 3; // approx unique
             const pct = totalConv > 0 ? Math.round((topConv / totalConv) * 100) : 0;
-            return `Top pattern "${kpi.top?.gram}" drives ${topConv} conversions. Brand terms represent ${kpi.brandPct}% of spend (${fmtEuro(kpi.brandSpend, 0)}) vs Non-brand ${fmtEuro(kpi.nonBrandSpend, 0)}.`;
+            return `Top pattern "${kpi.top?.gram}" drives ${fmtNum(topConv, 2)} conversions. Brand terms represent ${kpi.brandPct}% of spend (${fmtEuro(kpi.brandSpend, 0)}) vs Non-brand ${fmtEuro(kpi.nonBrandSpend, 0)}.`;
         } else {
             const wasted = tableData.reduce((s, g) => s + g.cost, 0);
             return `${tableData.length} patterns wasted ${fmtEuro(wasted, 0)} with 0 conversions. Add the highest-spend ones as negatives to recover budget.`;
@@ -235,9 +286,9 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
 
     // ---- TYPE badge ----
     const typeBadge = (t: string) => {
-        if (t === 'Brand')     return <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 font-bold tracking-wide">BRAND</span>;
+        if (t === 'Brand') return <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 font-bold tracking-wide">BRAND</span>;
         if (t === 'Dimension') return <span className="text-xs px-2 py-0.5 rounded-md bg-amber-500/20  text-amber-300  font-bold tracking-wide">DIMENSION</span>;
-        return                        <span className="text-xs px-2 py-0.5 rounded-md bg-slate-600/60   text-slate-400  font-bold tracking-wide">NON-BRAND</span>;
+        return <span className="text-xs px-2 py-0.5 rounded-md bg-slate-600/60   text-slate-400  font-bold tracking-wide">NON-BRAND</span>;
     };
 
     // ---- N badge ----
@@ -247,7 +298,17 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
     };
 
     // ---- Loading / empty ----
-    if (loading) return <div className="animate-pulse bg-slate-900/50 border border-slate-800 rounded-xl h-96" />;
+    if (loading) {
+        return (
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl shadow-lg relative overflow-hidden min-h-[500px] flex flex-col items-center justify-center space-y-4">
+                <Loader2 className="w-10 h-10 text-violet-500 animate-spin" />
+                <p className="text-slate-300 font-medium text-lg">Generating N-Gram Insights...</p>
+                <div className="text-sm text-slate-500 max-w-md text-center">
+                    Analyzing word patterns and combining metrics to identify your best and worst performing search term combinations.
+                </div>
+            </div>
+        );
+    }
     if (!searchTerms?.length) {
         return (
             <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center">
@@ -289,11 +350,14 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
             {kpi && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-800/50 border-b border-slate-800">
                     {/* Top Pattern */}
-                    <div className="bg-slate-900/70 px-4 py-3">
-                        <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">Top Pattern</p>
-                        <p className="text-lg font-black text-white mt-1 tracking-tight">{kpi.top?.gram ?? '—'}</p>
+                    <div
+                        className="bg-slate-900/70 px-4 py-3 cursor-pointer hover:bg-slate-800 transition-colors group"
+                        onClick={() => { if (kpi.top) { setSearchTerm(kpi.top.gram); setViewMode('table'); } }}
+                    >
+                        <p className="text-xs text-slate-500 uppercase tracking-widest font-bold group-hover:text-violet-400 transition-colors">Top Pattern</p>
+                        <p className="text-lg font-black text-white mt-1 tracking-tight truncate" title={kpi.top?.gram ?? '—'}>{kpi.top?.gram ?? '—'}</p>
                         <p className="text-sm text-slate-400 mt-0.5">
-                            {kpi.top?.conversions} conv · {roasText(kpi.top?.roas ?? null)} ROAS
+                            {kpi.top ? fmtNum(kpi.top.conversions, 2) : 0} conv · {roasText(kpi.top?.roas ?? null)} ROAS
                         </p>
                     </div>
                     {/* Brand vs Non-brand */}
@@ -361,23 +425,29 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                     ))}
                 </div>
 
-                <div className="ml-auto flex items-center gap-2 text-sm">
-                    <span className="text-slate-500">Sort:</span>
-                    <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}
-                        className="bg-slate-800 border border-slate-700 text-slate-300 text-sm rounded-lg px-2.5 py-1.5 focus:ring-violet-500 focus:border-violet-500">
-                        <option value="conversions">Conversions</option>
-                        <option value="roas">ROAS</option>
-                        <option value="cost">Spend</option>
-                        <option value="termCount">Terms</option>
-                        <option value="cpa">CPA</option>
-                    </select>
+                <div className="ml-auto flex items-center gap-2">
+                    <div className="relative">
+                        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                            type="text"
+                            placeholder="Търси патърн..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="bg-slate-800 border border-slate-700 text-slate-300 text-sm rounded-lg pl-9 pr-3 py-1.5 focus:ring-violet-500 focus:border-violet-500 w-48 placeholder:text-slate-600 focus:outline-none focus:ring-1"
+                        />
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {/* ── Content ──────────────────────────────────── */}
             <div className="min-h-[360px]">
                 {viewMode === 'bubble' ? (
-                    <BubbleChart data={tableData as any} typeFilter={typeFilter} />
+                    <BubbleChart data={paginatedData as any} typeFilter={typeFilter} />
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
@@ -386,16 +456,16 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                                     <th className="px-4 py-3 w-48">Pattern / Phrase</th>
                                     <th className="px-3 py-3">Size</th>
                                     <th className="px-3 py-3">Type</th>
-                                    <th className="px-3 py-3 text-right">Terms</th>
-                                    <th className="px-4 py-3">Spend (Share)</th>
-                                    <th className="px-3 py-3 text-right">Conversions</th>
-                                    <th className="px-3 py-3 text-right">ROAS</th>
-                                    <th className="px-3 py-3 text-right">CPA</th>
+                                    <SortHeader label="Terms" field="termCount" right />
+                                    <SortHeader label="Spend (Share)" field="cost" />
+                                    <SortHeader label="Conversions" field="conversions" right />
+                                    <SortHeader label="ROAS" field="roas" right />
+                                    <SortHeader label="CPA" field="cpa" right />
                                     {activeTab === 'wasteful' && <th className="px-3 py-3" />}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/40">
-                                {tableData.map((g, idx) => {
+                                {paginatedData.map((g, idx) => {
                                     const gAny = g as any;
                                     const spendShare = (g.cost / maxSpend) * 100;
                                     const cpa = g.conversions > 0 ? g.cost / g.conversions : null;
@@ -451,6 +521,29 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                         </table>
                         {tableData.length === 0 && (
                             <div className="p-10 text-center text-slate-500 italic">Няма намерени съвпадения.</div>
+                        )}
+                        {totalPages > 1 && (
+                            <div className="px-4 py-3 border-t border-slate-800/40 flex items-center justify-between text-sm">
+                                <span className="text-slate-500">
+                                    Показани {(currentPage - 1) * ITEMS_PER_PAGE + 1} до {Math.min(currentPage * ITEMS_PER_PAGE, tableData.length)} от {tableData.length} резултата
+                                </span>
+                                <div className="flex gap-1">
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={currentPage === 1}
+                                        className="p-1.5 rounded bg-slate-800 border border-slate-700 text-slate-400 disabled:opacity-50 hover:text-white disabled:hover:text-slate-400 transition-colors"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={currentPage === totalPages}
+                                        className="p-1.5 rounded bg-slate-800 border border-slate-700 text-slate-400 disabled:opacity-50 hover:text-white disabled:hover:text-slate-400 transition-colors"
+                                    >
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
                         )}
                     </div>
                 )}
@@ -513,11 +606,11 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                     </div>
                     {/* Chart fills remaining height */}
                     <div className="flex-1 flex flex-col justify-center px-6 pb-4 min-h-0">
-                        <BubbleChart data={tableData as any} typeFilter={typeFilter} fullscreen />
+                        <BubbleChart data={paginatedData as any} typeFilter={typeFilter} fullscreen />
                     </div>
                     {/* ESC hint */}
                     <div className="shrink-0 px-6 pb-3 text-xs text-slate-700 text-center">
-                        Натисни ESC за затваряне · {tableData.length} patterns
+                        Натисни ESC за затваряне · {paginatedData.length} patterns
                     </div>
                 </div>
             )}

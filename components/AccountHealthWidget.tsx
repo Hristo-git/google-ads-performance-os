@@ -15,7 +15,8 @@ import {
     ChevronUp,
     Lightbulb,
     Smartphone,
-    Users
+    Users,
+    Loader2
 } from 'lucide-react';
 
 interface HealthCheck {
@@ -145,10 +146,11 @@ export default function AccountHealthWidget({ data, loading }: AccountHealthWidg
 
     if (loading) {
         return (
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 animate-pulse">
-                <div className="h-8 w-48 bg-slate-800 rounded mb-4"></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-slate-800 rounded-lg"></div>)}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl shadow-lg relative overflow-hidden min-h-[500px] flex flex-col items-center justify-center space-y-4">
+                <Loader2 className="w-10 h-10 text-violet-500 animate-spin" />
+                <p className="text-slate-300 font-medium text-lg">Analyzing Account Health...</p>
+                <div className="text-sm text-slate-500 max-w-md text-center">
+                    Reviewing structural integrity, budget efficiency, conversions setup, and match types across your campaigns.
                 </div>
             </div>
         );
