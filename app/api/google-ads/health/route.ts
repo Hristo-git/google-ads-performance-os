@@ -194,6 +194,7 @@ export async function GET(request: Request) {
             cost: st.cost,
             conversions: st.conversions,
             conversionValue: st.conversionValue,
+            date: st.date,
         }));
 
         console.log(`[API/Health] Running pre-analysis with ${searchTermInputs.length} search term inputs`);

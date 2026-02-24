@@ -73,6 +73,7 @@ export interface SearchTermInput {
     cost: number;
     conversions: number;
     conversionValue: number;
+    date?: string; // ISO format date for lag filtering
 }
 
 // ============================================================
@@ -450,10 +451,24 @@ export function calculateHealthScore(
     let wastedTermsPct = 0;
     let wastedCost = 0;
     if (searchTerms && searchTerms.length > 0) {
-        const zeroConvTerms = searchTerms.filter(st => st.conversions === 0 && st.cost > 0);
-        wastedCost = zeroConvTerms.reduce((sum, st) => sum + st.cost, 0);
-        const totalSTCost = searchTerms.reduce((sum, st) => sum + st.cost, 0);
-        wastedTermsPct = totalSTCost > 0 ? (wastedCost / totalSTCost) * 100 : 0;
+        // --- 14-DAY ATTRIBUTION LAG COMPENSATION ---
+        const LAG_DAYS = 14;
+        const now = new Date();
+        const cutoffDate = new Date(now.getTime() - (LAG_DAYS * 24 * 60 * 60 * 1000));
+
+        // Only count terms older than 14 days for waste analysis
+        const matureTerms = searchTerms.filter(st => {
+            if (!st.date) return true; // Include if no date (fallback)
+            const stDate = new Date(st.date);
+            return stDate < cutoffDate;
+        });
+
+        if (matureTerms.length > 0) {
+            const zeroConvTerms = matureTerms.filter(st => st.conversions === 0 && st.cost > 0);
+            wastedCost = zeroConvTerms.reduce((sum, st) => sum + st.cost, 0);
+            const totalSTCost = matureTerms.reduce((sum, st) => sum + st.cost, 0);
+            wastedTermsPct = totalSTCost > 0 ? (wastedCost / totalSTCost) * 100 : 0;
+        }
     }
 
     let negScore: number;

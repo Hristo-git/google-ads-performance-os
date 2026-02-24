@@ -2705,6 +2705,7 @@ export async function getSearchTerms(
 SELECT
     search_term_view.search_term,
     segments.search_term_match_type,
+    segments.date,
     metrics.impressions,
     metrics.clicks,
     metrics.cost_micros,
@@ -2715,15 +2716,13 @@ FROM
 WHERE
                 ${dateFilter}
             ORDER BY
-                metrics.impressions DESC,
-                metrics.clicks DESC,
-                metrics.cost_micros DESC,
-                search_term_view.search_term ASC
+                segments.date DESC,
+                metrics.impressions DESC
         `;
 
             const rows = await customer.query(query);
             console.log(`✅ SUCCESS: Got ${rows.length} rows`);
-            console.log(`========== 🔍 SEARCH TERMS END ==========\n`);
+            console.log(`========== 🔍 SEARCH TERMS END ==========\\n`);
 
             return rows.map((row: any) => {
                 const impressions = Number(row.metrics?.impressions) || 0;
@@ -2742,6 +2741,7 @@ WHERE
                 };
                 return {
                     term: row.search_term_view?.search_term,
+                    date: row.segments?.date,
                     matchType: MATCH_TYPE_MAP[String(matchTypeRaw)] || null,
                     status: 'UNKNOWN', // Removed from query
                     impressions,
