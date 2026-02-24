@@ -8,9 +8,9 @@ import { upsertReport } from "@/lib/pinecone"; // Keep for RAG/Vectors
 import { logActivity } from "@/lib/activity-logger";
 import { buildQualityScoreRequest, QSKeyword, QSAdGroup, QSComponent, mapKeyword, AD_LEVEL_URL_QUERY, validateQSData } from "@/lib/quality-score";
 import { getQSSnapshotsForDate } from "@/lib/supabase";
-import { KeywordWithQS, AdGroupPerformance, CampaignPerformance, runAdsRawQuery } from "@/lib/google-ads";
+import { AdGroupPerformance, CampaignPerformance, runAdsRawQuery } from "@/lib/google-ads";
 import { calculateDerivedMetrics, buildEnhancedDataInventory } from "@/lib/derived-metrics";
-import type { ReportTemplateId, ReportSettings } from "@/types/google-ads";
+import type { ReportTemplateId, ReportSettings, KeywordWithQS } from "@/types/google-ads";
 
 // Streaming bypasses Vercel's time-to-first-byte timeout
 export const maxDuration = 300;
