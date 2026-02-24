@@ -468,15 +468,16 @@ export function calculateHealthScore(
     }
 
     // Penalize if high waste in search terms
-    if (wastedTermsPct > 40) negScore = Math.max(10, negScore - 25);
-    else if (wastedTermsPct > 25) negScore = Math.max(20, negScore - 15);
+    if (wastedTermsPct > 60) negScore = Math.max(10, negScore - 40);
+    else if (wastedTermsPct > 40) negScore = Math.max(10, negScore - 25);
+    else if (wastedTermsPct > 20) negScore = Math.max(20, negScore - 15);
 
     checks.push({
         name: 'Negative Keywords',
         category: 'NEGATIVE_KEYWORDS',
         score: Math.round(negScore),
         weight: 1.5,
-        status: negScore < 40 ? 'CRITICAL' : negScore < 60 ? 'WARNING' : negScore < 80 ? 'GOOD' : 'EXCELLENT',
+        status: negScore < 40 ? 'CRITICAL' : negScore <= 60 ? 'WARNING' : negScore < 80 ? 'GOOD' : 'EXCELLENT',
         finding: `${negKWCount} negative keywords for ${totalSearchKWs} active keywords (ratio: ${negRatio.toFixed(1)}:1).${(searchTerms && searchTerms.length > 0) ? ` Search term waste: ${wastedTermsPct.toFixed(0)}% of spend on 0-conversion terms (€${wastedCost.toFixed(2)}).` : ''}`,
         recommendation: negKWCount === 0
             ? 'CRITICAL: No negative keywords found. Run a search term report immediately and add negatives for irrelevant queries.'
