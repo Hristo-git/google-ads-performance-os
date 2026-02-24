@@ -5,7 +5,8 @@ import {
     AuctionInsight,
     ConversionActionBreakdown,
     AudiencePerformance,
-    PMaxSearchInsight
+    PMaxSearchInsight,
+    DemographicPerformance
 } from "../types/google-ads";
 
 // ==========================================
@@ -77,6 +78,7 @@ export interface PreparedData {
         audiencePerformance: AudiencePerformance[];
         networkPerformance: NetworkPerformance[];
         pmaxInsights: PMaxSearchInsight[];
+        demographicPerformance: DemographicPerformance[];
     };
     metadata: {
         dateRange: { start: string; end: string };
@@ -150,6 +152,7 @@ export function prepareSearchTermData(
     audiencePerformance: AudiencePerformance[] = [],
     networkPerformance: NetworkPerformance[] = [],
     pmaxInsights: PMaxSearchInsight[] = [],
+    demographicPerformance: DemographicPerformance[] = [],
     language: string = "bg"
 ): PreparedData {
     const termMap = new Map<string, {
@@ -160,9 +163,10 @@ export function prepareSearchTermData(
     }>();
 
     let aggregatedTotalCost = 0;
-    const totalRowsInGranularData = rawSearchTerms.length;
+    const totalRowsInGranularData = rawSearchTerms.length + pmaxInsights.length;
 
     // 1. Aggregation with Sets
+    // Process regular search terms
     for (const row of rawSearchTerms) {
         const term = row.searchTerm.toLowerCase().trim();
 
@@ -186,6 +190,50 @@ export function prepareSearchTermData(
 
         if (!entry.campaigns.has(cid)) {
             entry.campaigns.set(cid, { id: row.campaignId || '', name: cname, cost: 0, conversions: 0 });
+        }
+        const cStat = entry.campaigns.get(cid)!;
+        cStat.cost += row.cost;
+        cStat.conversions += row.conversions;
+
+        aggregatedTotalCost += row.cost;
+    }
+
+    // Process PMax Search Insights
+    for (const row of pmaxInsights) {
+        if (!row.term) continue;
+        const term = row.term.toLowerCase().trim();
+
+        if (!termMap.has(term)) {
+            termMap.set(term, {
+                raw: [],
+                dates: new Set(),
+                devices: new Set(),
+                campaigns: new Map()
+            });
+        }
+
+        const entry = termMap.get(term)!;
+        // Push a pseudo-SearchTerm for classification and display
+        entry.raw.push({
+            searchTerm: row.term,
+            campaignId: row.campaignId,
+            campaignName: row.campaignName,
+            impressions: row.impressions,
+            clicks: row.clicks,
+            cost: row.cost,
+            conversions: row.conversions,
+            conversionValue: row.conversionValue,
+            ctr: row.impressions > 0 ? row.clicks / row.impressions : 0,
+            averageCpc: row.clicks > 0 ? row.cost / row.clicks : 0,
+            conversionRate: row.clicks > 0 ? row.conversions / row.clicks : 0
+        } as SearchTerm);
+
+        // Track campaign stats per term
+        const cid = row.campaignId || 'pmax-unknown';
+        const cname = row.campaignName || 'PMax Campaign';
+
+        if (!entry.campaigns.has(cid)) {
+            entry.campaigns.set(cid, { id: row.campaignId, name: cname, cost: 0, conversions: 0 });
         }
         const cStat = entry.campaigns.get(cid)!;
         cStat.cost += row.cost;
@@ -381,7 +429,8 @@ export function prepareSearchTermData(
             conversionActions: sortedConversionActions,
             audiencePerformance: sortedAudiences,
             networkPerformance: sortedNetwork,
-            pmaxInsights: sortedPMax
+            pmaxInsights: sortedPMax,
+            demographicPerformance: demographicPerformance
         },
         metadata: {
             dateRange: { start: periodStart, end: periodEnd },

@@ -8,7 +8,8 @@ interface AnyRecord { [key: string]: any; }
 export function calculateDerivedMetrics(
     campaigns?: AnyRecord[],
     adGroups?: AnyRecord[],
-    deviceData?: AnyRecord[]
+    deviceData?: AnyRecord[],
+    demographicData?: AnyRecord[]
 ): string {
     const sections: string[] = [];
     sections.push('=== PRE-CALCULATED DERIVED METRICS ===');
@@ -155,6 +156,35 @@ export function calculateDerivedMetrics(
         }
     }
 
+    // ── Demographic-level derived metrics ──
+    if (demographicData?.length) {
+        const totalCost = demographicData.reduce((s, d) => s + (Number(d.cost) || 0), 0);
+        const totalConv = demographicData.reduce((s, d) => s + (Number(d.conversions) || 0), 0);
+        const totalValue = demographicData.reduce((s, d) => s + (Number(d.conversionValue || d.conversion_value) || 0), 0);
+
+        sections.push('');
+        sections.push('## Demographic-Level Derived Metrics');
+        sections.push('| Type | Label | Spend | ROAS | Conv | CPA | %Spend |');
+        sections.push('|------|-------|-------|------|------|-----|--------|');
+
+        // Group by dimension
+        for (const d of demographicData) {
+            const cost = Number(d.cost) || 0;
+            const conv = Number(d.conversions) || 0;
+            const val = Number(d.conversionValue || d.conversion_value) || 0;
+            const roas = cost > 0 ? val / cost : 0;
+            const cpa = conv > 0 ? cost / conv : null;
+            const pctSpend = totalCost > 0 ? (cost / totalCost) * 100 : 0;
+
+            const fmt = (v: number | null, dec = 2, prefix = '', suffix = '') =>
+                v !== null ? `${prefix}${v.toFixed(dec)}${suffix}` : 'N/A';
+
+            sections.push(
+                `| ${d.type} | ${d.dimension || 'N/A'} | ${fmt(cost, 0, '€')} | ${fmt(roas, 2, '', 'x')} | ${fmt(conv, 0)} | ${fmt(cpa, 1, '€')} | ${fmt(pctSpend, 1, '', '%')} |`
+            );
+        }
+    }
+
     return sections.length > 2 ? sections.join('\n') : '';
 }
 
@@ -183,6 +213,7 @@ export function buildEnhancedDataInventory(data: AnyRecord): string {
     check('Search terms', data.searchTerms);
     check('Strategic breakdown', data.strategicBreakdown);
     check('N-gram analysis', data.nGramAnalysis);
+    check('Demographic performance', data.demographicPerformance || data.demographics);
 
     // Context signals (parsed from contextBlock string)
     if (data.contextBlock) {
@@ -201,8 +232,10 @@ export function buildEnhancedDataInventory(data: AnyRecord): string {
         else notProvided.push('Landing page health');
         if (ctx.includes('Conversion Action') || ctx.includes('Conv. Action')) available.push('Conversion actions: Yes');
         else notProvided.push('Conversion actions');
+        if (ctx.includes('Demographic') || ctx.includes('Age') || ctx.includes('Gender')) available.push('Demographic signals: Yes');
+        else notProvided.push('Demographic signals');
     } else {
-        notProvided.push('Device split', 'Geo split', 'Hour of day', 'Day of week', 'Auction insights', 'Landing page health', 'Conversion actions');
+        notProvided.push('Device split', 'Geo split', 'Hour of day', 'Day of week', 'Auction insights', 'Landing page health', 'Conversion actions', 'Demographic signals');
     }
 
     // PMax context

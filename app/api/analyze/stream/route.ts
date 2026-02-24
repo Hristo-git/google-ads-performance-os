@@ -53,7 +53,12 @@ function buildPrompt(data: any): string {
     const contextBlock = data.contextBlock || '';
     const pmaxBlock = data.pmaxBlock || '';
     const dataInventory = buildEnhancedDataInventory(data);
-    const derivedMetrics = calculateDerivedMetrics(data.campaigns, data.adGroups, data.deviceData);
+    const derivedMetrics = calculateDerivedMetrics(
+        data.campaigns,
+        data.adGroups,
+        data.deviceData,
+        data.demographicPerformance || data.demographics
+    );
 
     if (level === 'adgroup') {
         return getAdGroupAnalysisPrompt(data, language);
@@ -106,9 +111,9 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
                     placements.slice(0, 100).map((p: any) => `- ${p.placement || p.url}: €${(p.cost || 0).toFixed(2)} spend | ${p.conversions || 0} conv | ${p.clicks || 0} clicks | CTR: ${(p.ctr * 100).toFixed(2)}%`).join('\n');
                 specificMission = "Identify high-waste placements (high spend, low conversion) for exclusion, and find high-performing sites for potentially adding as managed placements.";
             } else if (category === 'Demographics') {
-                const demographics = data.demographics || [];
+                const demographics = data.demographicPerformance || data.demographics || [];
                 categorySpecificData = `=== DEMOGRAPHIC DATA ===\n` +
-                    demographics.map((d: any) => `- ${d.type} (${d.range}): €${(d.cost || 0).toFixed(2)} spend | ${d.conversions || 0} conv | ROAS: ${d.roas || 0}x`).join('\n');
+                    demographics.map((d: any) => `- ${d.dimension || d.type || 'Unknown'}: ${d.label || d.range || d.id || 'N/A'} | €${(d.cost || 0).toFixed(2)} spend | ${d.conversions || 0} conv | ROAS: ${d.roas || 0}x`).join('\n');
                 specificMission = "Analyze performance skews across age and gender. Identify segments with disproportionately high waste or exceptional ROAS for bid adjustments.";
             } else if (category === 'Audiences') {
                 const audiences = data.audiences || [];

@@ -154,6 +154,7 @@ Search Terms Report (Блок 1) е най-критичният допълнит
 - **Множество conversion actions в една кампания** (напр. PURCHASE + ADD_TO_CART като primary) = inflated conversion count. CPA изглежда нисък, но реалният purchase CPA е по-висок. Провери дали micro-conversions (add-to-cart, page_view, lead) са маркирани като PRIMARY — ако да, препоръчай преместване в SECONDARY.
 - **AOV вариация между кампании > 2x** (напр. €134 vs €324) = или различни продуктови категории (легитимно), или различни conversion actions (проблем). Conversion action breakdown-ът разграничава двете.
 - **View-through conversions (VTC) > 30% от total conversions** за Display/Video/Connected TV = attribution inflation. VTC при 30-дневен window за furniture означава, че потребителят е видял реклама, но е купил от друг канал (brand search, direct). Препоръчай намаляване на VTC window на 3-7 дни.
+- **CONNECTED TV tracking diagnosis:** Ако виждаш Connected TV impressions с 0 clicks, но значителни conversions, това са View-Through conversions. Ако VTC са 80%+ от "конверсиите" в Connected TV, това е пасивен сигнал (view only), не директен performance. Флагвай това изрично.
 - **Connected TV CVR аномалия** (CVR > 5% за furniture display): почти винаги е VTC tracking issue. Нормалната Connected TV CVR за furniture е 0.1-0.5%. Ако виждаш CVR > 5%, първо провери VTC vs click-through split. Ако > 80% от конверсиите са VTC → това е root cause-ът.
 - **Attribution model различия** между кампании (напр. една с DDA, друга с last-click) = cross-campaign comparison е misleading. Маркирай това като risk factor.
 
@@ -467,7 +468,8 @@ export function buildAdvancedAnalysisPrompt(
       conversionActions: additionalData.conversionActions || [],
       audiencePerformance: additionalData.audiencePerformance || [],
       networkPerformance: additionalData.networkPerformance || [],
-      pmaxInsights: additionalData.pmaxInsights || []
+      pmaxInsights: additionalData.pmaxInsights || [],
+      demographicPerformance: additionalData.demographicPerformance || []
     },
     aggregatedSearchTerms: topTerms
   };

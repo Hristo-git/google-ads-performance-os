@@ -36,6 +36,7 @@ const CACHE_TTL = {
     ads: 5 * 60 * 1000,
     device: 5 * 60 * 1000,
     search: 5 * 60 * 1000,
+    diagnostics: 10 * 60 * 1000, // Device, Geo, Hour, etc.
     default: 5 * 60 * 1000,
 };
 
@@ -1616,7 +1617,8 @@ campaign_search_term_insight.id,
     metrics.clicks,
     metrics.impressions,
     metrics.conversions,
-    metrics.conversions_value
+    metrics.conversions_value,
+    metrics.view_through_conversions
             FROM campaign_search_term_insight
             WHERE campaign.id = ${campaignId}
             ORDER BY metrics.clicks DESC
@@ -1629,6 +1631,7 @@ campaign_search_term_insight.id,
             const impressions = Number(row.metrics?.impressions) || 0;
             const conversions = Number(row.metrics?.conversions) || 0;
             const conversionValue = Number(row.metrics?.conversions_value) || 0;
+            const viewThroughConversions = Number(row.metrics?.view_through_conversions) || 0;
 
             return {
                 campaignId: campaignId,
@@ -1640,6 +1643,7 @@ campaign_search_term_insight.id,
                 cost: 0, // Not available in this view
                 conversions,
                 conversionValue,
+                viewThroughConversions,
             };
         });
     } catch (error: unknown) {
@@ -1688,7 +1692,8 @@ campaign.id,
     metrics.conversions,
     metrics.conversions_value,
     metrics.ctr,
-    metrics.average_cpc
+    metrics.average_cpc,
+    metrics.view_through_conversions
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${dateFilter}
             ORDER BY metrics.cost_micros DESC
@@ -1715,6 +1720,7 @@ campaign.id,
                 conversionValue,
                 ctr: Number(row.metrics?.ctr) || 0,
                 cpc: Number(row.metrics?.average_cpc) / 1_000_000 || 0,
+                viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
                 roas: cost > 0 ? conversionValue / cost : null,
                 cpa: conversions > 0 ? cost / conversions : null,
                 adGroupType: 'STANDARD',
@@ -1866,18 +1872,19 @@ export async function getAuctionInsights(
     customerId?: string,
     dateRange?: DateRange
 ): Promise<AuctionInsight[]> {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    return withCache('diagnostics', [customerId, campaignId, dateRange, 'auctionInsights'], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
 
-    // Ensure a date filter is always present (default to last 30 days)
-    let dateFilter = getDateFilter(dateRange);
-    if (!dateFilter) {
-        dateFilter = " AND segments.date DURING LAST_30_DAYS";
-    }
+        // Ensure a date filter is always present (default to last 30 days)
+        let dateFilter = getDateFilter(dateRange);
+        if (!dateFilter) {
+            dateFilter = " AND segments.date DURING LAST_30_DAYS";
+        }
 
-    const campaignFilter = campaignId ? `AND campaign.id = ${campaignId} ` : '';
+        const campaignFilter = campaignId ? `AND campaign.id = ${campaignId} ` : '';
 
-    try {
-        const result = await customer.query(`
+        try {
+            const result = await customer.query(`
 SELECT
 campaign.id,
     segments.auction_insight_domain,
@@ -1890,19 +1897,20 @@ campaign.id,
             WHERE campaign.status != 'REMOVED' ${campaignFilter} ${dateFilter}
 `);
 
-        return result.map((row: any) => ({
-            campaignId: row.campaign?.id?.toString() || "",
-            competitor: row.segments?.auction_insight_domain || "Unknown",
-            impressionShare: row.metrics?.auction_insight_search_impression_share ?? null,
-            overlapRate: row.metrics?.auction_insight_search_overlap_rate ?? null,
-            outrankingShare: row.metrics?.auction_insight_search_outranking_share ?? null,
-            positionAboveRate: row.metrics?.auction_insight_search_position_above_rate ?? null,
-            // Deprecated in API v22
-        }));
-    } catch (error: unknown) {
-        logApiError("getAuctionInsights", error);
-        return [];
-    }
+            return result.map((row: any) => ({
+                campaignId: row.campaign?.id?.toString() || "",
+                competitor: row.segments?.auction_insight_domain || "Unknown",
+                impressionShare: row.metrics?.auction_insight_search_impression_share ?? null,
+                overlapRate: row.metrics?.auction_insight_search_overlap_rate ?? null,
+                outrankingShare: row.metrics?.auction_insight_search_outranking_share ?? null,
+                positionAboveRate: row.metrics?.auction_insight_search_position_above_rate ?? null,
+                // Deprecated in API v22
+            }));
+        } catch (error: unknown) {
+            logApiError("getAuctionInsights", error);
+            return [];
+        }
+    });
 }
 
 // ============================================
@@ -1927,18 +1935,19 @@ export async function getDayOfWeekPerformance(
     dateRange?: DateRange,
     campaignIds?: string[]
 ): Promise<DayOfWeekPerformance[]> {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
-    const campaignFilter = campaignIds?.length
-        ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
+    return withCache('diagnostics', [customerId, dateRange, campaignIds, 'dayOfWeek'], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
+        const campaignFilter = campaignIds?.length
+            ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
 
-    try {
-        const DAY_MAP: Record<number, string> = {
-            2: 'MONDAY', 3: 'TUESDAY', 4: 'WEDNESDAY',
-            5: 'THURSDAY', 6: 'FRIDAY', 7: 'SATURDAY', 8: 'SUNDAY'
-        };
+        try {
+            const DAY_MAP: Record<number, string> = {
+                2: 'MONDAY', 3: 'TUESDAY', 4: 'WEDNESDAY',
+                5: 'THURSDAY', 6: 'FRIDAY', 7: 'SATURDAY', 8: 'SUNDAY'
+            };
 
-        const result = await customer.query(`
+            const result = await customer.query(`
 SELECT
 campaign.id,
     segments.day_of_week,
@@ -1951,28 +1960,29 @@ campaign.id,
             WHERE campaign.status != 'REMOVED' ${dateFilter} ${campaignFilter}
 `);
 
-        return result.map((row) => {
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
-            const rawDay = row.segments?.day_of_week;
+            return result.map((row) => {
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+                const rawDay = row.segments?.day_of_week;
 
-            return {
-                campaignId: row.campaign?.id?.toString() || "",
-                dayOfWeek: typeof rawDay === 'string' ? rawDay : (typeof rawDay === 'number' ? (DAY_MAP[rawDay] || 'UNKNOWN') : 'UNKNOWN'),
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost,
-                conversions,
-                conversionValue,
-                roas: cost > 0 ? conversionValue / cost : null,
-                cpa: conversions > 0 ? cost / conversions : null,
-            };
-        });
-    } catch (error: unknown) {
-        logApiError("getDayOfWeekPerformance", error);
-        return [];
-    }
+                return {
+                    campaignId: row.campaign?.id?.toString() || "",
+                    dayOfWeek: typeof rawDay === 'string' ? rawDay : (typeof rawDay === 'number' ? (DAY_MAP[rawDay] || 'UNKNOWN') : 'UNKNOWN'),
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    conversionValue,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null,
+                };
+            });
+        } catch (error: unknown) {
+            logApiError("getDayOfWeekPerformance", error);
+            return [];
+        }
+    });
 }
 
 // ============================================
@@ -1988,6 +1998,7 @@ export interface AccountDevicePerformance {
     impressions: number;
     roas: number | null;
     cpa: number | null;
+    viewThroughConversions?: number;
 }
 
 export async function getAccountDeviceStats(
@@ -1995,18 +2006,19 @@ export async function getAccountDeviceStats(
     customerId?: string,
     dateRange?: DateRange
 ): Promise<AccountDevicePerformance[]> {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
+    return withCache('diagnostics', [customerId, dateRange, 'deviceStats'], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
 
-    const DEVICE_MAPPING: Record<number, string> = {
-        2: 'MOBILE',
-        3: 'TABLET',
-        4: 'DESKTOP',
-        6: 'CONNECTED_TV'
-    };
+        const DEVICE_MAPPING: Record<number, string> = {
+            2: 'MOBILE',
+            3: 'TABLET',
+            4: 'DESKTOP',
+            6: 'CONNECTED_TV'
+        };
 
-    try {
-        const result = await customer.query(`
+        try {
+            const result = await customer.query(`
 SELECT
 segments.device,
     metrics.cost_micros,
@@ -2021,60 +2033,63 @@ campaign.status != 'REMOVED'
                 AND metrics.impressions > 0
     `);
 
-        // Aggregate by device
-        const aggregator: Record<string, AccountDevicePerformance> = {};
+            // Aggregate by device
+            const aggregator: Record<string, AccountDevicePerformance> = {};
 
-        for (const row of result) {
-            const rawDevice = row.segments?.device;
-            // Map enum number or string to readable name if needed, 
-            // but GAQL returns 'MOBILE', 'DESKTOP' etc strings usually if queried as segments.device
-            // Actually, querying via client typically returns the enum string value.
-            // Let's rely on the string returned.
-            // The previous mapping had numbers 2,3,4... let's be safe.
-            let deviceName = 'UNKNOWN';
-            if (typeof rawDevice === 'number') {
-                deviceName = DEVICE_MAPPING[rawDevice] || 'UNKNOWN';
-            } else if (typeof rawDevice === 'string') {
-                deviceName = rawDevice;
+            for (const row of result) {
+                const rawDevice = row.segments?.device;
+                // Map enum number or string to readable name if needed, 
+                // but GAQL returns 'MOBILE', 'DESKTOP' etc strings usually if queried as segments.device
+                // Actually, querying via client typically returns the enum string value.
+                // Let's rely on the string returned.
+                // The previous mapping had numbers 2,3,4... let's be safe.
+                let deviceName = 'UNKNOWN';
+                if (typeof rawDevice === 'number') {
+                    deviceName = DEVICE_MAPPING[rawDevice] || 'UNKNOWN';
+                } else if (typeof rawDevice === 'string') {
+                    deviceName = rawDevice;
+                }
+
+                if (!aggregator[deviceName]) {
+                    aggregator[deviceName] = {
+                        device: deviceName,
+                        cost: 0,
+                        conversions: 0,
+                        conversionValue: 0,
+                        clicks: 0,
+                        impressions: 0,
+                        roas: null,
+                        cpa: null,
+                        viewThroughConversions: 0
+                    };
+                }
+
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+                const clicks = Number(row.metrics?.clicks) || 0;
+                const impressions = Number(row.metrics?.impressions) || 0;
+
+                aggregator[deviceName].cost += cost;
+                aggregator[deviceName].conversions += conversions;
+                aggregator[deviceName].conversionValue += conversionValue;
+                aggregator[deviceName].clicks += clicks;
+                aggregator[deviceName].impressions += impressions;
+                aggregator[deviceName].viewThroughConversions = (aggregator[deviceName].viewThroughConversions || 0) + (Number(row.metrics?.view_through_conversions) || 0);
             }
 
-            if (!aggregator[deviceName]) {
-                aggregator[deviceName] = {
-                    device: deviceName,
-                    cost: 0,
-                    conversions: 0,
-                    conversionValue: 0,
-                    clicks: 0,
-                    impressions: 0,
-                    roas: null,
-                    cpa: null
-                };
-            }
+            // Calculate calculated fields (ROAS, CPA)
+            return Object.values(aggregator).map(d => ({
+                ...d,
+                roas: d.cost > 0 ? d.conversionValue / d.cost : null,
+                cpa: d.conversions > 0 ? d.cost / d.conversions : null
+            }));
 
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
-            const clicks = Number(row.metrics?.clicks) || 0;
-            const impressions = Number(row.metrics?.impressions) || 0;
-
-            aggregator[deviceName].cost += cost;
-            aggregator[deviceName].conversions += conversions;
-            aggregator[deviceName].conversionValue += conversionValue;
-            aggregator[deviceName].clicks += clicks;
-            aggregator[deviceName].impressions += impressions;
+        } catch (error: unknown) {
+            logApiError("getAccountDeviceStats", error);
+            return [];
         }
-
-        // Calculate calculated fields (ROAS, CPA)
-        return Object.values(aggregator).map(d => ({
-            ...d,
-            roas: d.cost > 0 ? d.conversionValue / d.cost : null,
-            cpa: d.conversions > 0 ? d.cost / d.conversions : null
-        }));
-
-    } catch (error: unknown) {
-        logApiError("getAccountDeviceStats", error);
-        return [];
-    }
+    });
 }
 
 
@@ -2100,13 +2115,14 @@ export async function getHourOfDayPerformance(
     dateRange?: DateRange,
     campaignIds?: string[]
 ): Promise<HourOfDayPerformance[]> {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
-    const campaignFilter = campaignIds?.length
-        ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
+    return withCache('diagnostics', [customerId, dateRange, campaignIds, 'hourOfDay'], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
+        const campaignFilter = campaignIds?.length
+            ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
 
-    try {
-        const result = await customer.query(`
+        try {
+            const result = await customer.query(`
 SELECT
 campaign.id,
     segments.hour,
@@ -2119,27 +2135,28 @@ campaign.id,
             WHERE campaign.status != 'REMOVED' ${dateFilter} ${campaignFilter}
 `);
 
-        return result.map((row) => {
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
+            return result.map((row) => {
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
 
-            return {
-                campaignId: row.campaign?.id?.toString() || "",
-                hour: Number(row.segments?.hour) ?? 0,
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost,
-                conversions,
-                conversionValue,
-                roas: cost > 0 ? conversionValue / cost : null,
-                cpa: conversions > 0 ? cost / conversions : null,
-            };
-        });
-    } catch (error: unknown) {
-        logApiError("getHourOfDayPerformance", error);
-        return [];
-    }
+                return {
+                    campaignId: row.campaign?.id?.toString() || "",
+                    hour: Number(row.segments?.hour) ?? 0,
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    conversionValue,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null,
+                };
+            });
+        } catch (error: unknown) {
+            logApiError("getHourOfDayPerformance", error);
+            return [];
+        }
+    });
 }
 
 // ============================================
@@ -2158,6 +2175,7 @@ export interface LandingPagePerformance {
     roas: number | null;
     cpa: number | null;
     mobileFriendlyClicksPercentage: number | null;
+    viewThroughConversions?: number;
     speedScore: number | null;
     landingPageExperience: string | null;
 }
@@ -2169,14 +2187,15 @@ export async function getLandingPagePerformance(
     campaignIds?: string[],
     userId?: string
 ): Promise<LandingPagePerformance[]> {
-    if (userId) logActivity(userId, 'API_CALL', { category: 'landingPages', customerId });
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
-    const campaignFilter = campaignIds?.length
-        ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
+    return withCache('diagnostics', [customerId, dateRange, campaignIds, 'landingPage'], async () => {
+        if (userId) logActivity(userId, 'API_CALL', { category: 'landingPages', customerId });
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
+        const campaignFilter = campaignIds?.length
+            ? `AND campaign.id IN(${campaignIds.join(',')})` : '';
 
-    try {
-        const result = await customer.query(`
+        try {
+            const result = await customer.query(`
 SELECT
 campaign.id,
     landing_page_view.unexpanded_final_url,
@@ -2195,67 +2214,69 @@ campaign.id,
             LIMIT 200
     `);
 
-        console.log(`[GoogleAds / LandingPages] Found ${result.length} rows`);
+            console.log(`[GoogleAds / LandingPages] Found ${result.length} rows`);
 
-        const baseResults: LandingPagePerformance[] = result.map((row: any) => {
-            const m = row.metrics || {};
-            const lpv = row.landing_page_view || {};
+            const baseResults: LandingPagePerformance[] = result.map((row: any) => {
+                const m = row.metrics || {};
+                const lpv = row.landing_page_view || {};
 
-            const cost = Number(m.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(m.conversions) || 0;
-            const conversionValue = Number(m.conversions_value) || 0;
+                const cost = Number(m.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(m.conversions) || 0;
+                const conversionValue = Number(m.conversions_value) || 0;
 
 
-            return {
-                landingPageUrl: lpv.unexpanded_final_url || 'Unknown',
-                campaignId: row.campaign?.id?.toString() || null,
-                impressions: Number(m.impressions) || 0,
-                clicks: Number(m.clicks) || 0,
-                cost: cost,
-                conversions: conversions,
-                conversionValue: conversionValue,
-                ctr: Number(m.ctr) || 0,
-                roas: cost > 0 ? conversionValue / cost : null,
-                cpa: conversions > 0 ? cost / conversions : null,
-                mobileFriendlyClicksPercentage: m.mobile_friendly_clicks_percentage !== undefined ? Number(m.mobile_friendly_clicks_percentage) : null,
-                speedScore: m.speed_score !== undefined ? Number(m.speed_score) : null,
-                landingPageExperience: null, // Placeholder, will be filled below
-            };
-        });
+                return {
+                    landingPageUrl: lpv.unexpanded_final_url || 'Unknown',
+                    campaignId: row.campaign?.id?.toString() || null,
+                    impressions: Number(m.impressions) || 0,
+                    clicks: Number(m.clicks) || 0,
+                    cost: cost,
+                    conversions: conversions,
+                    conversionValue: conversionValue,
+                    ctr: Number(m.ctr) || 0,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null,
+                    viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
+                    mobileFriendlyClicksPercentage: m.mobile_friendly_clicks_percentage !== undefined ? Number(m.mobile_friendly_clicks_percentage) : null,
+                    speedScore: m.speed_score !== undefined ? Number(m.speed_score) : null,
+                    landingPageExperience: null, // Placeholder, will be filled below
+                };
+            });
 
-        // 2. Fetch Keyword Quality Scores for these URLs as a proxy for Experience
-        try {
-            const qualityData = await getLandingPageQualityScores(refreshToken, customerId, dateRange, campaignIds);
-
-            // Normalize URL for matching (remove protocol and trailing slash)
-            const normalize = (u: string) => u.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
-
-            // Map the aggregated scores back to our landing pages
-            const enrichedWithQuality = baseResults.map((lp: any) => ({
-                ...lp,
-                landingPageExperience: qualityData[normalize(lp.landingPageUrl)] || null
-            }));
-
-            // 3. Fetch Mobile Percentages via device segmentation
+            // 2. Fetch Keyword Quality Scores for these URLs as a proxy for Experience
             try {
-                const mobileData = await getLandingPageMobilePercentages(refreshToken, customerId, dateRange, campaignIds);
+                const qualityData = await getLandingPageQualityScores(refreshToken, customerId, dateRange, campaignIds);
 
-                return enrichedWithQuality.map((lp: any) => ({
+                // Normalize URL for matching (remove protocol and trailing slash)
+                const normalize = (u: string) => u.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+
+                // Map the aggregated scores back to our landing pages
+                const enrichedWithQuality = baseResults.map((lp: any) => ({
                     ...lp,
-                    mobileFriendlyClicksPercentage: mobileData[normalize(lp.landingPageUrl)] ?? null
+                    landingPageExperience: qualityData[normalize(lp.landingPageUrl)] || null
                 }));
-            } catch (mError) {
-                console.error("[GoogleAds/LandingPages] Failed to fetch mobile percentages:", mError);
-                return enrichedWithQuality;
+
+                // 3. Fetch Mobile Percentages via device segmentation
+                try {
+                    const mobileData = await getLandingPageMobilePercentages(refreshToken, customerId, dateRange, campaignIds);
+
+                    return enrichedWithQuality.map((lp: any) => ({
+                        ...lp,
+                        mobileFriendlyClicksPercentage: mobileData[normalize(lp.landingPageUrl)] ?? null
+                    }));
+                } catch (mError) {
+                    console.error("[GoogleAds/LandingPages] Failed to fetch mobile percentages:", mError);
+                    return enrichedWithQuality;
+                }
+            } catch (qError) {
+                console.error("[GoogleAds/LandingPages] Failed to fetch quality proxy:", qError);
+                return baseResults;
             }
-        } catch (qError) {
-            console.error("[GoogleAds/LandingPages] Failed to fetch quality proxy:", qError);
-            return baseResults;
+        } catch (error: unknown) {
+            logApiError("getLandingPagePerformance", error);
+            return [];
         }
-    } catch (error: unknown) {
-        logApiError("getLandingPagePerformance", error);
-        return [];
-    }
+    });
 }
 
 /**
@@ -2445,11 +2466,12 @@ export async function getGeographicPerformance(
     customerId?: string,
     dateRange?: DateRange
 ): Promise<GeographicPerformance[]> {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
+    return withCache('diagnostics', [customerId, dateRange, 'geographic'], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
 
-    try {
-        const result = await customer.query(`
+        try {
+            const result = await customer.query(`
     SELECT
 campaign.id,
     geographic_view.country_criterion_id,
@@ -2465,28 +2487,29 @@ campaign.id,
             LIMIT 500
     `);
 
-        return result.map((row) => {
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
+            return result.map((row) => {
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
 
-            return {
-                campaignId: row.campaign?.id?.toString() || "",
-                countryId: row.geographic_view?.country_criterion_id?.toString() || "",
-                locationType: String(row.geographic_view?.location_type) || "UNKNOWN",
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost,
-                conversions,
-                conversionValue,
-                roas: cost > 0 ? conversionValue / cost : null,
-                cpa: conversions > 0 ? cost / conversions : null,
-            };
-        });
-    } catch (error: unknown) {
-        logApiError("getGeographicPerformance", error);
-        return [];
-    }
+                return {
+                    campaignId: row.campaign?.id?.toString() || "",
+                    countryId: row.geographic_view?.country_criterion_id?.toString() || "",
+                    locationType: String(row.geographic_view?.location_type) || "UNKNOWN",
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    conversionValue,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null,
+                };
+            });
+        } catch (error: unknown) {
+            logApiError("getGeographicPerformance", error);
+            return [];
+        }
+    });
 }
 
 // ============================================
@@ -2523,11 +2546,12 @@ export async function getRegionalPerformance(
     customerId?: string,
     dateRange?: DateRange
 ): Promise<RegionalPerformance[]> {
-    const customer = getGoogleAdsCustomer(refreshToken, customerId);
-    const dateFilter = getDateFilter(dateRange);
+    return withCache('diagnostics', [customerId, dateRange, 'regional'], async () => {
+        const customer = getGoogleAdsCustomer(refreshToken, customerId);
+        const dateFilter = getDateFilter(dateRange);
 
-    // Use geographic_view with geo_target_most_specific_location for city/region data
-    const result = await customer.query(`
+        // Use geographic_view with geo_target_most_specific_location for city/region data
+        const result = await customer.query(`
 SELECT
 segments.geo_target_most_specific_location,
     metrics.impressions,
@@ -2542,39 +2566,39 @@ segments.geo_target_most_specific_location,
         LIMIT 1000
     `);
 
-    console.log(`[GoogleAds] getRegionalPerformance: got ${result.length} rows`);
-    if (result.length > 0) {
-        const sample = result[0] as any;
-        console.log(`[GoogleAds] Sample row segments: `, JSON.stringify(sample.segments));
-        console.log(`[GoogleAds] Sample row keys: `, Object.keys(sample));
-    }
-
-    // Extract unique geo_target_constant IDs from location resource names
-    const locationIds = new Set<string>();
-    result.forEach((row: any) => {
-        const locRef = row.segments?.geo_target_most_specific_location
-            ?? row.segments?.geoTargetMostSpecificLocation
-            ?? (row as any).geo_target_most_specific_location;
-        if (locRef) {
-            const id = String(locRef).replace(/^geoTargetConstants\//, '');
-            if (id && id !== '0' && id !== 'undefined' && id !== 'null' && id !== 'false') {
-                locationIds.add(id);
-            }
+        console.log(`[GoogleAds] getRegionalPerformance: got ${result.length} rows`);
+        if (result.length > 0) {
+            const sample = result[0] as any;
+            console.log(`[GoogleAds] Sample row segments: `, JSON.stringify(sample.segments));
+            console.log(`[GoogleAds] Sample row keys: `, Object.keys(sample));
         }
-    });
 
-    console.log(`[GoogleAds] Unique location IDs found: ${locationIds.size} `);
+        // Extract unique geo_target_constant IDs from location resource names
+        const locationIds = new Set<string>();
+        result.forEach((row: any) => {
+            const locRef = row.segments?.geo_target_most_specific_location
+                ?? row.segments?.geoTargetMostSpecificLocation
+                ?? (row as any).geo_target_most_specific_location;
+            if (locRef) {
+                const id = String(locRef).replace(/^geoTargetConstants\//, '');
+                if (id && id !== '0' && id !== 'undefined' && id !== 'null' && id !== 'false') {
+                    locationIds.add(id);
+                }
+            }
+        });
 
-    // Batch resolve location names via geo_target_constant
-    const locationNames: Record<string, { name: string; canonicalName: string; type: string }> = {};
+        console.log(`[GoogleAds] Unique location IDs found: ${locationIds.size} `);
 
-    if (locationIds.size > 0) {
-        const idsArray = Array.from(locationIds);
-        for (let i = 0; i < idsArray.length; i += 100) {
-            const batch = idsArray.slice(i, i + 100);
-            const idList = batch.join(', ');
-            try {
-                const geoResult = await customer.query(`
+        // Batch resolve location names via geo_target_constant
+        const locationNames: Record<string, { name: string; canonicalName: string; type: string }> = {};
+
+        if (locationIds.size > 0) {
+            const idsArray = Array.from(locationIds);
+            for (let i = 0; i < idsArray.length; i += 100) {
+                const batch = idsArray.slice(i, i + 100);
+                const idList = batch.join(', ');
+                try {
+                    const geoResult = await customer.query(`
 SELECT
 geo_target_constant.id,
     geo_target_constant.name,
@@ -2583,63 +2607,64 @@ geo_target_constant.id,
                     FROM geo_target_constant
                     WHERE geo_target_constant.id IN(${idList})
                 `);
-                geoResult.forEach((geoRow: any) => {
-                    const id = geoRow.geo_target_constant?.id?.toString();
-                    if (id) {
-                        const rawType = geoRow.geo_target_constant?.target_type;
-                        locationNames[id] = {
-                            name: geoRow.geo_target_constant?.name || `Location ${id} `,
-                            canonicalName: geoRow.geo_target_constant?.canonical_name || '',
-                            type: typeof rawType === 'string'
-                                ? rawType
-                                : (typeof rawType === 'number' ? (TARGET_TYPE_MAP[rawType] || 'Location') : 'Location'),
-                        };
-                    }
-                });
-            } catch (geoErr) {
-                console.warn("[GoogleAds] Failed to resolve geo_target_constant batch:", geoErr);
+                    geoResult.forEach((geoRow: any) => {
+                        const id = geoRow.geo_target_constant?.id?.toString();
+                        if (id) {
+                            const rawType = geoRow.geo_target_constant?.target_type;
+                            locationNames[id] = {
+                                name: geoRow.geo_target_constant?.name || `Location ${id} `,
+                                canonicalName: geoRow.geo_target_constant?.canonical_name || '',
+                                type: typeof rawType === 'string'
+                                    ? rawType
+                                    : (typeof rawType === 'number' ? (TARGET_TYPE_MAP[rawType] || 'Location') : 'Location'),
+                            };
+                        }
+                    });
+                } catch (geoErr) {
+                    console.warn("[GoogleAds] Failed to resolve geo_target_constant batch:", geoErr);
+                }
             }
         }
-    }
 
-    // Build results with resolved names, filtering out country-level entries (those are in getGeographicPerformance)
-    return result
-        .filter((row: any) => {
-            const locRef = row.segments?.geo_target_most_specific_location
-                ?? row.segments?.geoTargetMostSpecificLocation
-                ?? (row as any).geo_target_most_specific_location;
-            const id = String(locRef || '').replace(/^geoTargetConstants\//, '');
-            if (!id || id === '0' || id === 'undefined' || id === 'null' || id === 'false') return false;
-            // Filter out Country-level entries (already shown in Countries tab)
-            const info = locationNames[id];
-            return !info || info.type !== 'Country';
-        })
-        .map((row: any) => {
-            const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-            const conversions = Number(row.metrics?.conversions) || 0;
-            const conversionValue = Number(row.metrics?.conversions_value) || 0;
-            const locRef = String(
-                row.segments?.geo_target_most_specific_location
-                ?? row.segments?.geoTargetMostSpecificLocation
-                ?? (row as any).geo_target_most_specific_location
-                ?? ''
-            );
-            const locationId = locRef.replace(/^geoTargetConstants\//, '');
-            const locInfo = locationNames[locationId];
+        // Build results with resolved names, filtering out country-level entries (those are in getGeographicPerformance)
+        return result
+            .filter((row: any) => {
+                const locRef = row.segments?.geo_target_most_specific_location
+                    ?? row.segments?.geoTargetMostSpecificLocation
+                    ?? (row as any).geo_target_most_specific_location;
+                const id = String(locRef || '').replace(/^geoTargetConstants\//, '');
+                if (!id || id === '0' || id === 'undefined' || id === 'null' || id === 'false') return false;
+                // Filter out Country-level entries (already shown in Countries tab)
+                const info = locationNames[id];
+                return !info || info.type !== 'Country';
+            })
+            .map((row: any) => {
+                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
+                const conversions = Number(row.metrics?.conversions) || 0;
+                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+                const locRef = String(
+                    row.segments?.geo_target_most_specific_location
+                    ?? row.segments?.geoTargetMostSpecificLocation
+                    ?? (row as any).geo_target_most_specific_location
+                    ?? ''
+                );
+                const locationId = locRef.replace(/^geoTargetConstants\//, '');
+                const locInfo = locationNames[locationId];
 
-            return {
-                locationId,
-                locationName: locInfo?.canonicalName || locInfo?.name || `Location ${locationId} `,
-                locationType: locInfo?.type || 'Location',
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost,
-                conversions,
-                conversionValue,
-                roas: cost > 0 ? conversionValue / cost : null,
-                cpa: conversions > 0 ? cost / conversions : null,
-            };
-        });
+                return {
+                    locationId,
+                    locationName: locInfo?.canonicalName || locInfo?.name || `Location ${locationId} `,
+                    locationType: locInfo?.type || 'Location',
+                    impressions: Number(row.metrics?.impressions) || 0,
+                    clicks: Number(row.metrics?.clicks) || 0,
+                    cost,
+                    conversions,
+                    conversionValue,
+                    roas: cost > 0 ? conversionValue / cost : null,
+                    cpa: conversions > 0 ? cost / conversions : null,
+                };
+            });
+    });
 }
 
 // ============================================
@@ -3449,19 +3474,19 @@ export async function getDemographicsPerformance(
     try {
         const [ageResult, genderResult, parentalResult, incomeResult] = await Promise.allSettled([
             customer.query(`
-                SELECT age_range_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
+                SELECT age_range_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr, metrics.view_through_conversions
                 FROM age_range_view WHERE metrics.impressions > 0 ${filter}
             `),
             customer.query(`
-                SELECT gender_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
+                SELECT gender_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr, metrics.view_through_conversions
                 FROM gender_view WHERE metrics.impressions > 0 ${filter}
             `),
             customer.query(`
-                SELECT parental_status_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
+                SELECT parental_status_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr, metrics.view_through_conversions
                 FROM parental_status_view WHERE metrics.impressions > 0 ${filter}
             `),
             customer.query(`
-                SELECT income_range_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr
+                SELECT income_range_view.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.ctr, metrics.view_through_conversions
                 FROM income_range_view WHERE metrics.impressions > 0 ${filter}
             `)
         ]);
@@ -3510,15 +3535,20 @@ export async function getDemographicsPerformance(
                 dimension = INCOME_MAP[rawId] || rawId;
             }
 
+            const metrics = row.metrics || {};
+            const cost = (Number(metrics.cost_micros) || 0) / 1_000_000;
+            const convVal = Number(metrics.conversions_value || metrics.conversionsValue) || 0;
+
             return {
                 type,
-                dimension,
-                impressions: Number(row.metrics?.impressions) || 0,
-                clicks: Number(row.metrics?.clicks) || 0,
-                cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
-                conversions: Number(row.metrics?.conversions) || 0,
-                conversionValue: Number(row.metrics?.conversions_value) || 0,
-                ctr: Number(row.metrics?.ctr) || 0,
+                dimension: dimension || "Unknown",
+                impressions: Number(metrics.impressions) || 0,
+                clicks: Number(metrics.clicks) || 0,
+                cost,
+                conversions: Number(metrics.conversions) || 0,
+                conversionValue: convVal,
+                ctr: Number(metrics.ctr) || 0,
+                viewThroughConversions: Number(metrics.view_through_conversions || metrics.viewThroughConversions) || 0,
             };
         };
 
@@ -3727,6 +3757,59 @@ export async function getDisplayAdAssets(
     } catch (error: unknown) {
         logApiError('getDisplayAdAssets', error);
         return [];
+    }
+}
+
+// ============================================
+// PMax Asset Counts
+// ============================================
+
+export interface PMaxAssetCounts {
+    headlines: number;
+    descriptions: number;
+    images: number;
+    videos: number;
+}
+
+export async function getPMaxAssetCounts(
+    refreshToken: string,
+    campaignId: string,
+    customerId?: string
+): Promise<PMaxAssetCounts> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+
+    const counts: PMaxAssetCounts = {
+        headlines: 0,
+        descriptions: 0,
+        images: 0,
+        videos: 0
+    };
+
+    try {
+        const query = `
+            SELECT
+                asset_group_asset.field_type,
+                asset.type
+            FROM asset_group_asset
+            WHERE asset_group.campaign = 'customers/${customerId}/campaigns/${campaignId}'
+        `;
+
+        const result = await customer.query(query);
+
+        for (const row of result) {
+            const fieldType = row.asset_group_asset?.field_type;
+            const assetType = row.asset?.type;
+
+            if (fieldType === 'HEADLINE') counts.headlines++;
+            if (fieldType === 'DESCRIPTION') counts.descriptions++;
+            if (assetType === 'IMAGE') counts.images++;
+            if (assetType === 'YOUTUBE_VIDEO') counts.videos++;
+        }
+
+        return counts;
+    } catch (error: unknown) {
+        logApiError("getPMaxAssetCounts", error);
+        return counts;
     }
 }
 

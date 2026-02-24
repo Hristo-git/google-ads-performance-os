@@ -224,6 +224,7 @@ export interface PMaxSearchInsight {
     cost: number;
     conversions: number;
     conversionValue: number;
+    viewThroughConversions?: number;
 }
 
 export interface ConversionActionBreakdown {
@@ -455,6 +456,7 @@ export interface DemographicPerformance {
     conversions: number;
     conversionValue: number;
     ctr: number;
+    viewThroughConversions?: number;
 }
 
 export interface TimeAnalysisPerformance {

@@ -21,12 +21,14 @@ import {
     getAssetGroups,
     getPMaxSearchInsights,
     getAssetGroupAssets,
+    getPMaxAssetCounts,
     getAssetPerformance,
     getChangeHistory,
     getPMaxProductPerformance,
     getConversionActionsList,
     getCampaigns,
     getSearchTerms,
+    getDemographicsPerformance,
 } from './google-ads';
 import type {
     AccountDevicePerformance,
@@ -36,7 +38,7 @@ import type {
     LandingPagePerformance,
     ConversionActionBreakdown,
 } from './google-ads';
-import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance, PMaxAsset, AuctionInsight, PMaxSearchInsight } from '@/types/google-ads';
+import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance, PMaxAsset, AuctionInsight, PMaxSearchInsight, DemographicPerformance } from '@/types/google-ads';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -56,12 +58,14 @@ export interface AnalysisContext {
     // Core data for synthesis
     campaigns: any[];
     searchTerms: any[];
+    demographics: DemographicPerformance[];
 }
 
 export interface PMaxContext {
     assetGroups: any[];
     searchInsights: PMaxSearchInsight[];
     assetInventory: AssetInventory[];
+    campaignCounts?: Record<string, any>;
 }
 
 interface AssetInventory {
@@ -81,41 +85,46 @@ export async function fetchAnalysisContext(
     refreshToken: string,
     customerId: string,
     dateRange: DateRange,
+    sections: string[] = ['all']
 ): Promise<AnalysisContext> {
-    console.log('[AnalysisContext] Fetching context signals in parallel...');
+    console.log('[AnalysisContext] Fetching context signals in parallel...', sections);
     const start = Date.now();
 
+    const shouldFetch = (name: string) => sections.includes('all') || sections.includes(name);
+
     const results = await Promise.allSettled([
-        getAccountDeviceStats(refreshToken, customerId, dateRange),
-        getHourOfDayPerformance(refreshToken, customerId, dateRange),
-        getDayOfWeekPerformance(refreshToken, customerId, dateRange),
-        getRegionalPerformance(refreshToken, customerId, dateRange),
-        getAuctionInsights(refreshToken, undefined, customerId, dateRange),
-        getLandingPagePerformance(refreshToken, customerId, dateRange),
-        getConversionActions(refreshToken, customerId, dateRange),
+        shouldFetch('device') ? getAccountDeviceStats(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('hourOfDay') ? getHourOfDayPerformance(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('dayOfWeek') ? getDayOfWeekPerformance(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('geo') ? getRegionalPerformance(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('auction') ? getAuctionInsights(refreshToken, undefined, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('landingPages') ? getLandingPagePerformance(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('conversions') ? getConversionActions(refreshToken, customerId, dateRange) : Promise.resolve([]),
         // New diagnostic fetches
-        getAssetPerformance(refreshToken, customerId, dateRange),
-        getChangeHistory(refreshToken, customerId, dateRange),
-        getConversionActionsList(refreshToken, customerId, dateRange),
-        getPMaxProductPerformance(refreshToken, customerId, dateRange),
-        getCampaigns(refreshToken, customerId, dateRange),
-        getSearchTerms(refreshToken, customerId, dateRange),
+        shouldFetch('assetPerformance') ? getAssetPerformance(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('changeEvents') ? getChangeHistory(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('conversionList') ? getConversionActionsList(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('pmaxProducts') ? getPMaxProductPerformance(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('campaigns') ? getCampaigns(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('searchTerms') ? getSearchTerms(refreshToken, customerId, dateRange) : Promise.resolve([]),
+        shouldFetch('demographics') ? getDemographicsPerformance(refreshToken, customerId, dateRange) : Promise.resolve([]),
     ]);
 
     const result: AnalysisContext = {
-        device: results[0].status === 'fulfilled' ? results[0].value : [],
-        hourOfDay: results[1].status === 'fulfilled' ? results[1].value : [],
-        dayOfWeek: results[2].status === 'fulfilled' ? results[2].value : [],
-        geo: results[3].status === 'fulfilled' ? results[3].value : [],
-        auctionInsights: results[4].status === 'fulfilled' ? results[4].value : [],
-        landingPages: results[5].status === 'fulfilled' ? results[5].value : [],
-        conversionActions: results[6].status === 'fulfilled' ? results[6].value : [],
-        assetPerformance: results[7].status === 'fulfilled' ? results[7].value : [],
-        changeEvents: results[8].status === 'fulfilled' ? results[8].value : [],
-        conversionDiagnostics: results[9].status === 'fulfilled' ? results[9].value : [],
-        pmaxProducts: results[10].status === 'fulfilled' ? results[10].value : [],
-        campaigns: results[11].status === 'fulfilled' ? results[11].value : [],
-        searchTerms: results[12].status === 'fulfilled' ? results[12].value : [],
+        device: results[0].status === 'fulfilled' ? (results[0].value as any) : [],
+        hourOfDay: results[1].status === 'fulfilled' ? (results[1].value as any) : [],
+        dayOfWeek: results[2].status === 'fulfilled' ? (results[2].value as any) : [],
+        geo: results[3].status === 'fulfilled' ? (results[3].value as any) : [],
+        auctionInsights: results[4].status === 'fulfilled' ? (results[4].value as any) : [],
+        landingPages: results[5].status === 'fulfilled' ? (results[5].value as any) : [],
+        conversionActions: results[6].status === 'fulfilled' ? (results[6].value as any) : [],
+        assetPerformance: results[7].status === 'fulfilled' ? (results[7].value as any) : [],
+        changeEvents: results[8].status === 'fulfilled' ? (results[8].value as any) : [],
+        conversionDiagnostics: results[9].status === 'fulfilled' ? (results[9].value as any) : [],
+        pmaxProducts: results[10].status === 'fulfilled' ? (results[10].value as any) : [],
+        campaigns: results[11].status === 'fulfilled' ? (results[11].value as any) : [],
+        searchTerms: results[12].status === 'fulfilled' ? (results[12].value as any) : [],
+        demographics: results[13].status === 'fulfilled' ? (results[13].value as any) : [],
     };
 
     const elapsed = Date.now() - start;
@@ -173,9 +182,21 @@ export async function fetchPMaxContext(
         };
     });
 
+    // Fetch campaign-level asset counts
+    const campaignCountsResults = await Promise.allSettled(
+        pmaxCampaignIds.map(id => getPMaxAssetCounts(refreshToken, id, customerId))
+    );
+
+    const campaignCounts: Record<string, any> = {};
+    pmaxCampaignIds.forEach((id, i) => {
+        if (campaignCountsResults[i].status === 'fulfilled') {
+            campaignCounts[id] = (campaignCountsResults[i] as PromiseFulfilledResult<any>).value;
+        }
+    });
+
     console.log(`[PMaxContext] ${assetGroups.length} asset groups, ${searchInsights.length} search insights, ${assetInventory.length} inventories`);
 
-    return { assetGroups, searchInsights, assetInventory };
+    return { assetGroups, searchInsights, assetInventory, campaignCounts };
 }
 
 // ── Format Functions ───────────────────────────────────────────────────
@@ -264,7 +285,8 @@ export function formatContextForPrompt(ctx: AnalysisContext, language: 'bg' | 'e
                 const cvr = d.clicks > 0 ? ((d.conversions / d.clicks) * 100).toFixed(2) : '0';
                 const cpa = d.conversions > 0 ? (d.cost / d.conversions).toFixed(0) : 'N/A';
                 const roas = d.cost > 0 ? (d.conversionValue / d.cost).toFixed(2) : '0';
-                return `${d.device}: ${pct}% spend, CVR ${cvr}%, CPA €${cpa}, ROAS ${roas}x`;
+                const vtc = d.viewThroughConversions ? `, VTC ${d.viewThroughConversions}` : '';
+                return `${d.device}: ${pct}% spend, CVR ${cvr}%, CPA €${cpa}, ROAS ${roas}x${vtc}`;
             });
         sections.push(`## ${isEn ? 'Device Split' : 'Устройства'}\n${lines.join('\n')}`);
     }
@@ -386,7 +408,8 @@ export function formatContextForPrompt(ctx: AnalysisContext, language: 'bg' | 'e
                 const roas = lp.cost > 0 ? (lp.conversionValue / lp.cost).toFixed(2) : '0';
                 const speed = lp.speedScore != null ? `speed: ${lp.speedScore}/100` : '';
                 const mobile = lp.mobileFriendlyClicksPercentage != null ? `mobile: ${(lp.mobileFriendlyClicksPercentage * 100).toFixed(0)}%` : '';
-                const flags = [speed, mobile].filter(Boolean).join(', ');
+                const vtc = lp.viewThroughConversions ? `VTC: ${lp.viewThroughConversions}` : '';
+                const flags = [speed, mobile, vtc].filter(Boolean).join(', ');
                 return `${url}: €${lp.cost.toFixed(0)}, CVR ${cvr}%, ROAS ${roas}x${flags ? ` [${flags}]` : ''}`;
             });
         sections.push(`## ${isEn ? 'Landing Page Health (by spend)' : 'Здраве на Landing Pages (по разход)'}\n${top.join('\n')}`);
@@ -411,6 +434,42 @@ export function formatContextForPrompt(ctx: AnalysisContext, language: 'bg' | 'e
                 return `${name} (${d.category}): ${d.conv.toFixed(1)} conv (${pct}%), €${d.value.toFixed(0)} value`;
             });
         sections.push(`## ${isEn ? 'Conversion Actions' : 'Конверсионни действия'}\n${lines.join('\n')}`);
+    }
+
+    // 8. Demographics (Age & Gender skews)
+    if (ctx.demographics && ctx.demographics.length > 0) {
+        const typeLabels: Record<string, string> = {
+            'AGE': isEn ? 'Age' : 'Възраст',
+            'GENDER': isEn ? 'Gender' : 'Пол',
+            'INCOME': isEn ? 'Income' : 'Доход',
+            'PARENTAL_STATUS': isEn ? 'Parental' : 'Родител'
+        };
+
+        const grouped = ctx.demographics.reduce((acc: Record<string, DemographicPerformance[]>, d) => {
+            if (!acc[d.type]) acc[d.type] = [];
+            acc[d.type].push(d);
+            return acc;
+        }, {});
+
+        const demoLines: string[] = [];
+        Object.entries(grouped).forEach(([type, items]) => {
+            const totalCost = items.reduce((sum, d) => sum + d.cost, 0);
+            if (totalCost === 0) return;
+
+            const topItems = items
+                .sort((a, b) => b.cost - a.cost)
+                .slice(0, 3)
+                .map(d => {
+                    const roas = d.cost > 0 ? (d.conversionValue / d.cost).toFixed(2) : '0';
+                    const spendPct = ((d.cost / totalCost) * 100).toFixed(0);
+                    return `${d.dimension}: ${spendPct}% spend, ROAS ${roas}x`;
+                });
+            demoLines.push(`${typeLabels[type] || type}: ${topItems.join(' | ')}`);
+        });
+
+        if (demoLines.length > 0) {
+            sections.push(`## ${isEn ? 'Demographic Skews' : 'Демографски отклонения'}\n${demoLines.join('\n')}`);
+        }
     }
 
     if (sections.length === 0) return '';
@@ -466,10 +525,19 @@ export function formatPMaxContextForPrompt(ctx: PMaxContext, language: 'bg' | 'e
             .map(si => {
                 const pct = totalClicks > 0 ? ((si.clicks / totalClicks) * 100).toFixed(0) : '0';
                 const cvr = si.clicks > 0 ? ((si.conversions / si.clicks) * 100).toFixed(2) : '0';
-                return `${si.categoryName}: ${si.clicks} clicks (${pct}%), ${si.conversions.toFixed(1)} conv, CVR ${cvr}%`;
+                const vtc = si.viewThroughConversions ? `, VTC ${si.viewThroughConversions}` : '';
+                return `${si.categoryName}: ${si.clicks} clicks (${pct}%), ${si.conversions.toFixed(1)} conv, CVR ${cvr}%${vtc}`;
             });
 
         sections.push(`## ${isEn ? 'PMax Search Categories' : 'PMax търсени категории'}\n${lines.join('\n')}`);
+    }
+
+    // 4. Campaign-Level Asset Counts
+    if (ctx.campaignCounts && Object.keys(ctx.campaignCounts).length > 0) {
+        const lines = Object.entries(ctx.campaignCounts).map(([id, counts]) => {
+            return `Campaign ${id}: ${counts.headlines} headlines, ${counts.descriptions} descriptions, ${counts.images} images, ${counts.videos} videos`;
+        });
+        sections.push(`## ${isEn ? 'Campaign-Level Asset Counts' : 'Брой ресурси на ниво кампания'}\n${lines.join('\n')}`);
     }
 
     if (sections.length === 0) return '';

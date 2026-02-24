@@ -12,7 +12,8 @@ import {
     getConversionActions,
     getAudiencePerformance,
     getNetworkPerformance,
-    getPMaxSearchInsights
+    getPMaxSearchInsights,
+    getDemographicsPerformance
 } from "@/lib/google-ads";
 // ANALYSIS_SYSTEM_PROMPT_V3 and buildAdvancedAnalysisPrompt already imported above
 
@@ -87,6 +88,7 @@ function buildPrompt(data: any): string {
         data.audiencePerformance || [],
         data.networkPerformance || [],
         data.pmaxInsights || [],
+        data.demographicPerformance || [],
         language
     );
 
@@ -356,12 +358,14 @@ export async function POST(request: Request) {
                     auctionInsights,
                     conversionActions,
                     audiencePerformance,
-                    networkPerformance
+                    networkPerformance,
+                    demographics
                 ] = await Promise.all([
                     getAuctionInsights(session.refreshToken, undefined, customerId, dateRange),
                     getConversionActions(session.refreshToken, customerId, dateRange),
                     getAudiencePerformance(session.refreshToken, customerId, dateRange, campaignIds),
-                    getNetworkPerformance(session.refreshToken, customerId, dateRange, campaignIds)
+                    getNetworkPerformance(session.refreshToken, customerId, dateRange, campaignIds),
+                    getDemographicsPerformance(session.refreshToken, customerId, dateRange)
                 ]);
 
                 // Attach to data object for buildPrompt
@@ -369,6 +373,7 @@ export async function POST(request: Request) {
                 data.conversionActions = conversionActions;
                 data.audiencePerformance = audiencePerformance;
                 data.networkPerformance = networkPerformance;
+                data.demographicPerformance = demographics;
 
                 // Fetch PMax insights only if we have PMax campaigns
                 const pmaxCampaigns = data.campaigns?.filter((c: any) =>

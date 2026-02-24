@@ -25,6 +25,8 @@ export async function GET(request: Request) {
     // Comma-separated PMax campaign IDs (optional)
     const pmaxCampaignIds = searchParams.get('pmaxCampaignIds')?.split(',').filter(Boolean) || [];
 
+    const sections = searchParams.get('sections')?.split(',').filter(Boolean) || ['all'];
+
     if (!customerId || !startDate || !endDate) {
         return NextResponse.json({ error: 'Missing required parameters: customerId, startDate, endDate' }, { status: 400 });
     }
@@ -47,7 +49,7 @@ export async function GET(request: Request) {
 
         // Fetch general context + PMax context in parallel
         const [context, pmaxContext] = await Promise.all([
-            fetchAnalysisContext(refreshToken, customerId, dateRange),
+            fetchAnalysisContext(refreshToken, customerId, dateRange, sections),
             pmaxCampaignIds.length > 0
                 ? fetchPMaxContext(refreshToken, customerId, dateRange, pmaxCampaignIds)
                 : Promise.resolve(null),
