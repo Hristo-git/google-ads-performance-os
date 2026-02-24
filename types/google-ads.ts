@@ -99,7 +99,8 @@ export interface AdGroup {
 
 export interface NegativeKeyword {
     id: string;
-    adGroupId: string;
+    adGroupId?: string;
+    campaignId?: string;
     text: string;
     matchType: string;
 }
@@ -109,6 +110,7 @@ export interface KeywordWithQS {
     adGroupId: string;
     text: string;
     matchType: string;
+    status: string;
     qualityScore: number | null;
     expectedCtr: string;
     landingPageExperience: string;
@@ -177,10 +179,12 @@ export interface ConversionAction {
     conversionCategory: string; // Changed from category
     ownerCustomer?: string;
     includeInConversionsMetric: boolean;
+    primaryConfig?: string;
     allConversions: number;
     viewThroughConversions: number;
     value: number;
 }
+
 
 export interface AuctionInsight {
     campaignId: string;

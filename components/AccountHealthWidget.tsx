@@ -156,8 +156,7 @@ export default function AccountHealthWidget({ data, loading }: AccountHealthWidg
         );
     }
 
-    const topIssues = data.checks
-        .filter(c => c.status === 'CRITICAL' || c.status === 'WARNING')
+    const topIssues = [...data.checks]
         .sort((a, b) => a.score - b.score)
         .slice(0, 3);
 
@@ -230,12 +229,16 @@ export default function AccountHealthWidget({ data, loading }: AccountHealthWidg
                     {topIssues.map((issue, idx) => (
                         <div
                             key={idx}
-                            className={`border rounded-xl p-4 flex flex-col gap-2 group hover:scale-[1.02] transition-transform cursor-pointer ${issue.status === 'CRITICAL' ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/40' : 'bg-amber-500/5 border-amber-500/20 hover:border-amber-500/40'}`}
+                            className={`border rounded-xl p-4 flex flex-col gap-2 group hover:scale-[1.02] transition-transform cursor-pointer ${issue.status === 'CRITICAL' ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/40' :
+                                    issue.status === 'WARNING' ? 'bg-amber-500/5 border-amber-500/20 hover:border-amber-500/40' :
+                                        issue.status === 'GOOD' ? 'bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40' :
+                                            'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40'
+                                }`}
                             title={issue.recommendation}
                         >
                             <div className="flex justify-between items-center">
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{issue.name}</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${issue.status === 'CRITICAL' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${getStatusColor(issue.status)}`}>
                                     {issue.score}/100
                                 </span>
                             </div>

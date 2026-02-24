@@ -8,8 +8,8 @@
  *   import { calculateHealthScore, buildNGrams, formatHealthScoreForPrompt, formatNGramsForPrompt } from '@/lib/account-health';
  */
 
-import type { CampaignPerformance, AdGroupPerformance, KeywordWithQS, AdWithStrength, NegativeKeyword, DevicePerformance } from './google-ads';
-import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance, AuctionInsight } from '@/types/google-ads';
+import type { CampaignPerformance, AdGroupPerformance, AdWithStrength, DevicePerformance } from './google-ads';
+import type { AssetPerformance, ChangeEvent, ConversionAction, PMaxProductPerformance, AuctionInsight, KeywordWithQS, NegativeKeyword } from '@/types/google-ads';
 
 // ============================================================
 // TYPES
@@ -391,15 +391,18 @@ export function calculateHealthScore(
     const overloadedCampaigns = Array.from(agPerCampaign.entries())
         .filter(([_, count]) => count > 20);
 
-    let structureScore = 80; // start from a decent baseline
+    let structureScore = 100; // Start from 100 and deduct
     if (bloatedAdGroups.length > 0) {
-        structureScore -= Math.min(30, bloatedAdGroups.length * 5);
+        // -4 points per bloated ad group (max -40)
+        structureScore -= Math.min(40, bloatedAdGroups.length * 4);
     }
     if (emptyAdGroups.length > 0) {
-        structureScore -= Math.min(20, emptyAdGroups.length * 3);
+        // -2 points per empty ad group (max -20)
+        structureScore -= Math.min(20, emptyAdGroups.length * 2);
     }
     if (overloadedCampaigns.length > 0) {
-        structureScore -= Math.min(20, overloadedCampaigns.length * 10);
+        // -10 points per overloaded campaign (max -30)
+        structureScore -= Math.min(30, overloadedCampaigns.length * 10);
     }
     structureScore = Math.max(0, Math.min(100, structureScore));
 
@@ -424,9 +427,9 @@ export function calculateHealthScore(
         finding: structureIssues.length > 0
             ? structureIssues.join('. ') + '.'
             : 'Account structure is clean — reasonable ad group counts and ad distribution.',
-        recommendation: bloatedAdGroups.length > 0
-            ? `Google recommends 2-3 RSA per ad group. ${bloatedAdGroups.length} ad groups exceed this — consolidate or pause low-performers.`
-            : 'Structure looks good. No action needed.',
+        recommendation: structureIssues.length > 0
+            ? `Address structural issues: ${structureIssues.join(', ')}.`
+            : 'Account structure is clean. No action needed.',
         dataPoints: {
             totalAdGroups: enabledAdGroups.length,
             bloatedAdGroups: bloatedAdGroups.length,

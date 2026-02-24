@@ -15,7 +15,9 @@ import {
     PMaxSearchInsight,
     PlacementPerformance,
     DemographicPerformance,
-    TimeAnalysisPerformance
+    TimeAnalysisPerformance,
+    NegativeKeyword,
+    KeywordWithQS
 } from "@/types/google-ads";
 
 
@@ -109,9 +111,9 @@ export interface DateRange {
     end: string;
 }
 
-export function getDateFilter(dateRange?: DateRange) {
+export function getDateFilter(dateRange?: DateRange, field: string = 'segments.date') {
     if (!dateRange?.start || !dateRange?.end) return "";
-    return ` AND segments.date BETWEEN '${dateRange.start}' AND '${dateRange.end}'`;
+    return ` AND ${field} BETWEEN '${dateRange.start}' AND '${dateRange.end}'`;
 }
 
 export interface CampaignPerformance {
@@ -175,53 +177,7 @@ export interface AdGroupPerformance {
     searchLostISBudget: number | null;
 }
 
-export interface NegativeKeyword {
-    id: string;
-    adGroupId: string;
-    text: string;
-    matchType: string;
-}
 
-export interface KeywordWithQS {
-    id: string;
-    adGroupId: string;
-    text: string;
-    matchType: string;
-    status: string;              // NEW
-    qualityScore: number | null;
-    expectedCtr: string;
-    landingPageExperience: string;
-    adRelevance: string;
-    impressions: number;
-    clicks: number;
-    cost: number;
-    conversions: number;         // RESTORED
-    conversionValue: number;     // NEW
-    cpc: number;
-    biddingStrategyType?: string;
-    finalUrl?: string;
-    campaignName?: string;
-    adGroupName?: string;
-    // Added from instruction
-    quality_info?: {
-        quality_score: number;
-        post_click_quality_score: string;
-        ad_relevance: string;
-        ad_fairness: string;
-        landing_page_experience: string;
-        post_click_quality_score_range?: string;
-    };
-    final_urls?: string[];
-    approval_status?: string;
-    policy_summary?: {
-        approval_status: string;
-        policy_topic_entries: {
-            topic: string;
-            type: string;
-        }[];
-    };
-    searchImpressionShare: number | null;
-}
 
 export interface AdWithStrength {
     id: string;
@@ -776,22 +732,6 @@ export async function getNegativeKeywords(refreshToken: string, adGroupId?: stri
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
 
     try {
-        const whereClause = adGroupId
-            ? `WHERE ad_group_criterion.negative = TRUE AND ad_group.id = ${adGroupId} AND ad_group_criterion.type = 'KEYWORD'`
-            : `WHERE ad_group_criterion.negative = TRUE AND ad_group_criterion.type = 'KEYWORD'`;
-
-        const keywords = await customer.query(`
-SELECT
-ad_group_criterion.criterion_id,
-    ad_group.id,
-    ad_group_criterion.keyword.text,
-    ad_group_criterion.keyword.match_type
-            FROM ad_group_criterion
-            ${whereClause}
-            LIMIT 500
-        `);
-
-        // Match type map
         const MATCH_TYPE_MAP: Record<string, string> = {
             '2': 'UNSPECIFIED',
             '3': 'EXACT',
@@ -799,15 +739,91 @@ ad_group_criterion.criterion_id,
             '5': 'PHRASE'
         };
 
-        return keywords.map((row) => {
+        // 1. Ad Group Negatives
+        const agWhere = adGroupId
+            ? `WHERE ad_group_criterion.negative = TRUE AND ad_group.id = ${adGroupId} AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.status != 'REMOVED'`
+            : `WHERE ad_group_criterion.negative = TRUE AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.status != 'REMOVED'`;
+
+        const agKeywordsPromise = customer.query(`
+            SELECT
+                ad_group_criterion.criterion_id,
+                ad_group.id,
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.keyword.match_type
+            FROM ad_group_criterion
+            ${agWhere}
+            LIMIT 1000
+        `);
+
+        // 2. Campaign Negatives
+        // Note: If adGroupId is provided, we'd ideally filter by campaign. For health checks, we usually fetch all.
+        const campaignKeywordsPromise = customer.query(`
+            SELECT
+                campaign_criterion.criterion_id,
+                campaign.id,
+                campaign_criterion.keyword.text,
+                campaign_criterion.keyword.match_type
+            FROM campaign_criterion
+            WHERE campaign_criterion.negative = TRUE 
+              AND campaign_criterion.type = 'KEYWORD'
+              AND campaign_criterion.status != 'REMOVED'
+            LIMIT 1000
+        `);
+
+        // 3. Shared Set Negatives (Shared Criteria)
+        const sharedKeywordsPromise = customer.query(`
+            SELECT
+                shared_criterion.criterion_id,
+                shared_set.id,
+                shared_criterion.keyword.text,
+                shared_criterion.keyword.match_type
+            FROM shared_criterion
+            LIMIT 2000
+        `);
+
+        const [agResults, campaignResults, sharedResults] = await Promise.all([
+            agKeywordsPromise,
+            campaignKeywordsPromise,
+            sharedKeywordsPromise
+        ]);
+
+        console.log(`[getNegativeKeywords] API results: AG=${agResults.length}, Campaign=${campaignResults.length}, Shared=${sharedResults.length}`);
+
+        const allNegatives: NegativeKeyword[] = [];
+
+        // Map AG results
+        agResults.forEach((row) => {
             const rawMatchType = String(row.ad_group_criterion?.keyword?.match_type);
-            return {
+            allNegatives.push({
                 id: row.ad_group_criterion?.criterion_id?.toString() || "",
                 adGroupId: row.ad_group?.id?.toString() || "",
                 text: row.ad_group_criterion?.keyword?.text || "",
                 matchType: MATCH_TYPE_MAP[rawMatchType] || rawMatchType || "UNKNOWN",
-            };
+            });
         });
+
+        // Map Campaign results
+        campaignResults.forEach((row) => {
+            const rawMatchType = String(row.campaign_criterion?.keyword?.match_type);
+            allNegatives.push({
+                id: row.campaign_criterion?.criterion_id?.toString() || "",
+                campaignId: row.campaign?.id?.toString() || "",
+                text: row.campaign_criterion?.keyword?.text || "",
+                matchType: MATCH_TYPE_MAP[rawMatchType] || rawMatchType || "UNKNOWN",
+            });
+        });
+
+        // Map Shared results
+        sharedResults.forEach((row) => {
+            const rawMatchType = String(row.shared_criterion?.keyword?.match_type);
+            allNegatives.push({
+                id: row.shared_criterion?.criterion_id?.toString() || "",
+                text: row.shared_criterion?.keyword?.text || "",
+                matchType: MATCH_TYPE_MAP[rawMatchType] || rawMatchType || "UNKNOWN",
+            });
+        });
+
+        return allNegatives;
     } catch (error: unknown) {
         logApiError("API call", error);
         throw error;
@@ -925,6 +941,8 @@ campaign.status = 'ENABLED'
                 allConversions: Number(row.metrics?.all_conversions) || 0,
                 viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
                 searchImpressionShare: row.metrics?.search_impression_share ?? null,
+                searchLostISRank: row.metrics?.search_rank_lost_impression_share ?? null,
+                searchLostISBudget: row.metrics?.search_budget_lost_impression_share ?? null,
                 approvalStatus: String(row.ad_group_criterion?.approval_status || 'UNKNOWN'),
             }));
 
@@ -999,10 +1017,6 @@ export async function getAdsWithStrength(
                     ad_group_ad.ad.demand_gen_carousel_ad.description,
                     ad_group_ad.ad.demand_gen_video_responsive_ad.headlines,
                     ad_group_ad.ad.demand_gen_video_responsive_ad.descriptions,
-                    ad_group_ad.ad.discovery_multi_asset_ad.headlines,
-                    ad_group_ad.ad.discovery_multi_asset_ad.descriptions,
-                    ad_group_ad.ad.discovery_carousel_ad.headlines,
-                    ad_group_ad.ad.discovery_carousel_ad.descriptions,
                     ad_group_ad.ad.final_urls,
                     ad_group_ad.ad_strength,
                     metrics.impressions,
@@ -1891,8 +1905,7 @@ campaign.id,
     metrics.auction_insight_search_impression_share,
     metrics.auction_insight_search_overlap_rate,
     metrics.auction_insight_search_outranking_share,
-    metrics.auction_insight_search_position_above_rate,
-    // Deprecated in API v22: top_of_page_rate and absolute_top_of_page_rate
+    metrics.auction_insight_search_position_above_rate
             FROM campaign
             WHERE campaign.status != 'REMOVED' ${campaignFilter} ${dateFilter}
 `);
@@ -3126,7 +3139,6 @@ SELECT
     asset.id,
     asset.name,
     asset.type,
-    asset.image_asset.full_size,
     asset.youtube_video_asset.youtube_video_id,
     asset.text_asset.text,
     asset.final_urls,
@@ -3182,17 +3194,28 @@ SELECT
 export async function getChangeHistory(
     refreshToken: string,
     customerId?: string,
-    dateRange?: DateRange // Should default to last 30 days if not provided
+    dateRange?: DateRange,
+    limit: number = 1000
 ): Promise<ChangeEvent[]> {
     const customer = getGoogleAdsCustomer(refreshToken, customerId);
 
-    // Change history only supports specific date ranges, usually last 30 days is best for diagnostics
-    const dateFilter = getDateFilter(dateRange);
+    // If no date range provided, default to last 28 days to stay safely within 30-day limit
+    const range = dateRange || {
+        start: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        end: new Date().toISOString().split('T')[0]
+    };
+
+    // Enforce 30-day limit for change_event resource
+    const thirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000);
+    const startDate = new Date(range.start);
+    const finalStart = startDate < thirtyDaysAgo ? thirtyDaysAgo.toISOString().split('T')[0] : range.start;
+
+    const dateQuery = `WHERE change_event.change_date_time >= '${finalStart}' AND change_event.change_date_time <= '${range.end}'`;
 
     try {
         const query = `
 SELECT
-change_event.change_date_time,
+    change_event.change_date_time,
     change_event.change_resource_type,
     change_event.change_resource_name,
     change_event.client_type,
@@ -3201,31 +3224,42 @@ change_event.change_date_time,
     change_event.new_resource,
     change_event.campaign,
     change_event.ad_group
-            FROM change_event
-            WHERE change_event.change_date_time >= '${dateRange!.start}' 
-            AND change_event.change_date_time <= '${dateRange!.end}'
-            ORDER BY change_event.change_date_time DESC
-            LIMIT 100
+FROM change_event
+${dateQuery}
+ORDER BY change_event.change_date_time DESC
+LIMIT ${limit}
     `;
 
         const result = await customer.query(query);
 
-        return result.map((row) => ({
-            id: row.change_event?.change_resource_name || "",
-            changeDateTime: row.change_event?.change_date_time || "",
-            changeResourceType: String(row.change_event?.change_resource_type || "UNKNOWN"),
-            changeResourceName: row.change_event?.change_resource_name || "",
-            clientType: String(row.change_event?.client_type || "UNKNOWN"),
-            userEmail: row.change_event?.user_email || "",
-            oldResource: row.change_event?.old_resource ? JSON.stringify(row.change_event.old_resource) : undefined,
-            newResource: row.change_event?.new_resource ? JSON.stringify(row.change_event.new_resource) : undefined,
-            resourceName: row.change_event?.campaign || row.change_event?.ad_group || "Unknown Entity",
-        }));
+        return result.map((row) => {
+            const resourceType = String(row.change_event?.change_resource_type || "UNKNOWN");
+            let resourceName = row.change_event?.campaign || row.change_event?.ad_group || "Account Level";
+
+            // If it's a specific resource type and we have the resource name, use its last part
+            if (resourceName === "Account Level" && row.change_event?.change_resource_name) {
+                const parts = row.change_event.change_resource_name.split('/');
+                resourceName = `${resourceType}: ${parts[parts.length - 1]}`;
+            }
+
+            return {
+                id: row.change_event?.change_resource_name || "",
+                changeDateTime: row.change_event?.change_date_time || "",
+                changeResourceType: resourceType,
+                changeResourceName: row.change_event?.change_resource_name || "",
+                clientType: String(row.change_event?.client_type || "UNKNOWN"),
+                userEmail: row.change_event?.user_email || "",
+                oldResource: row.change_event?.old_resource ? JSON.stringify(row.change_event.old_resource) : undefined,
+                newResource: row.change_event?.new_resource ? JSON.stringify(row.change_event.new_resource) : undefined,
+                resourceName,
+            };
+        });
     } catch (error: unknown) {
         logApiError("getChangeHistory", error);
         return [];
     }
 }
+
 
 // ============================================
 // PRIORITY 7: Conversion Actions Diagnostics
@@ -3274,6 +3308,53 @@ AND metrics.all_conversions > 0
     }
 }
 
+export async function getConversionActionsAccount(
+    refreshToken: string,
+    customerId?: string,
+    dateRange?: DateRange
+): Promise<ConversionAction[]> {
+    const customer = getGoogleAdsCustomer(refreshToken, customerId);
+    const dateFilter = getDateFilter(dateRange);
+
+    try {
+        const query = `
+SELECT
+    conversion_action.id,
+    conversion_action.name,
+    conversion_action.status,
+    conversion_action.type,
+    conversion_action.category,
+    conversion_action.owner_customer,
+    conversion_action.include_in_conversions_metric,
+    metrics.all_conversions,
+    metrics.all_conversions_value
+FROM conversion_action
+WHERE conversion_action.status != 'REMOVED'
+${dateFilter}
+        `;
+
+        const result = await customer.query(query);
+
+        return result.map((row) => ({
+            id: row.conversion_action?.id?.toString() || "",
+            name: row.conversion_action?.name || "",
+            status: mapStatus(row.conversion_action?.status as any),
+            type: String(row.conversion_action?.type || ""),
+            conversionCategory: mapConversionCategory(row.conversion_action?.category),
+            ownerCustomer: row.conversion_action?.owner_customer || "",
+            includeInConversionsMetric: !!row.conversion_action?.include_in_conversions_metric,
+            allConversions: Number(row.metrics?.all_conversions) || 0,
+            viewThroughConversions: 0, // Not available at account level query without segmentation
+            value: Number(row.metrics?.all_conversions_value) || 0,
+        }));
+
+    } catch (error: unknown) {
+        logApiError("getConversionActionsAccount", error);
+        return [];
+    }
+}
+
+
 // ============================================
 // PRIORITY 8: Shopping/PMax Product Performance
 // ============================================
@@ -3292,10 +3373,8 @@ export async function getPMaxProductPerformance(
     try {
         const query = `
 SELECT
-shopping_product_view.resource_name,
     segments.product_merchant_id,
     segments.product_channel,
-    segments.product_language_code,
     segments.product_feed_label,
     segments.product_item_id,
     segments.product_title,

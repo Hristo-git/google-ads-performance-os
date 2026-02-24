@@ -13,9 +13,10 @@ import {
 
     getChangeHistory,
     getAssetPerformance,
-    getConversionActionsList,
+    getConversionActionsAccount,
     getPMaxProductPerformance
 } from "@/lib/google-ads";
+
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
 
 export async function GET(request: Request) {
@@ -165,8 +166,9 @@ export async function GET(request: Request) {
 
         let conversionActions: any[] = [];
         try {
-            conversionActions = await getConversionActionsList(refreshToken, customerId, dateRange);
+            conversionActions = await getConversionActionsAccount(refreshToken, customerId, dateRange);
         } catch (e: any) { console.error(`[API/Health] Failed conversionActions:`, e); }
+
 
         let pmaxProducts: any[] = [];
         try {
