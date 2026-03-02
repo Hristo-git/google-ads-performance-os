@@ -188,7 +188,6 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                 <>
                     <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
                     <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
-                    <td className="px-4 py-3 text-right">{fmtEuro(metrics.cost || 0, 0)}</td>
                     <td className="px-4 py-3 text-right">{fmtInt(metrics.conversions || 0)}</td>
                     <td className="px-4 py-3 text-right text-emerald-400 font-semibold">{fmtEuro(metrics.conversionValue || 0, 0)}</td>
                     <td className="px-4 py-3 text-right font-semibold">{fmtX(metrics.roas || 0)}</td>
@@ -222,11 +221,23 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
 
             {layout === 'search' && (
                 <>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.clicks > 0 && metrics.conversions > 0
+                            ? fmtPct(metrics.conversions / metrics.clicks * 100, 2)
+                            : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-emerald-400">{fmtEuro(metrics.conversionValue || 0, 0)}</td>
                     <td className="px-4 py-3 text-right text-emerald-400">
                         {metrics.searchImpressionShare ? fmtPct(metrics.searchImpressionShare * 100) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-400">
                         {metrics.searchLostISRank ? fmtPct(metrics.searchLostISRank * 100) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.searchLostISBudget ? fmtPct(metrics.searchLostISBudget * 100) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">{fmtNum(metrics.avgQualityScore || 0, 1)}</td>
                     <td className="px-4 py-3 text-right">
@@ -242,6 +253,8 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
 
             {layout === 'adgroup' && (
                 <>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
                     <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
                     <td className="px-4 py-3 text-right text-slate-300">
                         {metrics.clicks > 0 && metrics.conversions > 0
@@ -269,7 +282,7 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
             )}
 
             {(() => {
-                const renderedCols = layout === 'listing_group' ? 9 : layout === 'pmax_assets' ? 4 : (layout === 'search' ? 9 : layout === 'pmax' ? 10 : layout === 'adgroup' ? 10 : 1);
+                const renderedCols = layout === 'listing_group' ? 10 : layout === 'pmax_assets' ? 4 : (layout === 'search' ? 14 : layout === 'pmax' ? 11 : layout === 'adgroup' ? 12 : 1);
                 return colSpan > renderedCols ? <td colSpan={colSpan - renderedCols}></td> : null;
             })()}
         </tr>
@@ -3220,7 +3233,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     name={camp.name}
                                                                     type="Campaign"
                                                                     metrics={camp}
-                                                                    colSpan={8}
+                                                                    colSpan={isPMax ? 11 : 14}
                                                                     layout={isPMax ? 'pmax' : 'search'}
                                                                 />
                                                             );
@@ -3242,7 +3255,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 name={currentAdGroup.name}
                                                                 type="Ad Group"
                                                                 metrics={_metrics}
-                                                                colSpan={8}
+                                                                colSpan={12}
                                                                 layout="adgroup"
                                                             />
                                                         );

@@ -44,7 +44,10 @@ async function main() {
 
         console.log(`✅ Found ${children.length} accounts under ${targetMcc}:`);
         children.forEach((child: any) => {
-            console.log(`- ${child.customer_client.descriptive_name} (${child.customer_client.client_customer}) | Manager: ${child.customer_client.manager}`);
+            const cc = child.customer_client;
+            if (cc) {
+                console.log(`- ${cc.descriptive_name || 'Unnamed'} (${cc.client_customer || 'No ID'}) | Manager: ${cc.manager}`);
+            }
         });
 
     } catch (e) {

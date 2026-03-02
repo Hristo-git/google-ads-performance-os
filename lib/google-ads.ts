@@ -1204,12 +1204,12 @@ export async function getAssetGroups(refreshToken: string, campaignId?: string, 
                 const ASSET_AD_STRENGTH_MAP: Record<string, string> = {
                     '0': 'UNSPECIFIED',
                     '1': 'UNKNOWN',
-                    '2': 'POOR',
-                    '3': 'AVERAGE',
-                    '4': 'GOOD',
-                    '5': 'EXCELLENT',
-                    '6': 'PENDING',
-                    '7': 'UNRATED',  // Too little traffic to evaluate
+                    '2': 'PENDING',
+                    '3': 'NO_ADS',
+                    '4': 'POOR',
+                    '5': 'AVERAGE',
+                    '6': 'GOOD',
+                    '7': 'EXCELLENT',
                     'POOR': 'POOR',
                     'AVERAGE': 'AVERAGE',
                     'GOOD': 'GOOD',
@@ -1360,6 +1360,40 @@ export async function getListingGroups(
     });
 }
 
+// Enum mappings for Asset Field Types and Asset Types (numerical to string)
+const ASSET_FIELD_TYPE_MAP: Record<string, string> = {
+    '2': 'HEADLINE',
+    '3': 'DESCRIPTION',
+    '5': 'MARKETING_IMAGE',
+    '6': 'SQUARE_MARKETING_IMAGE',
+    '7': 'YOUTUBE_VIDEO',
+    '8': 'LOGO',
+    '9': 'LANDSCAPE_MARKETING_IMAGE',
+    '10': 'YOUTUBE_VIDEO',
+    '13': 'AD_CUSTOMIZER',
+    '15': 'CALL_TO_ACTION',
+    '17': 'LONG_HEADLINE',
+    '18': 'BUSINESS_NAME',
+    '19': 'SQUARE_MARKETING_IMAGE',
+    '20': 'PORTRAIT_MARKETING_IMAGE',
+    '21': 'LOGO',
+    '22': 'LANDSCAPE_LOGO',
+    '23': 'YOUTUBE_VIDEO',
+    '24': 'CALLOUT',
+    '25': 'SITELINK',
+    '26': 'CALL_TO_ACTION_SELECTION'
+};
+
+const ASSET_TYPE_MAP: Record<string, string> = {
+    '2': 'YOUTUBE_VIDEO',
+    '3': 'HTML5_AD',
+    '4': 'IMAGE',
+    '5': 'TEXT',
+    '6': 'MEDIA_BUNDLE',
+    '18': 'SITELINK',
+    '21': 'DYNAMIC_REAL_ESTATE_ASSET'
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getAssetGroupAssets(refreshToken: string, assetGroupId: string, customerId?: string): Promise<PMaxAsset[]> {
@@ -1391,11 +1425,14 @@ asset_group_asset.asset_group,
                 const asset = row.asset;
                 const link = row.asset_group_asset;
 
+                const fieldTypeRaw = String(link?.field_type || "UNKNOWN");
+                const assetTypeRaw = String(asset?.type || "UNKNOWN");
+
                 return {
                     id: asset?.id?.toString() || "",
                     assetGroupId: assetGroupId,
-                    type: String(asset?.type) || "UNKNOWN",
-                    fieldType: String(link?.field_type) || "UNKNOWN",
+                    type: ASSET_TYPE_MAP[assetTypeRaw] || assetTypeRaw,
+                    fieldType: ASSET_FIELD_TYPE_MAP[fieldTypeRaw] || fieldTypeRaw,
                     text: asset?.text_asset?.text || asset?.name || "",
                     name: asset?.name || "",
                     status: mapStatus(link?.status),
@@ -3876,13 +3913,21 @@ export async function getPMaxAssetCounts(
         const result = await customer.query(query);
 
         for (const row of result) {
-            const fieldType = row.asset_group_asset?.field_type;
-            const assetType = row.asset?.type;
+            const fieldTypeRaw = String(row.asset_group_asset?.field_type || "");
+            const assetTypeRaw = String(row.asset?.type || "");
+
+            const fieldType = ASSET_FIELD_TYPE_MAP[fieldTypeRaw] || fieldTypeRaw;
+            const assetType = ASSET_TYPE_MAP[assetTypeRaw] || assetTypeRaw;
 
             if (fieldType === 'HEADLINE') counts.headlines++;
+            if (fieldType === 'LONG_HEADLINE') {
+                // Dashboard UI counts Long Headlines separately but also sometimes includes them in the generic Headline pill
+                // We'll follow the exact mapping used in getAssetGroupAssets for consistency
+                counts.headlines++;
+            }
             if (fieldType === 'DESCRIPTION') counts.descriptions++;
             if (assetType === 'IMAGE') counts.images++;
-            if (assetType === 'YOUTUBE_VIDEO') counts.videos++;
+            if (assetType === 'YOUTUBE_VIDEO' || assetType === 'VIDEO' || fieldType === 'YOUTUBE_VIDEO' || fieldType === 'VIDEO') counts.videos++;
         }
 
         return counts;

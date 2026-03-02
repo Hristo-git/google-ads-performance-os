@@ -11,9 +11,8 @@ async function main() {
     const developer_token = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
     const refresh_token = process.env.GOOGLE_ADS_REFRESH_TOKEN;
 
-    // Login ID from env or fallback
     const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ? process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID.replace(/-/g, "") : undefined;
-    const envCustomerId = process.env.GOOGLE_ADS_CUSTOMER_ID?.replace(/-/g, "");
+    const envCustomerId = "5334827744";
 
     if (!client_id || !client_secret || !developer_token || !refresh_token || !envCustomerId) {
         console.error("Missing env vars (CLIENT_ID, SECRET, TOKENS, CUSTOMER_ID)");
@@ -36,38 +35,82 @@ async function main() {
 
     // 1. Fetch PMax Asset Groups
     console.log("Fetching PMax Asset Groups...");
-    const assetGroups = await customer.query(`
-        SELECT asset_group.id, asset_group.name, asset_group.status
+    const results = await customer.query(`
+        SELECT 
+            campaign.name, 
+            asset_group.id, 
+            asset_group.name, 
+            asset_group.status
         FROM asset_group
-        WHERE asset_group.status = 'ENABLED'
-        LIMIT 5
     `);
 
-    if (assetGroups.length === 0) {
-        console.log("No enabled asset groups found.");
+    if (results.length === 0) {
+        console.log("No asset groups found.");
         return;
     }
 
-    const targetGroup = assetGroups[0];
-    console.log(`Checking Asset Group: ${targetGroup.asset_group.name} (${targetGroup.asset_group.id})`);
+    console.log(`Found ${results.length} asset groups.`);
+    for (const row of results) {
+        console.log(`- Campaign: ${row.campaign.name} | Asset Group: ${row.asset_group.name} (${row.asset_group.id}) [${row.asset_group.status}]`);
+    }
+
+    // Search specifically for "Кухни AON"
+    const targetGroup = results.find(r => r.asset_group.name.includes("Кухни AON")) || results[0];
+    console.log(`\nInspecting Asset Group: ${targetGroup.asset_group.name} (${targetGroup.asset_group.id})`);
+
+    const FIELD_TYPE_MAP: Record<string, string> = {
+        '2': 'HEADLINE',
+        '3': 'DESCRIPTION',
+        '18': 'LONG_HEADLINE',
+        '25': 'SITELINK',
+        '19': 'SQUARE_MARKETING_IMAGE',
+        '20': 'PORTRAIT_MARKETING_IMAGE',
+        '5': 'MARKETING_IMAGE',
+        '21': 'LOGO',
+        '22': 'LANDSCAPE_LOGO'
+    };
+
+    const assetGroupId = targetGroup.asset_group.id;
+    const assetGroupName = targetGroup.asset_group.name;
 
     // 2. Fetch Assets for this group
-    console.log("Fetching Assets raw response...");
+    console.log("Fetching Assets with raw field_type...");
     try {
         const assets = await customer.query(`
             SELECT
-                asset_group_asset.resource_name,
+                asset_group.id,
+                asset_group.name,
+                asset_group.ad_strength,
+                asset_group_asset.asset,
                 asset_group_asset.field_type,
                 asset_group_asset.status,
-                asset_group_asset.primary_status
+                asset.id,
+                asset.type,
+                asset.name,
+                asset.text_asset.text,
+                asset.image_asset.full_size.url,
+                asset.youtube_video_asset.youtube_video_id
             FROM asset_group_asset
-            WHERE asset_group.id = ${targetGroup.asset_group.id}
-            LIMIT 5
+            WHERE asset_group.id = ${assetGroupId}
         `);
 
-        console.log("Assets Found:", assets.length);
+        console.log(`\n--- Assets for Asset Group: ${assetGroupName} (ID: ${assetGroupId}) ---`);
+
         if (assets.length > 0) {
-            console.log("First Asset:", JSON.stringify(assets[0], null, 2));
+            const adStrength = assets[0].asset_group?.ad_strength;
+            console.log(`Ad Strength: ${adStrength}`);
+        }
+
+        console.log(`Assets Found: ${assets.length}\n`);
+        for (const a of assets) {
+            const rawFieldType = a.asset_group_asset.field_type;
+            const mappedFieldType = FIELD_TYPE_MAP[String(rawFieldType)] || rawFieldType;
+
+            let content = "";
+            if (a.asset.text_asset?.text) content = `Text: "${a.asset.text_asset.text}"`;
+            else if (a.asset.youtube_video_asset?.youtube_video_id) content = `Video ID: ${a.asset.youtube_video_asset.youtube_video_id}`;
+
+            console.log(`ID: ${a.asset.id} | Type: ${a.asset.type} | FieldType: ${mappedFieldType} (Raw: ${rawFieldType}) | Content: ${content}`);
         }
     } catch (e) {
         console.error("Asset Query Error:", e);
