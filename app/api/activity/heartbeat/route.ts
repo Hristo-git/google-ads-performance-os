@@ -11,12 +11,13 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { path } = body;
+        const { path, eventType = 'HEARTBEAT', visibility } = body;
 
-        // Log heartbeat
-        // We log it as 'HEARTBEAT'
-        // Metadata can include the current path to see where they are spending time
-        await logActivity(session.user.id, 'HEARTBEAT', { path });
+        // Log specified event type
+        await logActivity(session.user.id, eventType, {
+            path,
+            visibility
+        });
 
         return NextResponse.json({ success: true });
     } catch (error) {

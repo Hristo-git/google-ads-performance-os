@@ -4,48 +4,56 @@ import { useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 
-const HEARTBEAT_INTERVAL = 30000; // 30 seconds for better resolution
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
 export function ActivityTracker() {
     const { data: session } = useSession();
     const pathname = usePathname();
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const lastPathRef = useRef(pathname);
 
+    // 1. Log PAGE_VIEW when path changes
     useEffect(() => {
         if (!session?.user?.id) return;
 
-        const sendHeartbeat = async () => {
-            // Include visibility status to see if they are active or backgrounded
-            const visibility = document.visibilityState;
-
+        const logPageView = async () => {
             try {
                 await fetch('/api/activity/heartbeat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         path: pathname,
-                        visibility: visibility // 'visible' or 'hidden'
+                        eventType: 'PAGE_VIEW',
+                        visibility: document.visibilityState
                     }),
                 });
-            } catch (err) {
-                // Silent fail to avoid polluting console too much
-            }
+            } catch (err) { }
         };
 
-        // Send immediately on mount/path change
-        sendHeartbeat();
+        logPageView();
+        lastPathRef.current = pathname;
+    }, [session?.user?.id, pathname]);
 
-        // Set up interval
-        intervalRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+    // 2. Continuous HEARTBEAT timer (doesn't reset on path change)
+    useEffect(() => {
+        if (!session?.user?.id) return;
 
-        return () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                // Last-second effort to send exit heart-beat? 
-                // Mostly handled by pathname change re-triggering sendHeartbeat
-            }
+        const sendHeartbeat = async () => {
+            try {
+                await fetch('/api/activity/heartbeat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        path: lastPathRef.current,
+                        eventType: 'HEARTBEAT',
+                        visibility: document.visibilityState
+                    }),
+                });
+            } catch (err) { }
         };
-    }, [session?.user?.id, pathname]); // Re-run on path change or login status change
 
-    return null; // Invisible component
+        const interval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+        return () => clearInterval(interval);
+    }, [session?.user?.id]); // Only reset on login/logout
+
+    return null;
 }

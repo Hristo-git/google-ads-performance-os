@@ -217,7 +217,8 @@ export default function ActivityDashboard() {
                                                 ${log.event_type === 'LOGIN' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
                                                     log.event_type === 'AI_ANALYSIS' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
                                                         log.event_type === 'HEARTBEAT' ? 'bg-slate-800 text-slate-500 opacity-60' :
-                                                            'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
+                                                            log.event_type === 'PAGE_VIEW' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                                                                'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
                                                 {log.event_type}
                                             </span>
                                         </td>

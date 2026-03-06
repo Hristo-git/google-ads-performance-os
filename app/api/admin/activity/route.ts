@@ -48,37 +48,51 @@ export async function GET(request: Request) {
             .eq('event_type', 'API_CALL')
             .gte('created_at', startDateIso);
 
-        // Calculate session time and other stats per user (last X days)
-        // We fetch more records to avoid truncation in stats calculation
-        const { data: userDataXh } = await supabaseAdmin
-            .from('user_activity_logs')
-            .select('user_id, event_type, gads_users(name, username)')
-            .gte('created_at', startDateIso)
-            .order('created_at', { ascending: false })
-            .range(0, 5000);
+        // 1. Fetch all users to ensure we check statistics for everyone
+        const { data: users, error: usersError } = await supabaseAdmin
+            .from('gads_users')
+            .select('id, name, username')
+            .eq('is_active', true);
 
+        if (usersError) throw usersError;
+
+        // 2. Fetch aggregate stats for each user in parallel
+        // This bypasses the 1000-row result limit because we use 'count' queries
         const userSummary: Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number, apiCalls: number }> = {};
 
-        userDataXh?.forEach(row => {
-            const uid = row.user_id;
-            // Handle both object and array response from join
-            const gUser = Array.isArray(row.gads_users) ? row.gads_users[0] : row.gads_users;
+        const userStatPromises = users.map(async (user) => {
+            const userId = user.id;
 
-            if (!userSummary[uid]) {
-                userSummary[uid] = {
-                    name: gUser?.name || 'Unknown',
-                    username: gUser?.username || 'Unknown',
-                    sessionMinutes: 0,
-                    aiCalls: 0,
-                    apiCalls: 0
+            // Fetch counts for different event types
+            const [heartbeats, pageViews, aiCalls, apiCalls] = await Promise.all([
+                supabaseAdmin.from('user_activity_logs').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('event_type', 'HEARTBEAT').gte('created_at', startDateIso),
+                supabaseAdmin.from('user_activity_logs').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('event_type', 'PAGE_VIEW').gte('created_at', startDateIso),
+                supabaseAdmin.from('user_activity_logs').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('event_type', 'AI_ANALYSIS').gte('created_at', startDateIso),
+                supabaseAdmin.from('user_activity_logs').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('event_type', 'API_CALL').gte('created_at', startDateIso)
+            ]);
+
+            const hbCount = heartbeats.count || 0;
+            const pvCount = pageViews.count || 0;
+            const aiCount = aiCalls.count || 0;
+            const apiCount = apiCalls.count || 0;
+
+            // If user has any activity, add to summary
+            if (hbCount > 0 || pvCount > 0 || aiCount > 0 || apiCount > 0) {
+                userSummary[userId] = {
+                    name: user.name,
+                    username: user.username,
+                    // Count both heartbeats and page views as signs of active time
+                    // Each one represents roughly a slice of the 30s interval logic
+                    sessionMinutes: Math.round((hbCount + pvCount) * 0.5 * 10) / 10,
+                    aiCalls: aiCount,
+                    apiCalls: apiCount
                 };
             }
-            if (row.event_type === 'HEARTBEAT') userSummary[uid].sessionMinutes += 0.5;
-            if (row.event_type === 'AI_ANALYSIS') userSummary[uid].aiCalls++;
-            if (row.event_type === 'API_CALL') userSummary[uid].apiCalls++;
         });
 
-        const activeUsersXh = Object.keys(userSummary).length;
+        await Promise.all(userStatPromises);
+
+        const activeUsersCount = Object.keys(userSummary).length;
 
         return NextResponse.json({
             logs,
@@ -86,7 +100,7 @@ export async function GET(request: Request) {
                 logins24h: loginsXh || 0,
                 aiCalls24h: aiCallsXh || 0,
                 apiCalls24h: apiCallsXh || 0,
-                activeUsers24h: activeUsersXh,
+                activeUsers24h: activeUsersCount,
                 userSummary
             }
         });
