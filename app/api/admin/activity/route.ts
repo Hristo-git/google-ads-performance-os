@@ -49,15 +49,19 @@ export async function GET(request: Request) {
             .gte('created_at', startDateIso);
 
         // Calculate session time and other stats per user (last X days)
+        // We fetch more records to avoid truncation in stats calculation
         const { data: userDataXh } = await supabaseAdmin
             .from('user_activity_logs')
             .select('user_id, event_type, gads_users(name, username)')
-            .gte('created_at', startDateIso);
+            .gte('created_at', startDateIso)
+            .order('created_at', { ascending: false })
+            .range(0, 5000);
 
         const userSummary: Record<string, { name: string, username: string, sessionMinutes: number, aiCalls: number, apiCalls: number }> = {};
 
         userDataXh?.forEach(row => {
             const uid = row.user_id;
+            // Handle both object and array response from join
             const gUser = Array.isArray(row.gads_users) ? row.gads_users[0] : row.gads_users;
 
             if (!userSummary[uid]) {
