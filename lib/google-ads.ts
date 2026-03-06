@@ -839,9 +839,10 @@ export async function getKeywordsWithQS(
     adGroupIds?: string[],
     minQualityScore?: number,
     maxQualityScore?: number,
-    onlyEnabled: boolean = false
+    onlyEnabled: boolean = false,
+    campaignId?: string
 ): Promise<KeywordWithQS[]> {
-    return withCache('keywords', [adGroupId, customerId, dateRange, adGroupIds, onlyEnabled], async () => {
+    return withCache('keywords', [adGroupId, customerId, dateRange, adGroupIds, onlyEnabled, campaignId], async () => {
         const customer = getGoogleAdsCustomer(refreshToken, customerId);
         const dateFilter = getDateFilter(dateRange);
 
@@ -857,6 +858,8 @@ export async function getKeywordsWithQS(
                 whereClause += ` AND ad_group.id = ${adGroupId} `;
             } else if (adGroupIds && adGroupIds.length > 0) {
                 whereClause += ` AND ad_group.id IN(${adGroupIds.join(',')})`;
+            } else if (campaignId) {
+                whereClause += ` AND campaign.id = ${campaignId} `;
             }
 
             // Add Quality Score filtering
@@ -1083,9 +1086,12 @@ export async function getAdsWithStrength(
                     descriptions = [{ text: "Auto-generated from product feed" }];
                 }
 
-                const cost = Number(row.metrics?.cost_micros) / 1_000_000 || 0;
-                const conversions = Number(row.metrics?.conversions) || 0;
-                const conversionValue = Number(row.metrics?.conversions_value) || 0;
+                const cost = Number(row.metrics?.cost_micros || 0) / 1_000_000;
+                const conversions = Number(row.metrics?.conversions || 0);
+                const conversionValue = Number(row.metrics?.conversions_value || 0);
+                const impressions = Number(row.metrics?.impressions || 0);
+                const clicks = Number(row.metrics?.clicks || 0);
+                const ctr = Number(row.metrics?.ctr || 0);
 
                 return {
                     id: row.ad_group_ad?.ad?.id?.toString() || "",
@@ -1098,12 +1104,12 @@ export async function getAdsWithStrength(
                     finalUrls: row.ad_group_ad?.ad?.final_urls || [],
                     headlines: headlines.map((h: any) => h.text || ""),
                     descriptions: descriptions.map((d: any) => d.text || ""),
-                    impressions: Number(row.metrics?.impressions) || 0,
-                    clicks: Number(row.metrics?.clicks) || 0,
+                    impressions,
+                    clicks,
                     cost,
                     conversions,
                     conversionValue,
-                    ctr: Number(row.metrics?.ctr) || 0,
+                    ctr,
                     roas: cost > 0 ? conversionValue / cost : null,
                 };
             });
@@ -3554,11 +3560,50 @@ export async function getPlacementsPerformance(
         `;
 
         const result = await customer.query(query);
+        console.log(`[getPlacementsPerformance] Found ${result.length} placements (detail_placement_view) for campaignId=${campaignId}, adGroupId=${adGroupId}`);
 
-        return result.map((row: any) => ({
-            placement: row.detail_placement_view?.placement || "",
-            description: row.detail_placement_view?.display_name || "",
-            type: String(row.detail_placement_view?.placement_type || 'UNKNOWN'),
+        if (result.length > 0) {
+            return result.map((row: any) => ({
+                placement: row.detail_placement_view?.placement || "",
+                description: row.detail_placement_view?.display_name || "",
+                type: String(row.detail_placement_view?.placement_type || 'UNKNOWN'),
+                impressions: Number(row.metrics?.impressions) || 0,
+                clicks: Number(row.metrics?.clicks) || 0,
+                cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,
+                conversions: Number(row.metrics?.conversions) || 0,
+                conversionValue: Number(row.metrics?.conversions_value) || 0,
+                ctr: Number(row.metrics?.ctr) || 0,
+                viewThroughConversions: Number(row.metrics?.view_through_conversions) || 0,
+            }));
+        }
+
+        // Fallback: try group_placement_view (for Demand Gen campaigns which don't support detail_placement_view)
+        const groupQuery = `
+            SELECT
+                group_placement_view.placement,
+                group_placement_view.display_name,
+                group_placement_view.placement_type,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value,
+                metrics.ctr,
+                metrics.view_through_conversions
+            FROM group_placement_view
+            WHERE group_placement_view.placement IS NOT NULL
+            ${filter}
+            AND metrics.impressions > 0
+            ORDER BY metrics.cost_micros DESC
+            LIMIT 500
+        `;
+        const groupResult = await customer.query(groupQuery);
+        console.log(`[getPlacementsPerformance] Fallback group_placement_view found ${groupResult.length} placements`);
+
+        return groupResult.map((row: any) => ({
+            placement: row.group_placement_view?.placement || "",
+            description: row.group_placement_view?.display_name || "",
+            type: String(row.group_placement_view?.placement_type || 'UNKNOWN'),
             impressions: Number(row.metrics?.impressions) || 0,
             clicks: Number(row.metrics?.clicks) || 0,
             cost: Number(row.metrics?.cost_micros) / 1_000_000 || 0,

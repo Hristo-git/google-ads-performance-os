@@ -83,15 +83,29 @@ const AD_STRENGTH_LABEL: Record<string, string> = {
 
 const MetricCell = ({ value, format, previous, invertColor = false }: { value: number, format: (v: number) => string, previous?: number, invertColor?: boolean }) => {
     let delta = null;
+    let isNew = false;
+    let isZeroed = false;
 
-    if (previous !== undefined && previous !== null && previous !== 0) {
-        delta = ((value - previous) / previous) * 100;
+    if (previous !== undefined && previous !== null) {
+        if (previous === 0 && value > 0) {
+            isNew = true;
+        } else if (previous > 0 && value === 0) {
+            isZeroed = true;
+        } else if (previous !== 0) {
+            delta = ((value - previous) / previous) * 100;
+        }
     }
 
     let colorClass = "text-slate-500";
     let arrow = "";
 
-    if (delta !== null) {
+    if (isNew) {
+        arrow = "↑";
+        colorClass = invertColor ? "text-red-400" : "text-emerald-400";
+    } else if (isZeroed) {
+        arrow = "↓";
+        colorClass = invertColor ? "text-emerald-400" : "text-red-400";
+    } else if (delta !== null) {
         if (delta > 0) {
             arrow = "↑";
             colorClass = invertColor ? "text-red-400" : "text-emerald-400";
@@ -109,11 +123,21 @@ const MetricCell = ({ value, format, previous, invertColor = false }: { value: n
                     {arrow} {fmtNum(Math.abs(delta), 0)}%
                 </span>
             )}
+            {isNew && (
+                <span className={`text-[10px] ${colorClass} flex items-center`}>
+                    {arrow} 100%
+                </span>
+            )}
+            {isZeroed && (
+                <span className={`text-[10px] ${colorClass} flex items-center`}>
+                    {arrow} 100%
+                </span>
+            )}
         </div>
     );
 };
 
-const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: { name: string; type: string; metrics: any; colSpan: number; layout?: 'pmax' | 'search' | 'adgroup' | 'listing_group' | 'pmax_assets' }) => {
+const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: { name: string; type: string; metrics: any; colSpan: number; layout?: 'pmax' | 'search' | 'adgroup' | 'search_terms' | 'listing_group' | 'pmax_assets' | 'keywords' | 'ads' }) => {
     // Determine number of leading columns (before metrics)
     const baseColSpan = layout === 'listing_group' ? 2 : 1;
 
@@ -184,52 +208,104 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                 </>
             )}
 
-            {layout === 'pmax' && (
+            {layout === 'keywords' && (
                 <>
-                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtEuro(metrics.cost || 0, 0)}</td>
                     <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
-                    <td className="px-4 py-3 text-right">{fmtInt(metrics.conversions || 0)}</td>
-                    <td className="px-4 py-3 text-right text-emerald-400 font-semibold">{fmtEuro(metrics.conversionValue || 0, 0)}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{fmtX(metrics.roas || 0)}</td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0, 1)}</td>
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.clicks > 0 && metrics.conversions > 0 ? fmtPct(metrics.conversions / metrics.clicks * 100, 2) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.clicks > 0 ? fmtEuro(metrics.cost / metrics.clicks) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">{metrics.conversions > 0 ? fmtEuro(metrics.cost / metrics.conversions) : '—'}</td>
+                    <td className="px-4 py-3 text-right">
                         {metrics.searchImpressionShare != null ? (
                             <span className={`font-medium ${getISColor(metrics.searchImpressionShare)}`}>
                                 {fmtPct(metrics.searchImpressionShare * 100)}
                             </span>
                         ) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-3 text-right">
                         {metrics.searchLostISRank != null ? (
                             <span className={`font-medium ${metrics.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
                                 {fmtPct(metrics.searchLostISRank * 100)}
                             </span>
                         ) : '—'}
                     </td>
+                    <td className="px-4 py-3 text-center font-bold">
+                        {fmtNum(metrics.avgQualityScore || 0, 1)}
+                    </td>
+                    <td colSpan={3}></td>
+                </>
+            )}
+
+            {layout === 'ads' && (
+                <>
+                    <td className="px-4 py-3 text-right italic text-slate-500">Total {type} Stats</td>
                     <td className="px-4 py-3 text-center">
                         {metrics.adStrength ? (
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${getAdStrengthColor(metrics.adStrength)}`}>
                                 {AD_STRENGTH_LABEL[metrics.adStrength] || metrics.adStrength}
                             </span>
                         ) : (
-                            <span className="text-xs text-slate-400">
-                                {metrics.status === 'ENABLED' ? '✅ ENABLED' : '⚠️ ' + (metrics.status || 'UNKNOWN')}
-                            </span>
+                            <span className="text-slate-500">—</span>
                         )}
+                    </td>
+                    <td className="px-4 py-3 text-center text-[10px]">
+                        {metrics.status === 'ENABLED' ? '✅ ENABLED' : '⚠️ ' + (metrics.status || 'UNKNOWN')}
                     </td>
                 </>
             )}
 
             {layout === 'search' && (
                 <>
-                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
-                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
-                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
+                    <td className="px-4 py-3 text-right">
+                        <MetricCell value={metrics.impressions || 0} format={v => fmtInt(v)} previous={metrics.previous?.impressions} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        <MetricCell value={metrics.clicks || 0} format={v => fmtInt(v)} previous={metrics.previous?.clicks} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        <MetricCell value={metrics.conversions || 0} format={v => fmtNum(v)} previous={metrics.previous?.conversions} />
+                    </td>
                     <td className="px-4 py-3 text-right text-slate-300">
                         {metrics.clicks > 0 && metrics.conversions > 0
                             ? fmtPct(metrics.conversions / metrics.clicks * 100, 2)
                             : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right text-emerald-400">{fmtEuro(metrics.conversionValue || 0, 0)}</td>
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.clicks > 0 ? fmtEuro(metrics.cost / metrics.clicks) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        <MetricCell value={metrics.conversionValue || 0} format={v => fmtEuro(v, 0)} previous={metrics.previous?.conversionValue} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        {(() => {
+                            const ers = metrics.conversionValue > 0 ? metrics.cost / metrics.conversionValue : null;
+                            return ers != null ? (
+                                <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {fmtPct(ers * 100, 2)}
+                                </span>
+                            ) : <span className="text-slate-500">—</span>;
+                        })()}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {fmtPct(TARGET_MARGIN * 100, 0)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        {(() => {
+                            const ers = metrics.conversionValue > 0 ? metrics.cost / metrics.conversionValue : null;
+                            if (ers == null) return <span className="text-slate-500">—</span>;
+                            const profitability = TARGET_MARGIN - ers;
+                            return (
+                                <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
+                                </span>
+                            );
+                        })()}
+                    </td>
                     <td className="px-4 py-3 text-right text-emerald-400">
                         {metrics.searchImpressionShare ? fmtPct(metrics.searchImpressionShare * 100) : '—'}
                     </td>
@@ -253,16 +329,25 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
 
             {layout === 'adgroup' && (
                 <>
-                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
-                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
-                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
+                    <td className="px-4 py-3 text-right">
+                        <MetricCell value={metrics.impressions || 0} format={v => fmtInt(v)} previous={metrics.previous?.impressions} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        <MetricCell value={metrics.clicks || 0} format={v => fmtInt(v)} previous={metrics.previous?.clicks} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        <MetricCell value={metrics.conversions || 0} format={v => fmtNum(v)} previous={metrics.previous?.conversions} />
+                    </td>
                     <td className="px-4 py-3 text-right text-slate-300">
                         {metrics.clicks > 0 && metrics.conversions > 0
                             ? fmtPct(metrics.conversions / metrics.clicks * 100, 2)
                             : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right text-emerald-400">
-                        {metrics.conversionValue > 0 ? fmtEuro(metrics.conversionValue, 0) : '—'}
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.clicks > 0 ? fmtEuro(metrics.cost / metrics.clicks) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                        <MetricCell value={metrics.conversionValue || 0} format={v => fmtEuro(v, 0)} previous={metrics.previous?.conversionValue} />
                     </td>
                     <td className="px-4 py-3 text-right">{fmtX(metrics.roas || 0)}</td>
                     <td className="px-4 py-3 text-right text-emerald-400">
@@ -281,8 +366,127 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                 </>
             )}
 
+            {layout === 'pmax' && (
+                <>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.clicks > 0 && metrics.conversions > 0
+                            ? fmtPct(metrics.conversions / metrics.clicks * 100, 2)
+                            : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.clicks > 0 ? fmtEuro(metrics.cost / metrics.clicks) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-emerald-400 font-semibold">{fmtEuro(metrics.conversionValue || 0, 0)}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{fmtX(metrics.roas || 0)}</td>
+                    <td className="px-4 py-3 text-center">
+                        {metrics.searchImpressionShare != null ? (
+                            <span className={`font-medium ${getISColor(metrics.searchImpressionShare)}`}>
+                                {fmtPct(metrics.searchImpressionShare * 100)}
+                            </span>
+                        ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                        {metrics.searchLostISRank != null ? (
+                            <span className={`font-medium ${metrics.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>
+                                {fmtPct(metrics.searchLostISRank * 100)}
+                            </span>
+                        ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                        {metrics.adStrength ? (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${getAdStrengthColor(metrics.adStrength)}`}>
+                                {AD_STRENGTH_LABEL[metrics.adStrength] || metrics.adStrength}
+                            </span>
+                        ) : '—'}
+                    </td>
+                </>
+            )}
+
+
+
+            {layout === 'search_terms' && (
+                <>
+                    <td colSpan={1}></td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
+                    <td className="px-4 py-3 text-right text-slate-300">
+                        {metrics.impressions > 0
+                            ? fmtPct(metrics.clicks / metrics.impressions * 100, 2)
+                            : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">{fmtEuro(metrics.cost || 0, 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
+                    <td className="px-4 py-3 text-right">{metrics.conversions > 0 ? fmtEuro(metrics.cost / metrics.conversions) : '—'}</td>
+                    <td className="px-4 py-3 text-right">{fmtX(metrics.roas || 0)}</td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.clicks > 0 ? fmtPct((metrics.conversions / metrics.clicks) * 100, 2) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-emerald-400">
+                        {metrics.conversionValue > 0 ? fmtEuro(metrics.conversionValue, 0) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.clicks > 0 ? fmtEuro(metrics.cost / metrics.clicks) : '—'}
+                    </td>
+                </>
+            )}
+
+            {layout === 'listing_group' && (
+                <>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
+                    <td className="px-4 py-3 text-right text-slate-300">{fmtEuro(metrics.cost || 0)}</td>
+                    <td className="px-4 py-3 text-right">{fmtNum(metrics.conversions || 0)}</td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.clicks > 0 && metrics.conversions > 0
+                            ? fmtPct((metrics.conversions / metrics.clicks) * 100, 2)
+                            : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.clicks > 0 ? fmtEuro(metrics.cost / metrics.clicks) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-emerald-400">
+                        {metrics.conversionValue > 0 ? fmtEuro(metrics.conversionValue, 0) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">{fmtX(metrics.roas || 0)}</td>
+                    <td className="px-4 py-3 text-right text-emerald-400">
+                        {metrics.searchImpressionShare ? fmtPct(metrics.searchImpressionShare * 100) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.searchLostISRank ? fmtPct(metrics.searchLostISRank * 100) : '—'}
+                    </td>
+                </>
+            )}
+
+            {layout === 'pmax_assets' && (
+                <>
+                    <td colSpan={2} className="px-4 py-3 text-right italic text-slate-500">Total {type} Stats</td>
+                    <td className="px-4 py-3 text-center">
+                        {metrics.adStrength ? (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${getAdStrengthColor(metrics.adStrength)}`}>
+                                {AD_STRENGTH_LABEL[metrics.adStrength] || metrics.adStrength}
+                            </span>
+                        ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-[10px]">
+                        {metrics.status === 'ENABLED' ? '✅ ENABLED' : '⚠️ ' + (metrics.status || 'UNKNOWN')}
+                    </td>
+                </>
+            )}
+
             {(() => {
-                const renderedCols = layout === 'listing_group' ? 10 : layout === 'pmax_assets' ? 4 : (layout === 'search' ? 14 : layout === 'pmax' ? 11 : layout === 'adgroup' ? 12 : 1);
+                const renderedCols = (
+                    layout === 'listing_group' ? 12 :
+                        layout === 'pmax_assets' ? 4 :
+                            layout === 'search' ? 18 :
+                                layout === 'pmax' ? 16 :
+                                    layout === 'adgroup' ? 16 :
+                                        layout === 'search_terms' ? 12 :
+                                            layout === 'keywords' ? 13 :
+                                                layout === 'ads' ? 4 : 1
+                ) as number;
                 return colSpan > renderedCols ? <td colSpan={colSpan - renderedCols}></td> : null;
             })()}
         </tr>
@@ -308,6 +512,9 @@ const getLastMonthRange = () => {
     const end = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of last month
     return { start: fmtDate(start), end: fmtDate(end) };
 };
+
+// Global Target Margin
+const TARGET_MARGIN = 0.31; // 31%
 
 // Helper to get "Last 7 Days" date range
 const getLast7DaysRange = () => {
@@ -335,6 +542,11 @@ const loadDateRange = (): { start: string; end: string } => {
 const loadDateSelection = (): string => {
     if (typeof window === 'undefined') return 'last-7';
     return localStorage.getItem(STORAGE_KEY_DATE_SELECTION) || 'last-7';
+};
+
+const loadCompareMode = (): 'none' | 'PoP' | 'YoY' => {
+    if (typeof window === 'undefined') return 'none';
+    return (localStorage.getItem('gads_compareMode') as any) || 'none';
 };
 
 // Helper to categorize campaigns
@@ -649,6 +861,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // Filter by category
     const [showAIModal, setShowAIModal] = useState(false); // AI Insights modal
     const [dateRangeSelection, setDateRangeSelectionRaw] = useState<string>(loadDateSelection);
+    const [compareMode, setCompareModeRaw] = useState<'none' | 'PoP' | 'YoY'>(loadCompareMode);
 
     // Persist date range to localStorage
     const setDateRange = (range: { start: string; end: string }) => {
@@ -659,6 +872,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const setDateRangeSelection = (val: string) => {
         setDateRangeSelectionRaw(val);
         try { localStorage.setItem(STORAGE_KEY_DATE_SELECTION, val); } catch { }
+    };
+
+    const setCompareMode = (val: 'none' | 'PoP' | 'YoY') => {
+        setCompareModeRaw(val);
+        try { localStorage.setItem('gads_compareMode', val); } catch { }
     };
 
     // --- Tab Persistence Logic ---
@@ -712,6 +930,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     // Demand Gen specific state
     const [dgPlacements, setDgPlacements] = useState<PlacementPerformance[]>([]);
     const [dgDemographics, setDgDemographics] = useState<DemographicPerformance[]>([]);
+    const [prevDgDemographics, setPrevDgDemographics] = useState<DemographicPerformance[]>([]);
     const [dgTimeAnalysis, setDgTimeAnalysis] = useState<TimeAnalysisPerformance[]>([]);
     const [dgAssets, setDgAssets] = useState<AssetPerformance[]>([]);
     const [dgAudiences, setDgAudiences] = useState<AudiencePerformance[]>([]);
@@ -733,6 +952,10 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [auditSnapshotDate, setAuditSnapshotDate] = useState<string | null>(null);
     const lastHealthRef = useRef<string | null>(null);
 
+    // Derived context helpers
+    const currentCampaign = useMemo(() => campaigns.find(c => String(c.id) === String(navigation.campaignId)), [campaigns, navigation.campaignId]);
+    const currentAdGroup = useMemo(() => adGroups.find(ag => String(ag.id) === String(navigation.adGroupId)), [adGroups, navigation.adGroupId]);
+
     // Search Terms implementation state
     const [searchTermSortBy, setSearchTermSortBy] = useState<string>('cost');
     const [searchTermSortDirection, setSearchTermSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -744,6 +967,30 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             setSearchTermSortBy(column);
             setSearchTermSortDirection('desc');
         }
+    };
+
+    const scrollToSection = (id: string) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        // Direct scroll using scrollIntoView with start alignment
+        el.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+            inline: 'nearest'
+        });
+
+        // Fallback for some browsers/sticky interactions
+        setTimeout(() => {
+            const currentEl = document.getElementById(id);
+            if (currentEl) {
+                const rect = currentEl.getBoundingClientRect();
+                if (Math.abs(rect.top - 80) > 10) { // If not roughly at the top (accounting for menu)
+                    const container = currentEl.closest('main') || window;
+                    container.scrollBy({ top: rect.top - 100, behavior: 'smooth' });
+                }
+            }
+        }, 500);
     };
 
     // Sync state with URL parameter (from props) and trigger data refresh
@@ -830,6 +1077,17 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         };
     };
 
+    const getYoYDateRange = (start: string, end: string) => {
+        const startDate = new Date(start);
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        const endDate = new Date(end);
+        endDate.setFullYear(endDate.getFullYear() - 1);
+        return {
+            start: fmtDate(startDate),
+            end: fmtDate(endDate)
+        };
+    };
+
     const fetchCoreData = async () => {
         console.log(`[fetchCoreData] Called with:`, { selectedAccountId, dateRange });
         setLoading(true);
@@ -845,7 +1103,18 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
         try {
             const statusParam = hideStopped ? '&status=ENABLED' : '';
-            const commonParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
+            let compareParams = '';
+            if (compareMode === 'PoP') {
+                const cmp = getComparisonDateRange(dateRange.start, dateRange.end);
+                compareParams = `&compareStartDate=${cmp.start}&compareEndDate=${cmp.end}`;
+                console.log("[Dashboard] Comparison Mode: PoP. Dates:", cmp);
+            } else if (compareMode === 'YoY') {
+                const cmp = getYoYDateRange(dateRange.start, dateRange.end);
+                compareParams = `&compareStartDate=${cmp.start}&compareEndDate=${cmp.end}`;
+                console.log("[Dashboard] Comparison Mode: YoY. Dates:", cmp);
+            }
+            const commonParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}${compareParams}`;
+            console.log("[Dashboard] commonParams:", commonParams);
 
             setLoadingMessage("Fetching Google Ads account...");
             const [accRes, camRes] = await Promise.all([
@@ -910,11 +1179,21 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         }
     };
 
-    const fetchDGDetails = async (campaignId: string) => {
+    const fetchDGDetails = async (campaignId: string, adGroupId?: string | null) => {
         setLoading(true);
         try {
             setLoadingMessage("Fetching Demand Gen insights...");
-            const params = `customerId=${selectedAccountId}&campaignId=${campaignId}&startDate=${dateRange.start}&endDate=${dateRange.end}`;
+            let compareParams = '';
+            if (compareMode === 'PoP') {
+                const cmp = getComparisonDateRange(dateRange.start, dateRange.end);
+                compareParams = `&compareStartDate=${cmp.start}&compareEndDate=${cmp.end}`;
+            } else if (compareMode === 'YoY') {
+                const cmp = getYoYDateRange(dateRange.start, dateRange.end);
+                compareParams = `&compareStartDate=${cmp.start}&compareEndDate=${cmp.end}`;
+            }
+
+            let params = `customerId=${selectedAccountId}&campaignId=${campaignId}&startDate=${dateRange.start}&endDate=${dateRange.end}${compareParams}`;
+            if (adGroupId) params += `&adGroupId=${adGroupId}`;
             const res = await fetch(`/api/google-ads/dg-details?${params}`);
             const data = await res.json();
 
@@ -922,6 +1201,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
             if (data.placements) setDgPlacements(data.placements);
             if (data.demographics) setDgDemographics(data.demographics);
+            if (data.previousDemographics) setPrevDgDemographics(data.previousDemographics);
+            else setPrevDgDemographics([]);
             if (data.timeAnalysis) setDgTimeAnalysis(data.timeAnalysis);
             if (data.assets) setDgAssets(data.assets);
             if (data.audiences) setDgAudiences(data.audiences);
@@ -942,7 +1223,17 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         try {
             setLoadingMessage("Fetching details...");
             const statusParam = hideStopped ? '&status=ENABLED' : '';
-            const commonParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
+
+            let compareParams = '';
+            if (compareMode === 'PoP') {
+                const cmp = getComparisonDateRange(dateRange.start, dateRange.end);
+                compareParams = `&compareStartDate=${cmp.start}&compareEndDate=${cmp.end}`;
+            } else if (compareMode === 'YoY') {
+                const cmp = getYoYDateRange(dateRange.start, dateRange.end);
+                compareParams = `&compareStartDate=${cmp.start}&compareEndDate=${cmp.end}`;
+            }
+
+            const commonParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}${compareParams}`;
 
             // Pass campaignType to avoid an extra getCampaigns() call on the backend
             const currentCampaign = campaigns.find(c => String(c.id) === String(navigation.campaignId));
@@ -974,7 +1265,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         if (session) {
             fetchCoreData();
         }
-    }, [session, selectedAccountId, dateRange.start, dateRange.end, hideStopped]);
+    }, [session, selectedAccountId, dateRange.start, dateRange.end, hideStopped, compareMode]);
 
     useEffect(() => {
         if (session && (navigation.level === 'campaign' || navigation.level === 'adgroup') && navigation.campaignId) {
@@ -985,14 +1276,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     // fetchAdGroupData itself guards against campaigns.length === 0.
 
     useEffect(() => {
-        if (session && navigation.level === 'campaign' && navigation.campaignId && campaigns.length > 0) {
+        if (session && (navigation.level === 'campaign' || navigation.level === 'adgroup') && navigation.campaignId && campaigns.length > 0) {
             const camp = campaigns.find(c => String(c.id) === String(navigation.campaignId));
             const isDG = camp?.advertisingChannelType === 'DEMAND_GEN' || camp?.advertisingChannelType === 'DISCOVERY' || camp?.advertisingChannelType === '14';
             if (isDG) {
-                fetchDGDetails(navigation.campaignId);
+                fetchDGDetails(navigation.campaignId, navigation.level === 'adgroup' ? navigation.adGroupId : undefined);
             }
         }
-    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, campaigns.length]);
+    }, [session, navigation.level, navigation.campaignId, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, campaigns.length]);
     // campaigns.length is in deps so we fire once campaigns resolve (initial load guard).
     // fetchAdGroupData itself guards against campaigns.length === 0.
 
@@ -1000,7 +1291,16 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     useEffect(() => {
         setDgView('performance');
         setPmaxView('summary');
+        // Reset keywords/ads when switching campaigns to avoid flash of old data
+        setKeywords([]);
+        setAds([]);
     }, [navigation.campaignId]);
+
+    useEffect(() => {
+        if (session && navigation.level === 'campaign' && navigation.campaignId) {
+            fetchCampaignSpecificDetails(navigation.campaignId);
+        }
+    }, [session, navigation.level, navigation.campaignId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
 
     // Fetch ALL ad groups when entering Strategic Insights (for Quality Audit)
     useEffect(() => {
@@ -1028,6 +1328,44 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     }, [session, navigation.level, navigation.adGroupId, selectedAccountId, dateRange.start, dateRange.end, hideStopped, campaigns.length]);
 
 
+
+    const fetchCampaignSpecificDetails = async (campaignId: string) => {
+        try {
+            const currentCampaign = campaigns.find(c => String(c.id) === String(campaignId));
+            const channelType = currentCampaign?.advertisingChannelType || '';
+
+            // Only for Search/Brand/DSA
+            const isSearch = channelType === 'SEARCH' || channelType === '2';
+            const isDSA = currentCampaign?.name?.toLowerCase().includes('dsa') || currentCampaign?.advertisingChannelSubType === 'SEARCH_DYNAMIC_ADS';
+
+            if (!isSearch && !isDSA) {
+                setKeywords([]);
+                setAds([]);
+                return;
+            }
+
+            setLoadingMessage("Fetching campaign keywords...");
+            const statusParam = hideStopped ? '&status=ENABLED' : '';
+            const queryParams = `campaignId=${campaignId}&customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`;
+
+            const [kwRes, adsRes] = await Promise.all([
+                fetch(`/api/google-ads/keywords?${queryParams}`),
+                fetch(`/api/google-ads/ads?${queryParams}`)
+            ]);
+
+            const kwData = await kwRes.json();
+            const adsData = await adsRes.json();
+
+            if (kwData.keywords) setKeywords(kwData.keywords);
+            else setKeywords([]);
+
+            if (adsData.ads) setAds(adsData.ads);
+            else setAds([]);
+
+        } catch (error) {
+            console.error("Failed to fetch campaign specific details:", error);
+        }
+    };
 
     const fetchAdGroupDetails = async (adGroupId: string) => {
         if (campaigns.length === 0) return; // Wait for campaigns to load context
@@ -1081,34 +1419,37 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             }
 
             if (isUpperFunnel) {
-                // Video / Display / Demand Gen → no keywords/ads to show, clear everything
+                // Video / Display / Demand Gen → no keywords, but DO fetch ads
                 setListingGroups([]);
                 setPmaxAssets([]);
-                setAds([]);
                 setKeywords([]);
                 setNegativeKeywords([]);
 
-                // Fetch Display-specific data for this ad group in parallel
+                // Fetch Display-specific data for this ad group in parallel (including ads)
                 setLoadingMessage("Fetching Display insights...");
                 const baseParams = `customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}`;
                 const adGroupParam = `adGroupId=${adGroupId}`;
                 const campaignParam = navigation.campaignId ? `&campaignId=${navigation.campaignId}` : '';
-                const [placementsRes, audiencesRes, demographicsRes, assetsRes] = await Promise.all([
+                const statusParam = hideStopped ? '&status=ENABLED' : '';
+                const [placementsRes, audiencesRes, demographicsRes, assetsRes, adsRes] = await Promise.all([
                     fetch(`/api/google-ads/placements?${baseParams}&${adGroupParam}${campaignParam}`),
                     fetch(`/api/google-ads/audiences?${baseParams}&${adGroupParam}${campaignParam}`),
                     fetch(`/api/google-ads/demographics?${baseParams}&${adGroupParam}${campaignParam}`),
-                    fetch(`/api/google-ads/display-ad-assets?${baseParams}&${adGroupParam}`)
+                    fetch(`/api/google-ads/display-ad-assets?${baseParams}&${adGroupParam}`),
+                    fetch(`/api/google-ads/ads?adGroupId=${adGroupId}&customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}${statusParam}`)
                 ]);
-                const [placementsData, audiencesData, demographicsData, assetsData] = await Promise.all([
+                const [placementsData, audiencesData, demographicsData, assetsData, adsData] = await Promise.all([
                     placementsRes.json(),
                     audiencesRes.json(),
                     demographicsRes.json(),
-                    assetsRes.json()
+                    assetsRes.json(),
+                    adsRes.json()
                 ]);
                 setDisplayPlacements(placementsData.placements || []);
                 setDisplayAudiences(audiencesData.audiences || []);
                 setDisplayDemographics(demographicsData.demographics || []);
                 setDisplayAdAssets(assetsData.assets || []);
+                setAds(adsData.ads || []);
                 return;
             }
 
@@ -1229,7 +1570,16 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             if (navigation.level === 'account' || navigation.level === 'campaign' || finalAnalysisType === 'ngrams') {
                 try {
                     setLoadingMessage("Fetching search terms for N-Gram analysis...");
-                    const queryParams = `?customerId=${selectedAccountId}&startDate=${dateRange.start}&endDate=${dateRange.end}&aggregate=true`;
+                    let ngramStart = dateRange.start;
+                    const dStart = new Date(dateRange.start);
+                    const dEnd = new Date(dateRange.end);
+                    const diffDays = (dEnd.getTime() - dStart.getTime()) / (1000 * 3600 * 24);
+                    if (diffDays < 30) {
+                        const minStart = new Date(dEnd);
+                        minStart.setDate(minStart.getDate() - 30);
+                        ngramStart = minStart.toISOString().split('T')[0];
+                    }
+                    const queryParams = `?customerId=${selectedAccountId}&startDate=${ngramStart}&endDate=${dateRange.end}&aggregate=true`;
                     const stRes = await fetch(`/api/google-ads/search-terms${queryParams}`);
                     if (stRes.ok) {
                         const stData = await stRes.json();
@@ -2412,6 +2762,26 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             bVal = b.clicks > 0 ? (b.conversions || 0) / b.clicks : 0;
         }
 
+        // Custom handling for Avg. CPC
+        if (sortBy === 'avgCpc') {
+            aVal = a.clicks > 0 ? (a.cost || 0) / a.clicks : 0;
+            bVal = b.clicks > 0 ? (b.cost || 0) / b.clicks : 0;
+        }
+
+        // Custom handling for ERS
+        if (sortBy === 'ers') {
+            aVal = (a as any).conversionValue > 0 ? ((a as any).cost || 0) / (a as any).conversionValue : Infinity;
+            bVal = (b as any).conversionValue > 0 ? ((b as any).cost || 0) / (b as any).conversionValue : Infinity;
+        }
+
+        // Custom handling for Profitability
+        if (sortBy === 'profitability') {
+            const ersA = (a as any).conversionValue > 0 ? ((a as any).cost || 0) / (a as any).conversionValue : Infinity;
+            const ersB = (b as any).conversionValue > 0 ? ((b as any).cost || 0) / (b as any).conversionValue : Infinity;
+            aVal = TARGET_MARGIN - ersA;
+            bVal = TARGET_MARGIN - ersB;
+        }
+
         // Handle null/undefined
         if (aVal == null) aVal = -Infinity;
         if (bVal == null) bVal = -Infinity;
@@ -2429,17 +2799,68 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
     const totalSpend = sortedData.reduce((sum, item) => sum + (item?.cost || 0), 0);
+    // Only compute previous totals if compareMode is set AND at least one item has real previous data
+    const hasPreviousData = compareMode !== 'none' && sortedData.some(item => (item as any)?.previous != null);
+    const prevTotalSpend = hasPreviousData ? sortedData.reduce((sum, item) => sum + ((item as any)?.previous?.cost || 0), 0) : undefined;
+
     const totalConversions = sortedData.reduce((sum, item) => sum + (item?.conversions || 0), 0);
+    const prevTotalConversions = hasPreviousData ? sortedData.reduce((sum, item) => sum + ((item as any)?.previous?.conversions || 0), 0) : undefined;
+
     const totalClicks = sortedData.reduce((sum, item) => sum + (item?.clicks || 0), 0);
+    const prevTotalClicks = hasPreviousData ? sortedData.reduce((sum, item) => sum + ((item as any)?.previous?.clicks || 0), 0) : undefined;
+
     const totalImpressions = sortedData.reduce((sum, item) => sum + (item?.impressions || 0), 0);
     const totalConversionValue = sortedData.reduce((sum, item) => sum + (item?.conversionValue || 0), 0);
+    const prevTotalConversionValue = hasPreviousData ? sortedData.reduce((sum, item) => sum + ((item as any)?.previous?.conversionValue || 0), 0) : undefined;
+
     const totalROAS = totalSpend > 0 ? totalConversionValue / totalSpend : 0;
+    const prevTotalROAS = hasPreviousData && prevTotalSpend !== undefined && prevTotalSpend > 0 ? (prevTotalConversionValue ?? 0) / prevTotalSpend : undefined;
 
-    // Current selected ad group for detail view
-    const currentAdGroup = navigation.level === 'adgroup'
-        ? adGroups.find(ag => String(ag.id) === String(navigation.adGroupId))
-        : null;
+    const totalCVR = totalClicks > 0 ? (totalConversions / totalClicks) * 100 : 0;
+    const prevTotalCVR = hasPreviousData && prevTotalClicks !== undefined && prevTotalClicks > 0 ? (prevTotalConversions! / prevTotalClicks) * 100 : undefined;
 
+    const totalERS = totalConversionValue > 0 ? (totalSpend / totalConversionValue) * 100 : 0;
+    const prevTotalERS = hasPreviousData && prevTotalConversionValue !== undefined && prevTotalConversionValue > 0 ? (prevTotalSpend! / prevTotalConversionValue) * 100 : undefined;
+
+    const renderSummaryDelta = (current: number, previous: number | undefined, invertColor = false) => {
+        if (compareMode === 'none' || previous === undefined || previous === null) return null;
+        let delta = null;
+        let isNew = false;
+        let isZeroed = false;
+
+        if (previous === 0 && current === 0) return null; // both zero, nothing to show
+        if (previous === 0 && current > 0) {
+            // Previous metric was exactly zero — don't show a percentage (would be infinite/misleading)
+            // Show a neutral "new" indicator without the misleading "100%"
+            const colorClass = invertColor ? "text-amber-200" : "text-emerald-200";
+            return <div className={`text-[11px] mt-2 font-medium flex items-center gap-1.5 ${colorClass}`}><span className="bg-white/10 rounded px-1.5 py-0.5">↑ new</span><span className="text-white/50 lowercase tracking-wide">vs prev</span></div>;
+        }
+        else if (previous > 0 && current === 0) isZeroed = true;
+        else if (previous !== 0) delta = ((current - previous) / previous) * 100;
+
+        let arrow = "";
+        let colorClass = "text-white/70";
+
+        if (isNew) {
+            arrow = "↑";
+            colorClass = invertColor ? "text-red-200" : "text-emerald-200";
+            return <div className={`text-[11px] mt-2 font-medium flex items-center gap-1.5 ${colorClass}`}><span className="bg-white/10 rounded px-1.5 py-0.5">{arrow} 100%</span><span className="text-white/50 lowercase tracking-wide">vs prev</span></div>;
+        } else if (isZeroed) {
+            arrow = "↓";
+            colorClass = invertColor ? "text-emerald-200" : "text-red-200";
+            return <div className={`text-[11px] mt-2 font-medium flex items-center gap-1.5 ${colorClass}`}><span className="bg-white/10 rounded px-1.5 py-0.5">{arrow} 100%</span><span className="text-white/50 lowercase tracking-wide">vs prev</span></div>;
+        } else if (delta !== null && Math.abs(delta) > 0.5) {
+            if (delta > 0) {
+                arrow = "↑";
+                colorClass = invertColor ? "text-red-200" : "text-emerald-200";
+            } else {
+                arrow = "↓";
+                colorClass = invertColor ? "text-emerald-200" : "text-red-200";
+            }
+            return <div className={`text-[11px] mt-2 font-medium flex items-center gap-1.5 ${colorClass}`}><span className="bg-white/10 rounded px-1.5 py-0.5">{arrow} {fmtNum(Math.abs(delta), 1)}%</span><span className="text-white/50 lowercase tracking-wide">vs prev</span></div>;
+        }
+        return null;
+    };
     return (
         <div className="flex h-screen bg-slate-900 overflow-hidden">
             <Sidebar
@@ -2623,6 +3044,20 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 </span>
                             </button>
 
+                            {/* Compare Mode Toggle */}
+                            <div className="bg-slate-700/50 rounded-lg px-2 py-1 flex items-center gap-2 border border-slate-600/50">
+                                <span className="text-xs text-slate-400 font-medium whitespace-nowrap hidden sm:inline-block">Compare:</span>
+                                <select
+                                    value={compareMode}
+                                    onChange={(e) => setCompareMode(e.target.value as 'none' | 'PoP' | 'YoY')}
+                                    className="bg-transparent text-xs text-white border-none focus:ring-0 cursor-pointer appearance-none hover:text-blue-400 transition-colors pl-0 pr-4"
+                                >
+                                    <option value="none" className="bg-slate-800">None</option>
+                                    <option value="PoP" className="bg-slate-800">MoM / Previous</option>
+                                    <option value="YoY" className="bg-slate-800">YoY (Last Year)</option>
+                                </select>
+                            </div>
+
                             {/* Windsor toggle hidden as requested */}
 
                             {/* AI Analysis Button */}
@@ -2781,27 +3216,90 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                     </main>
                 ) : (
                     <main className="flex-1 overflow-auto p-6 space-y-6">
+                        {/* Sticky Navigation Menu */}
+                        {(navigation.level === 'campaign' || navigation.level === 'adgroup') && (
+                            <div className="sticky top-0 z-30 -mx-6 px-6 py-2 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between shadow-lg animate-in fade-in duration-500">
+                                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth">
+                                    <button
+                                        onClick={() => scrollToSection('perf-summary')}
+                                        className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all whitespace-nowrap active:scale-95 cursor-pointer"
+                                    >
+                                        Summary
+                                    </button>
+                                    <button
+                                        onClick={() => scrollToSection('main-table-section')}
+                                        className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all whitespace-nowrap active:scale-95 cursor-pointer"
+                                    >
+                                        {navigation.level === 'campaign' ? 'Ad Groups' : 'Performance'}
+                                    </button>
+                                    {(keywords.length > 0 || navigation.level === 'campaign') && (
+                                        <button
+                                            onClick={() => scrollToSection('keywords-section')}
+                                            className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all whitespace-nowrap active:scale-95 cursor-pointer"
+                                        >
+                                            Keywords
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => scrollToSection('search-terms-section')}
+                                        className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all whitespace-nowrap active:scale-95 cursor-pointer"
+                                    >
+                                        Search Terms
+                                    </button>
+                                    {(ads.length > 0) && (
+                                        <button
+                                            onClick={() => scrollToSection('ads-section')}
+                                            className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all whitespace-nowrap active:scale-95 cursor-pointer"
+                                        >
+                                            Ads
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="hidden md:flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Current:</span>
+                                    <span className="text-[10px] font-black text-violet-400 uppercase truncate max-w-[150px]">
+                                        {navigation.level === 'campaign' ? currentCampaign?.name : currentAdGroup?.name}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
                         {/* KPI Cards */}
-                        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${(() => { const _c = navigation.level === 'adgroup' && campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = (_c as any)?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
+                        <div id="perf-summary" className={`grid grid-cols-2 gap-4 lg:grid-cols-4 scroll-mt-24 ${(() => { const _c = navigation.level === 'adgroup' && campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = (_c as any)?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() ? 'xl:grid-cols-8' : 'xl:grid-cols-7'}`}>
                             <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-blue-100">Total Spend</p>
                                 <p className="text-2xl font-bold text-white mt-1">{fmtEuro(totalSpend, 0)}</p>
+                                {renderSummaryDelta(totalSpend, prevTotalSpend, true)}
                             </div>
                             <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-emerald-100">Conversions</p>
                                 <p className="text-2xl font-bold text-white mt-1">{fmtInt(totalConversions)}</p>
+                                {renderSummaryDelta(totalConversions, prevTotalConversions)}
+                            </div>
+                            <div className="rounded-xl bg-gradient-to-br from-cyan-600 to-cyan-700 p-5 shadow-lg">
+                                <p className="text-sm font-medium text-cyan-100">CVR</p>
+                                <p className="text-2xl font-bold text-white mt-1">{fmtNum(totalCVR, 2)}%</p>
+                                {renderSummaryDelta(totalCVR, prevTotalCVR)}
                             </div>
                             <div className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-purple-100">Conv. Value</p>
                                 <p className="text-2xl font-bold text-white mt-1">{fmtEuro(totalConversionValue, 0)}</p>
+                                {renderSummaryDelta(totalConversionValue, prevTotalConversionValue)}
                             </div>
                             <div className={`rounded-xl bg-gradient-to-br p-5 shadow-lg ${totalROAS === 0 ? 'from-slate-600 to-slate-700' : 'from-pink-600 to-pink-700'}`}>
                                 <p className={`text-sm font-medium ${totalROAS === 0 ? 'text-slate-300' : 'text-pink-100'}`}>ROAS</p>
                                 <p className="text-2xl font-bold text-white mt-1">{fmtX(totalROAS)}</p>
+                                {renderSummaryDelta(totalROAS, prevTotalROAS)}
+                            </div>
+                            <div className="rounded-xl bg-gradient-to-br from-amber-600 to-amber-700 p-5 shadow-lg">
+                                <p className="text-sm font-medium text-amber-100">ERS</p>
+                                <p className="text-2xl font-bold text-white mt-1">{fmtNum(totalERS, 2)}%</p>
+                                {renderSummaryDelta(totalERS, prevTotalERS, true)}
                             </div>
                             <div className="rounded-xl bg-gradient-to-br from-violet-600 to-violet-700 p-5 shadow-lg">
                                 <p className="text-sm font-medium text-violet-100">Clicks</p>
                                 <p className="text-2xl font-bold text-white mt-1">{fmtInt(totalClicks)}</p>
+                                {renderSummaryDelta(totalClicks, prevTotalClicks)}
                             </div>
                             {/* View-through Conv card — Display/Video/DG ad groups only */}
                             {navigation.level === 'adgroup' && (() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
@@ -2815,7 +3313,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                         <div className="flex flex-col gap-6">
                             {/* Data Table */}
-                            <div className="w-full space-y-6">
+                            <div id="main-table-section" className="w-full space-y-6 scroll-mt-24">
                                 <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
                                     <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                         <div className="flex items-center gap-3">
@@ -3078,7 +3576,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                         );
                                     })()}
 
-                                    <div className="overflow-x-auto">
+                                    <div id="main-table-section" className="overflow-x-auto scroll-mt-24">
                                         {(navigation.level === 'campaign' && pmaxView === 'summary' && (() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); return _c?.advertisingChannelType === 'PERFORMANCE_MAX' || _c?.advertisingChannelType === '10'; })()) ? (
                                             renderPMaxSummary()
                                         ) : (dgView === 'performance' || (() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); return _c?.advertisingChannelType === 'PERFORMANCE_MAX' || _c?.advertisingChannelType === '10'; })()) ? (
@@ -3129,6 +3627,14 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     </button>
                                                                 </th>
                                                                 <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('avgCpc')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        Avg. CPC
+                                                                        {sortBy === 'avgCpc' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </button>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium">
                                                                     <button onClick={() => handleSort('conversionValue')} className="flex items-center gap-1 ml-auto hover:text-white">
                                                                         Conv. Value
                                                                         {sortBy === 'conversionValue' && (
@@ -3160,6 +3666,25 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         )}
                                                                     </button>
                                                                 </th>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('ers')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        ERS
+                                                                        {sortBy === 'ers' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </button>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">
+                                                                    Target Mg.
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium">
+                                                                    <button onClick={() => handleSort('profitability')} className="flex items-center gap-1 ml-auto hover:text-white">
+                                                                        Profitability
+                                                                        {sortBy === 'profitability' && (
+                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </button>
+                                                                </th>
                                                                 <th className="px-4 py-3 text-center font-medium">Type</th>
                                                                 <th className="px-4 py-3 text-center font-medium">Bidding</th>
                                                             </>
@@ -3176,6 +3701,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <th className="px-4 py-3 text-right font-medium">Impr.</th>
                                                                     <th className="px-4 py-3 text-right font-medium">Clicks</th>
                                                                     <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">CVR</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Avg. CPC</th>
                                                                     <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
                                                                     <th className="px-4 py-3 text-right font-medium">ROAS</th>
                                                                     <th className="px-4 py-3 text-right font-medium text-purple-400">IS</th>
@@ -3197,6 +3724,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <th className="px-4 py-3 text-right font-medium">Clicks</th>
                                                                     <th className="px-4 py-3 text-right font-medium">Conversions</th>
                                                                     <th className="px-4 py-3 text-right font-medium">CVR</th>
+                                                                    <th className="px-4 py-3 text-right font-medium">Avg. CPC</th>
                                                                     <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
                                                                     <th className="px-4 py-3 text-right font-medium">IS</th>
                                                                     <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
@@ -3213,6 +3741,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <th className="px-4 py-3 text-right font-medium">Clicks</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Conversions</th>
                                                                 <th className="px-4 py-3 text-right font-medium">CVR</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Avg. CPC</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
                                                                 <th className="px-4 py-3 text-right font-medium">ROAS</th>
                                                                 <th className="px-4 py-3 text-right font-medium">IS</th>
@@ -3233,7 +3762,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     name={camp.name}
                                                                     type="Campaign"
                                                                     metrics={camp}
-                                                                    colSpan={isPMax ? 11 : 14}
+                                                                    colSpan={isPMax ? 13 : 15}
                                                                     layout={isPMax ? 'pmax' : 'search'}
                                                                 />
                                                             );
@@ -3255,7 +3784,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 name={currentAdGroup.name}
                                                                 type="Ad Group"
                                                                 metrics={_metrics}
-                                                                colSpan={12}
+                                                                colSpan={13}
                                                                 layout="adgroup"
                                                             />
                                                         );
@@ -3333,6 +3862,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <td className="px-4 py-4 text-right text-slate-400">
                                                                         {item.clicks > 0 ? fmtPct((item.conversions || 0) / item.clicks * 100, 2) : '0.00%'}
                                                                     </td>
+                                                                    <td className="px-4 py-4 text-right text-slate-400">
+                                                                        {item.clicks > 0 ? fmtEuro(item.cost / item.clicks) : '—'}
+                                                                    </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {item.conversionValue != null && item.conversionValue > 0 ? (
                                                                             <span className="text-slate-200">{fmtEuro(item.conversionValue, 0)}</span>
@@ -3390,6 +3922,31 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             <span className="text-slate-500">—</span>
                                                                         )}
                                                                     </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {(() => {
+                                                                            const ers = item.conversionValue > 0 ? item.cost / item.conversionValue : null;
+                                                                            return ers != null ? (
+                                                                                <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                    {fmtPct(ers * 100, 2)}
+                                                                                </span>
+                                                                            ) : <span className="text-slate-500">—</span>;
+                                                                        })()}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right text-slate-400">
+                                                                        {fmtPct(TARGET_MARGIN * 100, 0)}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right">
+                                                                        {(() => {
+                                                                            const ers = item.conversionValue > 0 ? item.cost / item.conversionValue : null;
+                                                                            if (ers == null) return <span className="text-slate-500">—</span>;
+                                                                            const profitability = TARGET_MARGIN - ers;
+                                                                            return (
+                                                                                <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                    {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
+                                                                                </span>
+                                                                            );
+                                                                        })()}
+                                                                    </td>
                                                                     <td className="px-4 py-4 text-center">
                                                                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${item.category === 'pmax_sale' || item.category === 'pmax_aon' ? 'bg-purple-500/20 text-purple-400' :
                                                                             item.category === 'search_nonbrand' || item.category === 'search_dsa' ? 'bg-blue-500/20 text-blue-400' :
@@ -3440,6 +3997,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right text-slate-300 font-mono text-xs">
                                                                             {fmtNum((item as any).conversions ?? 0)}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-400 font-mono text-xs">
+                                                                            {(item as any).clicks > 0 ? fmtPct(((item as any).conversions ?? 0) / (item as any).clicks * 100, 2) : '—'}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-400 font-mono text-xs">
+                                                                            {(item as any).clicks > 0 ? fmtEuro(((item as any).cost ?? 0) / (item as any).clicks) : '—'}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right">
                                                                             {(item as any).conversionValue > 0 ? (
@@ -3539,10 +4102,38 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <td className="px-4 py-4 text-right text-slate-400 text-xs">
                                                                             {item.clicks > 0 ? fmtPct(item.conversions / item.clicks * 100, 2) : '—'}
                                                                         </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-400 text-xs">
+                                                                            {item.clicks > 0 ? fmtEuro(item.cost / item.clicks) : '—'}
+                                                                        </td>
                                                                         <td className="px-4 py-4 text-right">
-                                                                            {(item as any).conversionValue > 0 ? (
-                                                                                <span className="text-emerald-400 font-medium">{fmtEuro((item as any).conversionValue as number, 0)}</span>
+                                                                            {item.conversionValue > 0 ? (
+                                                                                <span className="text-emerald-400 font-medium">{fmtEuro(item.conversionValue as number, 0)}</span>
                                                                             ) : <span className="text-slate-500">—</span>}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(() => {
+                                                                                const ers = item.conversionValue > 0 ? item.cost / item.conversionValue : null;
+                                                                                return ers != null ? (
+                                                                                    <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                        {fmtPct(ers * 100, 2)}
+                                                                                    </span>
+                                                                                ) : <span className="text-slate-500">—</span>;
+                                                                            })()}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right text-slate-400">
+                                                                            {fmtPct(TARGET_MARGIN * 100, 0)}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-right">
+                                                                            {(() => {
+                                                                                const ers = item.conversionValue > 0 ? item.cost / item.conversionValue : null;
+                                                                                if (ers == null) return <span className="text-slate-500">—</span>;
+                                                                                const profitability = TARGET_MARGIN - ers;
+                                                                                return (
+                                                                                    <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                        {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
+                                                                                    </span>
+                                                                                );
+                                                                            })()}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right">
                                                                             {item.searchImpressionShare != null ? (
@@ -3636,6 +4227,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right text-slate-400 text-xs">
                                                                         {item.clicks > 0 ? fmtPct(item.conversions / item.clicks * 100, 2) : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right text-slate-400 text-xs">
+                                                                        {item.clicks > 0 ? fmtEuro(item.cost / item.clicks) : '—'}
                                                                     </td>
                                                                     <td className="px-4 py-4 text-right">
                                                                         {(item as any).conversionValue > 0 ? (
@@ -3912,6 +4506,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                         {/* ── end Display sections ─────────────────────────────────── */}
 
                                         {/* Shopping: Listing Groups / Product Groups */}
+                                        {/* Time Analysis (DG / Video / Display ad groups) */}
+                                        {(() => { const _camp = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _camp?.advertisingChannelType || ""; const _isUF = _ct === "DISPLAY" || _ct === "VIDEO" || _ct === "DEMAND_GEN" || _ct === "DISCOVERY"; if (!_isUF || dgTimeAnalysis.length === 0) return null; return renderDGTimeAnalysis(); })()}
+
                                         {listingGroups.length > 0 && (
                                             <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
                                                 <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
@@ -3934,6 +4531,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <th className="px-4 py-3 text-right font-medium">Clicks</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Cost</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                <th className="px-4 py-3 text-right font-medium">CVR</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Avg. CPC</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
+                                                                <th className="px-4 py-3 text-right font-medium">ERS</th>
+                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">Target Mg.</th>
+                                                                <th className="px-4 py-3 text-right font-medium">Profitability</th>
                                                                 <th className="px-4 py-3 text-right font-medium">ROAS</th>
                                                                 <th className="px-4 py-3 text-right font-medium">IS</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
@@ -3945,7 +4548,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     name={currentAdGroup.name}
                                                                     type="Ad Group"
                                                                     metrics={currentAdGroup}
-                                                                    colSpan={10}
+                                                                    colSpan={12}
                                                                     layout="listing_group"
                                                                 />
                                                             )}
@@ -3962,6 +4565,40 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     <td className="px-4 py-3 text-right text-slate-300">{fmtInt(lg.clicks)}</td>
                                                                     <td className="px-4 py-3 text-right text-slate-200">{fmtEuro(lg.cost)}</td>
                                                                     <td className="px-4 py-3 text-right text-slate-300">{fmtNum(lg.conversions)}</td>
+                                                                    <td className="px-4 py-3 text-right text-slate-400">
+                                                                        {lg.clicks > 0 ? fmtPct((lg.conversions || 0) / lg.clicks * 100, 2) : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-slate-400">
+                                                                        {lg.clicks > 0 ? fmtEuro(lg.cost / lg.clicks) : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-emerald-400">
+                                                                        {lg.conversionValue > 0 ? fmtEuro(lg.conversionValue, 0) : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        {(() => {
+                                                                            const ers = lg.conversionValue > 0 ? lg.cost / lg.conversionValue : null;
+                                                                            return ers != null ? (
+                                                                                <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                    {fmtPct(ers * 100, 2)}
+                                                                                </span>
+                                                                            ) : <span className="text-slate-500">—</span>;
+                                                                        })()}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-slate-400">
+                                                                        {fmtPct(TARGET_MARGIN * 100, 0)}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        {(() => {
+                                                                            const ers = lg.conversionValue > 0 ? lg.cost / lg.conversionValue : null;
+                                                                            if (ers == null) return <span className="text-slate-500">—</span>;
+                                                                            const profitability = TARGET_MARGIN - ers;
+                                                                            return (
+                                                                                <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                    {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
+                                                                                </span>
+                                                                            );
+                                                                        })()}
+                                                                    </td>
                                                                     <td className="px-4 py-3 text-right">
                                                                         {lg.roas != null ? (
                                                                             <span className={`font-medium ${lg.roas >= 3 ? 'text-emerald-400' : lg.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
@@ -4053,7 +4690,16 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-700">
-                                                            {currentAdGroup && (
+                                                            {String(navigation.level) === 'campaign' && currentCampaign && (
+                                                                <ParentContextRow
+                                                                    name={currentCampaign.name}
+                                                                    type="Campaign"
+                                                                    metrics={currentCampaign}
+                                                                    colSpan={4}
+                                                                    layout="pmax_assets"
+                                                                />
+                                                            )}
+                                                            {String(navigation.level) === 'adgroup' && currentAdGroup && (
                                                                 <ParentContextRow
                                                                     name={currentAdGroup.name}
                                                                     type="Asset Group"
@@ -4134,7 +4780,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                    <div id="keywords-section" className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden scroll-mt-24">
                                                         <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                                             <h2 className="font-semibold text-white">Keywords & Quality Score</h2>
                                                             <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
@@ -4149,6 +4795,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         <th className="px-4 py-3 text-right font-medium">Cost</th>
                                                                         <th className="px-4 py-3 text-right font-medium">Clicks</th>
                                                                         <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">CVR</th>
+                                                                        <th className="px-4 py-3 text-right font-medium">Avg. CPC</th>
                                                                         <th className="px-4 py-3 text-right font-medium">CPA</th>
                                                                         <th className="px-4 py-3 text-right font-medium">IS</th>
                                                                         <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
@@ -4159,30 +4807,23 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody className="divide-y divide-slate-700">
-                                                                    {currentAdGroup && (
-                                                                        <tr className="bg-slate-700/40 border-b-2 border-slate-600/50 italic font-medium">
-                                                                            <td className="px-4 py-2 text-slate-300 text-xs">
-                                                                                Ad Group: {currentAdGroup.name} (All)
-                                                                            </td>
-                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{fmtEuro(currentAdGroup.cost)}</td>
-                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{fmtInt(currentAdGroup.clicks)}</td>
-                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{fmtNum(currentAdGroup.conversions, 1)}</td>
-                                                                            <td className="px-4 py-2 text-right text-slate-300 text-xs">{currentAdGroup.cpa != null ? fmtEuro(currentAdGroup.cpa) : '—'}</td>
-                                                                            <td className="px-4 py-2 text-right">
-                                                                                {currentAdGroup.searchImpressionShare != null ? (
-                                                                                    <span className={`font-bold ${getISColor(currentAdGroup.searchImpressionShare)}`}>
-                                                                                        {fmtPct(currentAdGroup.searchImpressionShare * 100)}
-                                                                                    </span>
-                                                                                ) : '—'}
-                                                                            </td>
-                                                                            <td className="px-4 py-2 text-right text-slate-400 text-xs">
-                                                                                {currentAdGroup.searchLostISRank != null ? fmtPct(currentAdGroup.searchLostISRank * 100) : '—'}
-                                                                            </td>
-                                                                            <td className="px-4 py-2 text-center text-slate-300 font-bold">
-                                                                                {fmtNum(currentAdGroup.avgQualityScore, 1)}
-                                                                            </td>
-                                                                            <td colSpan={3}></td>
-                                                                        </tr>
+                                                                    {String(navigation.level) === 'campaign' && currentCampaign && (
+                                                                        <ParentContextRow
+                                                                            name={currentCampaign.name}
+                                                                            type="Campaign"
+                                                                            metrics={currentCampaign}
+                                                                            colSpan={13}
+                                                                            layout="keywords"
+                                                                        />
+                                                                    )}
+                                                                    {String(navigation.level) === 'adgroup' && currentAdGroup && (
+                                                                        <ParentContextRow
+                                                                            name={currentAdGroup.name}
+                                                                            type="Ad Group"
+                                                                            metrics={currentAdGroup}
+                                                                            colSpan={13}
+                                                                            layout="keywords"
+                                                                        />
                                                                     )}
                                                                     {keywords.map((kw) => (
                                                                         <tr key={kw.id} className="hover:bg-slate-700/30">
@@ -4198,6 +4839,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             </td>
                                                                             <td className="px-4 py-3 text-right text-slate-300 text-sm">
                                                                                 {kw.conversions != null ? (kw.conversions === 0 ? '0' : fmtNum(kw.conversions, 1)) : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                                {kw.conversions > 0 && kw.clicks > 0 ? fmtPct(kw.conversions / kw.clicks * 100, 2) : <span className="text-slate-600">—</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right text-slate-300 text-sm">
+                                                                                {kw.cost > 0 && kw.clicks > 0 ? fmtEuro(kw.cost / kw.clicks) : <span className="text-slate-600">—</span>}
                                                                             </td>
                                                                             <td className="px-4 py-3 text-right text-slate-300 text-sm">
                                                                                 {kw.conversions > 0 && kw.cost > 0 ? fmtEuro(kw.cost / kw.conversions) : <span className="text-slate-600">—</span>}
@@ -4282,7 +4929,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     ))}
                                                                     {keywords.length === 0 && (
                                                                         <tr>
-                                                                            <td colSpan={11} className="px-6 py-8 text-center text-slate-500">
+                                                                            <td colSpan={13} className="px-6 py-8 text-center text-slate-500">
                                                                                 No keywords found.
                                                                             </td>
                                                                         </tr>
@@ -4296,12 +4943,36 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                                                 {/* Ads with Strength — shown for Search/DSA campaigns (not upper-funnel/PMax/Shopping) */}
                                                 {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY' || _ct === 'PERFORMANCE_MAX' || _ct === 'SHOPPING'; })() && (
-                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                    <div id="ads-section" className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden scroll-mt-24">
                                                         <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                                             <h2 className="font-semibold text-white">Ads & Ad Strength</h2>
                                                             <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{ads.length} ads</span>
                                                         </div>
                                                         <div className="p-4 space-y-4">
+                                                            {String(navigation.level) === 'campaign' && currentCampaign && (
+                                                                <div className="bg-slate-700/20 rounded-lg p-3 border border-slate-700/50 mb-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded tracking-wider">Campaign</span>
+                                                                        <span className="text-white text-sm font-medium">{currentCampaign.name}</span>
+                                                                        <div className="ml-auto flex gap-4 text-xs text-slate-400">
+                                                                            <span>Cost: <strong className="text-slate-200">{fmtEuro(currentCampaign.cost)}</strong></span>
+                                                                            <span>Conv: <strong className="text-slate-200">{fmtNum(currentCampaign.conversions || 0, 1)}</strong></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {String(navigation.level) === 'adgroup' && currentAdGroup && (
+                                                                <div className="bg-slate-700/20 rounded-lg p-3 border border-slate-700/50 mb-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded tracking-wider">Ad Group</span>
+                                                                        <span className="text-white text-sm font-medium">{currentAdGroup.name}</span>
+                                                                        <div className="ml-auto flex gap-4 text-xs text-slate-400">
+                                                                            <span>Cost: <strong className="text-slate-200">{fmtEuro(currentAdGroup.cost)}</strong></span>
+                                                                            <span>Conv: <strong className="text-slate-200">{fmtNum(currentAdGroup.conversions || 0, 1)}</strong></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                             {ads.map((ad) => {
                                                                 const AD_TYPE_LABEL: Record<string, string> = {
                                                                     RESPONSIVE_SEARCH_AD: 'Responsive Search Ad',
@@ -4444,14 +5115,18 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                                                 {/* Search Terms for Ad Group — hidden for Display/Video/DG */}
                                                 {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
-                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mt-6">
+                                                    <div id="search-terms-section" className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mt-6 scroll-mt-24">
                                                         <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                                             <h2 className="font-semibold text-white">Search Terms</h2>
                                                             <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                                {searchTerms.filter(st =>
-                                                                    String(st.adGroupId) === String(navigation.adGroupId) ||
-                                                                    (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
-                                                                ).length} terms
+                                                                {searchTerms.filter(st => {
+                                                                    if (String(navigation.level) === 'adgroup') {
+                                                                        return String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                            (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'));
+                                                                    }
+                                                                    if (String(navigation.level) === 'campaign') return String(st.campaignId) === String(navigation.campaignId);
+                                                                    return false;
+                                                                }).length} terms
                                                             </span>
                                                         </div>
                                                         <div className="overflow-x-auto">
@@ -4538,6 +5213,23 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 )}
                                                                             </div>
                                                                         </th>
+                                                                        <th className="px-4 py-3 text-right font-medium text-slate-400 cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('ers')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                ERS
+                                                                                {searchTermSortBy === 'ers' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
+                                                                        <th className="px-4 py-3 text-right font-medium text-slate-400">Target Mg.</th>
+                                                                        <th className="px-4 py-3 text-right font-medium text-slate-400 cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('profitability')}>
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                Profitability
+                                                                                {searchTermSortBy === 'profitability' && (
+                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </th>
                                                                         <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('averageCpc')}>
                                                                             <div className="flex items-center justify-end gap-1">
                                                                                 Avg. CPC
@@ -4549,11 +5241,33 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody className="divide-y divide-slate-700">
+                                                                    {String(navigation.level) === 'campaign' && currentCampaign && (
+                                                                        <ParentContextRow
+                                                                            name={currentCampaign.name}
+                                                                            type="Campaign"
+                                                                            metrics={currentCampaign}
+                                                                            colSpan={12}
+                                                                            layout="search_terms"
+                                                                        />
+                                                                    )}
+                                                                    {String(navigation.level) === 'adgroup' && currentAdGroup && (
+                                                                        <ParentContextRow
+                                                                            name={currentAdGroup.name}
+                                                                            type="Ad Group"
+                                                                            metrics={currentAdGroup}
+                                                                            colSpan={12}
+                                                                            layout="search_terms"
+                                                                        />
+                                                                    )}
                                                                     {searchTerms
-                                                                        .filter(st =>
-                                                                            String(st.adGroupId) === String(navigation.adGroupId) ||
-                                                                            (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
-                                                                        )
+                                                                        .filter(st => {
+                                                                            if (String(navigation.level) === 'adgroup') {
+                                                                                return String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                                    (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'));
+                                                                            }
+                                                                            if (String(navigation.level) === 'campaign') return String(st.campaignId) === String(navigation.campaignId);
+                                                                            return false;
+                                                                        })
                                                                         .sort((a, b) => {
                                                                             let valA: number | string = 0;
                                                                             let valB: number | string = 0;
@@ -4568,6 +5282,12 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             } else if (searchTermSortBy === 'roas') {
                                                                                 valA = a.cost > 0 ? a.conversionValue / a.cost : 0;
                                                                                 valB = b.cost > 0 ? b.conversionValue / b.cost : 0;
+                                                                            } else if (searchTermSortBy === 'ers') {
+                                                                                valA = a.conversionValue > 0 ? a.cost / a.conversionValue : Infinity;
+                                                                                valB = b.conversionValue > 0 ? b.cost / b.conversionValue : Infinity;
+                                                                            } else if (searchTermSortBy === 'profitability') {
+                                                                                valA = a.conversionValue > 0 ? TARGET_MARGIN - (a.cost / a.conversionValue) : -Infinity;
+                                                                                valB = b.conversionValue > 0 ? TARGET_MARGIN - (b.cost / b.conversionValue) : -Infinity;
                                                                             } else if (searchTermSortBy === 'searchTerm') {
                                                                                 valA = (a.searchTerm || '').toLowerCase();
                                                                                 valB = (b.searchTerm || '').toLowerCase();
@@ -4657,6 +5377,31 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                         <span className="text-emerald-400 text-xs">{fmtEuro(term.conversionValue)}</span>
                                                                                     ) : <span className="text-slate-600">—</span>}
                                                                                 </td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    {(() => {
+                                                                                        const ers = term.conversionValue > 0 ? term.cost / term.conversionValue : null;
+                                                                                        return ers != null ? (
+                                                                                            <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
+                                                                                                {fmtPct(ers * 100, 2)}
+                                                                                            </span>
+                                                                                        ) : <span className="text-slate-500 text-xs">—</span>;
+                                                                                    })()}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right text-slate-400 text-xs">
+                                                                                    {fmtPct(TARGET_MARGIN * 100, 0)}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    {(() => {
+                                                                                        const ers = term.conversionValue > 0 ? term.cost / term.conversionValue : null;
+                                                                                        if (ers == null) return <span className="text-slate-500 text-xs">—</span>;
+                                                                                        const profitability = TARGET_MARGIN - ers;
+                                                                                        return (
+                                                                                            <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
+                                                                                                {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
+                                                                                            </span>
+                                                                                        );
+                                                                                    })()}
+                                                                                </td>
                                                                                 <td className="px-4 py-3 text-right text-slate-300 text-xs">
                                                                                     {term.averageCpc > 0 ? fmtEuro(term.averageCpc) : '—'}
                                                                                 </td>
@@ -4704,6 +5449,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <th className="px-4 py-3 text-right font-medium">Cost</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Conv.Value</th>
                                                                 <th className="px-4 py-3 text-right font-medium">ROAS</th>
+                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">ERS</th>
+                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">Target Mg.</th>
+                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">Profitability</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-700">
@@ -4740,6 +5488,31 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 {fmtX(lg.roas)}
                                                                             </span>
                                                                         ) : '—'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        {(() => {
+                                                                            const ers = lg.conversionValue > 0 ? lg.cost / lg.conversionValue : null;
+                                                                            return ers != null ? (
+                                                                                <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
+                                                                                    {fmtPct(ers * 100, 2)}
+                                                                                </span>
+                                                                            ) : <span className="text-slate-500 text-xs">—</span>;
+                                                                        })()}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right text-slate-400 text-xs">
+                                                                        {fmtPct(TARGET_MARGIN * 100, 0)}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        {(() => {
+                                                                            const ers = lg.conversionValue > 0 ? lg.cost / lg.conversionValue : null;
+                                                                            if (ers == null) return <span className="text-slate-500 text-xs">—</span>;
+                                                                            const profitability = TARGET_MARGIN - ers;
+                                                                            return (
+                                                                                <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
+                                                                                    {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
+                                                                                </span>
+                                                                            );
+                                                                        })()}
                                                                     </td>
                                                                 </tr>
                                                             ))}

@@ -85,34 +85,63 @@ export async function GET(request: Request) {
                 return n === 'PERFORMANCE_MAX' || n === 'MULTI_CHANNEL';
             };
 
-            if (campaignId) {
-                // Determine campaign type — prefer the param passed by the frontend
-                // to avoid an extra getCampaigns() API call.
-                let channelType = campaignTypeParam;
-
-                if (!channelType) {
-                    // Fallback: fetch campaigns to detect the type
-                    const campaigns = await getCampaigns(refreshToken, customerId, dateRange, false, session.user.id);
-                    const campaign = campaigns.find(c => c.id === campaignId);
-                    channelType = campaign?.advertisingChannelType || '';
-                }
-
-                if (isPMax(channelType)) {
-                    console.log(`[AdGroups] Detected PMax campaign ${campaignId} (channelType=${channelType}). Fetching Asset Groups.`);
-                    adGroups = await getAssetGroups(refreshToken, campaignId, customerId, dateRange, onlyEnabled, session.user.id);
+            async function fetchGroupsData(range: typeof dateRange) {
+                if (campaignId) {
+                    let channelType = campaignTypeParam;
+                    if (!channelType) {
+                        const campaigns = await getCampaigns(refreshToken!, customerId, range, false, session!.user.id);
+                        const campaign = campaigns.find(c => c.id === campaignId);
+                        channelType = campaign?.advertisingChannelType || '';
+                    }
+                    if (isPMax(channelType)) {
+                        console.log(`[AdGroups] Detected PMax campaign ${campaignId} (channelType=${channelType}). Fetching Asset Groups.`);
+                        return getAssetGroups(refreshToken!, campaignId, customerId, range, onlyEnabled, session!.user.id);
+                    } else {
+                        return getAdGroups(refreshToken!, campaignId, customerId, range, onlyEnabled, session!.user.id);
+                    }
                 } else {
-                    // Shopping, Search, Display, Video, Demand Gen — all use standard ad_group GAQL
-                    adGroups = await getAdGroups(refreshToken, campaignId, customerId, dateRange, onlyEnabled, session.user.id);
+                    const [standardGroups, assetGroups] = await Promise.all([
+                        getAdGroups(refreshToken!, undefined, customerId, range, onlyEnabled, session!.user.id),
+                        getAssetGroups(refreshToken!, undefined, customerId, range, onlyEnabled, session!.user.id)
+                    ]);
+                    return [...standardGroups, ...assetGroups];
                 }
-            } else {
-                // Fetch both standard ad groups and asset groups when no campaign is selected (All Campaigns view)
-                // Note: unique ID collision is possible if asset group ID matches an ad group ID (unlikely but possible across entities)
-                // But usually we filter by campaign. If we show all, we mix them.
-                const [standardGroups, assetGroups] = await Promise.all([
-                    getAdGroups(refreshToken, undefined, customerId, dateRange, onlyEnabled, session.user.id),
-                    getAssetGroups(refreshToken, undefined, customerId, dateRange, onlyEnabled, session.user.id)
-                ]);
-                adGroups = [...standardGroups, ...assetGroups];
+            }
+
+            const compareStartDate = searchParams.get('compareStartDate');
+            const compareEndDate = searchParams.get('compareEndDate');
+            const compareDateRange = (compareStartDate && compareEndDate) ? { start: compareStartDate, end: compareEndDate } : undefined;
+
+            let [fetchedAdGroups, previousAdGroups] = await Promise.all([
+                fetchGroupsData(dateRange),
+                compareDateRange ? fetchGroupsData(compareDateRange) : Promise.resolve([])
+            ]);
+
+            adGroups = fetchedAdGroups;
+
+            // Enrich with previous stats
+            if (previousAdGroups && previousAdGroups.length > 0) {
+                adGroups = adGroups.map(ag => {
+                    const prev = previousAdGroups.find(p => p.id === ag.id);
+                    if (prev) {
+                        return {
+                            ...ag,
+                            previous: {
+                                cost: prev.cost,
+                                conversions: prev.conversions,
+                                cpa: prev.cpa,
+                                roas: prev.roas,
+                                clicks: prev.clicks,
+                                impressions: prev.impressions,
+                                conversionValue: prev.conversionValue,
+                                ctr: prev.ctr,
+                                cpc: prev.cpc,
+                                searchImpressionShare: prev.searchImpressionShare
+                            }
+                        };
+                    }
+                    return ag;
+                });
             }
 
             console.log(`Fetched ${adGroups.length} items (AdGroups + AssetGroups)`);

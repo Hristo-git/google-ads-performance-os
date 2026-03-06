@@ -23,6 +23,7 @@ export async function GET(request: Request) {
         const customerId = searchParams.get("customerId");
         const startDate = searchParams.get("startDate");
         const endDate = searchParams.get("endDate");
+        const adGroupId = searchParams.get("adGroupId");
 
         if (!campaignId || !customerId) {
             return NextResponse.json({ error: "Missing required parameters: campaignId and customerId" }, { status: 400 });
@@ -36,22 +37,32 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Access denied to this customer ID" }, { status: 403 });
         }
 
+        const compareStartDate = searchParams.get('compareStartDate');
+        const compareEndDate = searchParams.get('compareEndDate');
         const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN!;
         const dateRange = startDate && endDate ? { start: startDate, end: endDate } : undefined;
+        const compareDateRange = compareStartDate && compareEndDate ? { start: compareStartDate, end: compareEndDate } : undefined;
 
-        // Fetch all reporting data in parallel
+        // Fetch all reporting data in parallel (Current)
         const [placements, demographics, timeAnalysis, adGroups, assets, audiences] = await Promise.all([
-            getPlacementsPerformance(refreshToken, customerId, dateRange, campaignId),
-            getDemographicsPerformance(refreshToken, customerId, dateRange, campaignId),
-            getTimeAnalysisPerformance(refreshToken, customerId, dateRange, campaignId),
+            getPlacementsPerformance(refreshToken, customerId, dateRange, campaignId, adGroupId || undefined),
+            getDemographicsPerformance(refreshToken, customerId, dateRange, campaignId, adGroupId || undefined),
+            getTimeAnalysisPerformance(refreshToken, customerId, dateRange, campaignId, adGroupId || undefined),
             getAdGroups(refreshToken, campaignId, customerId, dateRange),
             getAssetPerformance(refreshToken, customerId, dateRange, [campaignId]),
             getAudiencePerformance(refreshToken, customerId, dateRange, [campaignId])
         ]);
 
+        // Fetch previous demographics for delta calculation if comparing
+        let previousDemographics = null;
+        if (compareDateRange) {
+            previousDemographics = await getDemographicsPerformance(refreshToken, customerId, compareDateRange, campaignId, adGroupId || undefined);
+        }
+
         return NextResponse.json({
             placements,
             demographics,
+            previousDemographics,
             timeAnalysis,
             adGroups,
             assets,

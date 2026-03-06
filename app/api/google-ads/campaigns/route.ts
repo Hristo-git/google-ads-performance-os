@@ -152,24 +152,21 @@ export async function GET(request: Request) {
             const dateRange = (startDate && endDate) ? { start: startDate, end: endDate } : undefined;
             const compareDateRange = (compareStartDate && compareEndDate) ? { start: compareStartDate, end: compareEndDate } : undefined;
 
+            console.log("[Campaigns API] DateRange:", dateRange);
+            console.log("[Campaigns API] CompareDateRange:", compareDateRange);
+
             // Fetch data in parallel
             const promises: Promise<any>[] = [
-                getCampaigns(refreshToken, customerId, dateRange, false, session.user.id)
+                getCampaigns(refreshToken, customerId, dateRange, false, session.user.id),
+                compareDateRange ? getCampaigns(refreshToken, customerId, compareDateRange) : Promise.resolve(null),
+                (includeTrends && dateRange) ? getCampaignTrends(refreshToken, customerId, dateRange) : Promise.resolve(null)
             ];
 
-            if (compareDateRange) {
-                promises.push(getCampaigns(refreshToken, customerId, compareDateRange));
-            } else {
-                promises.push(Promise.resolve(null));
-            }
-
-            if (includeTrends && dateRange) {
-                promises.push(getCampaignTrends(refreshToken, customerId, dateRange));
-            } else {
-                promises.push(Promise.resolve(null));
-            }
-
             const [currentCampaigns, previousCampaigns, trendsData] = await Promise.all(promises);
+
+            console.log(`[Campaigns API] Current campaigns: ${currentCampaigns?.length || 0}`);
+            console.log(`[Campaigns API] Previous campaigns: ${previousCampaigns?.length || 0}`);
+            let matchedCount = 0;
 
             // Merge data
             const enrichedCampaigns = currentCampaigns.map((camp: any) => {
@@ -179,13 +176,18 @@ export async function GET(request: Request) {
                 if (previousCampaigns) {
                     const prev = previousCampaigns.find((p: any) => p.id === camp.id);
                     if (prev) {
+                        matchedCount++;
                         enriched.previous = {
                             cost: prev.cost,
                             conversions: prev.conversions,
                             cpa: prev.cpa,
                             roas: prev.roas,
                             clicks: prev.clicks,
-                            impressions: prev.impressions
+                            impressions: prev.impressions,
+                            conversionValue: prev.conversionValue,
+                            ctr: prev.ctr,
+                            cpc: prev.cpc,
+                            searchImpressionShare: prev.searchImpressionShare
                         };
                     }
                 }
@@ -197,6 +199,8 @@ export async function GET(request: Request) {
 
                 return enriched;
             });
+
+            console.log(`[Campaigns API] Matched ${matchedCount} previous campaigns for comparison.`);
 
             return NextResponse.json({ campaigns: enrichedCampaigns });
 

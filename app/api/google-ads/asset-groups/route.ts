@@ -19,7 +19,11 @@ export async function GET(request: Request) {
         let customerId = searchParams.get('customerId');
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
+        const compareStartDate = searchParams.get('compareStartDate');
+        const compareEndDate = searchParams.get('compareEndDate');
+
         const dateRange = (startDate && endDate) ? { start: startDate, end: endDate } : undefined;
+        const compareDateRange = (compareStartDate && compareEndDate) ? { start: compareStartDate, end: compareEndDate } : undefined;
 
         try {
             const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
@@ -48,8 +52,33 @@ export async function GET(request: Request) {
                 }
             }
 
-            const assetGroups = await getAssetGroups(refreshToken, campaignId || undefined, customerId || undefined, dateRange);
-            return NextResponse.json({ assetGroups });
+            const [currentAssetGroups, previousAssetGroups] = await Promise.all([
+                getAssetGroups(refreshToken, campaignId || undefined, customerId || undefined, dateRange),
+                compareDateRange ? getAssetGroups(refreshToken, campaignId || undefined, customerId || undefined, compareDateRange) : Promise.resolve(null)
+            ]);
+
+            const enrichedAssetGroups = currentAssetGroups.map((ag: any) => {
+                const enriched = { ...ag };
+                if (previousAssetGroups) {
+                    const prev = previousAssetGroups.find((p: any) => p.id === ag.id);
+                    if (prev) {
+                        enriched.previous = {
+                            cost: prev.cost,
+                            conversions: prev.conversions,
+                            conversionValue: prev.conversionValue,
+                            clicks: prev.clicks,
+                            impressions: prev.impressions,
+                            roas: prev.roas,
+                            cpa: prev.cpa,
+                            ctr: prev.ctr,
+                            cpc: prev.cpc
+                        };
+                    }
+                }
+                return enriched;
+            });
+
+            return NextResponse.json({ assetGroups: enrichedAssetGroups });
         } catch (apiError) {
             console.error("Google Ads API error (Asset Groups):", apiError);
             return NextResponse.json(

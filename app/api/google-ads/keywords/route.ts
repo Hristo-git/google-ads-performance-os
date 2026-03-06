@@ -21,6 +21,7 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url);
         const adGroupId = searchParams.get("adGroupId");
+        const campaignId = searchParams.get("campaignId");
         let customerId = searchParams.get('customerId');
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
@@ -60,7 +61,7 @@ export async function GET(request: Request) {
                 }
             }
 
-            const keywords = await getKeywordsWithQS(refreshToken, adGroupId || undefined, customerId || undefined, dateRange, undefined, minQS, maxQS, onlyEnabled);
+            const keywords = await getKeywordsWithQS(refreshToken, adGroupId || undefined, customerId || undefined, dateRange, undefined, minQS, maxQS, onlyEnabled, campaignId || undefined);
             return NextResponse.json({ keywords });
         } catch (apiError: any) {
             console.error("Google Ads API error fetching keywords:", apiError);

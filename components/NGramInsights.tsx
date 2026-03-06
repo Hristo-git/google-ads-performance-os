@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Layers, TrendingUp, TrendingDown, MinusCircle, Check, BarChart2, Circle, X, Maximize2, Loader2, ChevronUp, ChevronDown, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildNGrams, type NGram } from '@/lib/account-health';
-import { fmtNum, fmtInt, fmtEuro, fmtX } from '@/lib/format';
+import { fmtNum, fmtInt, fmtEuro, fmtX, fmtPct } from '@/lib/format';
 
 interface NGramInsightsProps {
     searchTerms: any[];
@@ -12,10 +12,18 @@ interface NGramInsightsProps {
 
 // ---------- Brand / Dimension classification ----------
 const BRAND_WORDS = ['виденов', 'videnov', 'vellea', 'вилеа', 'videhov'];
-function classifyGram(gram: string): 'Brand' | 'Non-brand' | 'Dimension' {
+function classifyGram(gram?: string): 'Brand' | 'Non-brand' | 'Dimension' {
+    if (!gram) return 'Non-brand';
     const lower = gram.toLowerCase();
+
     if (BRAND_WORDS.some(b => lower.includes(b))) return 'Brand';
-    if (/^\d[\d\s,.*x×]*$/.test(gram.trim())) return 'Dimension';
+
+    // Match common dimension patterns in furniture (e.g., 120x200, 160/200, 90 на 200, 144х190, 82 190)
+    // Looks for numbers separated by x, х (cyrillic), *, /, ' на ', or just spaces ANYWHERE in the string
+    if (/\d+\s*([xх*\/]|на)?\s*\d+(\s*([xх*\/]|на)?\s*\d+)?/.test(lower.trim())) {
+        return 'Dimension';
+    }
+
     return 'Non-brand';
 }
 
@@ -35,8 +43,104 @@ function roasText(roas: number | null) {
 type TabType = 'winning' | 'wasteful';
 type SizeFilter = 0 | 1 | 2 | 3;
 type TypeFilter = 'all' | 'Brand' | 'Non-brand' | 'Dimension';
-type SortKey = 'conversions' | 'roas' | 'cost' | 'cpa' | 'termCount';
+type SortKey = 'conversions' | 'conversionValue' | 'aov' | 'roas' | 'cost' | 'cpa' | 'termCount';
 type ViewDisplay = 'table' | 'bubble';
+
+// ---------- Bubble chart ----------
+function SegmentHeatmap({ searchTerms }: { searchTerms: any[] }) {
+    const segments = useMemo(() => {
+        if (!searchTerms?.length) return [];
+
+        const data: Record<string, { cost: number; conv: number; rev: number }> = {
+            'Brand': { cost: 0, conv: 0, rev: 0 },
+            'Non-brand': { cost: 0, conv: 0, rev: 0 },
+            'Dimension': { cost: 0, conv: 0, rev: 0 }
+        };
+
+        searchTerms.forEach(term => {
+            const text = term.searchTerm || term.text || term.gram;
+            const type = classifyGram(text);
+            if (data[type]) {
+                data[type].cost += (term.cost || 0);
+                data[type].conv += (term.conversions || 0);
+                data[type].rev += (term.conversionValue || 0);
+            }
+        });
+
+        const TARGET_MARGIN = 0.31; // 31% static margin for now
+
+        return Object.entries(data).map(([name, metrics]) => {
+            const ers = metrics.rev > 0 ? (metrics.cost / metrics.rev) : null;
+            const aov = metrics.conv > 0 ? (metrics.rev / metrics.conv) : 0;
+            const profitability = ers != null ? (TARGET_MARGIN - ers) : null;
+            return {
+                name,
+                ...metrics,
+                ers,
+                margin: TARGET_MARGIN,
+                profitability,
+                aov
+            };
+        });
+    }, [searchTerms]);
+
+    if (!segments.length) return null;
+
+    return (
+        <div className="bg-slate-900/40 px-5 py-6 border-b border-slate-800">
+            <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-violet-400" />
+                Segment Profitability Heatmap
+                <span className="text-[10px] font-normal text-slate-500 uppercase tracking-widest ml-2 border border-slate-700 px-1.5 py-0.5 rounded">Keyword Aggregation</span>
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {segments.map(seg => (
+                    <div key={seg.name} className={`rounded-xl p-5 border transition-all ${seg.profitability == null ? 'bg-slate-800/30 border-slate-700/50' :
+                        seg.profitability >= 0 ? 'bg-emerald-950/20 border-emerald-900/40 hover:border-emerald-500/40' :
+                            'bg-red-950/20 border-red-900/40 hover:border-red-500/40'
+                        }`}>
+                        <div className="flex justify-between items-start mb-4">
+                            <h5 className="font-bold text-white tracking-tight">{seg.name}</h5>
+                            {seg.profitability != null && (
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded ${seg.profitability >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                    {seg.profitability > 0 ? '+' : ''}{fmtPct(seg.profitability * 100, 1)} Profit
+                                </span>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
+                            <div>
+                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">ERS</div>
+                                <div className={`font-semibold ${seg.ers != null && seg.ers <= seg.margin ? 'text-emerald-400' : seg.ers != null ? 'text-red-400' : 'text-slate-500'}`}>
+                                    {seg.ers != null ? fmtPct(seg.ers * 100, 1) : '—'}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Margin</div>
+                                <div className="text-slate-300 font-semibold">{fmtPct(seg.margin * 100, 0)}</div>
+                            </div>
+                            <div>
+                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">AOV</div>
+                                <div className="text-slate-300 font-semibold">{fmtEuro(seg.aov, 0)}</div>
+                            </div>
+                            <div>
+                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Conv. Value (DDA)</div>
+                                <div className="text-emerald-400 font-semibold">{fmtEuro(seg.rev, 0)}</div>
+                            </div>
+                            <div>
+                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Conversions (DDA)</div>
+                                <div className="text-white font-semibold">{fmtNum(seg.conv, 1)}</div>
+                            </div>
+                            <div>
+                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Spend</div>
+                                <div className="text-slate-300 font-semibold">{fmtEuro(seg.cost, 0)}</div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 // ---------- Bubble chart ----------
 function BubbleChart({ data, typeFilter, fullscreen = false }: { data: (NGram & { gramType: string })[]; typeFilter: TypeFilter; fullscreen?: boolean }) {
@@ -208,7 +312,19 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
         const top = [...winning].sort((a, b) => b.conversions - a.conversions)[0];
 
         const brandSpend = allNGrams.filter(g => (g as any).gramType === 'Brand').reduce((s, g) => s + g.cost, 0);
+        const brandConv = allNGrams.filter(g => (g as any).gramType === 'Brand').reduce((s, g) => s + g.conversions, 0);
+        const brandRev = allNGrams.filter(g => (g as any).gramType === 'Brand').reduce((s, g) => s + g.conversionValue, 0);
+        const brandAov = brandConv > 0 ? brandRev / brandConv : 0;
+
         const nonBrandSpend = allNGrams.filter(g => (g as any).gramType === 'Non-brand').reduce((s, g) => s + g.cost, 0);
+        const nonBrandConv = allNGrams.filter(g => (g as any).gramType === 'Non-brand').reduce((s, g) => s + g.conversions, 0);
+        const nonBrandRev = allNGrams.filter(g => (g as any).gramType === 'Non-brand').reduce((s, g) => s + g.conversionValue, 0);
+        const nonBrandAov = nonBrandConv > 0 ? nonBrandRev / nonBrandConv : 0;
+
+        const dimensionConv = allNGrams.filter(g => (g as any).gramType === 'Dimension').reduce((s, g) => s + g.conversions, 0);
+        const dimensionRev = allNGrams.filter(g => (g as any).gramType === 'Dimension').reduce((s, g) => s + g.conversionValue, 0);
+        const dimensionAov = dimensionConv > 0 ? dimensionRev / dimensionConv : 0;
+
         const totalSpend = brandSpend + nonBrandSpend || 1;
         const brandPct = Math.round((brandSpend / totalSpend) * 100);
 
@@ -222,7 +338,7 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
             .filter(g => (g as any).gramType !== 'Dimension' && g.n >= 2)
             .sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))[0];
 
-        return { top, brandPct, brandSpend, nonBrandSpend, avgRoas, roasCount: roasGrams.length, opp };
+        return { top, brandPct, brandSpend, nonBrandSpend, brandAov, nonBrandAov, dimensionAov, avgRoas, roasCount: roasGrams.length, opp };
     }, [allNGrams]);
 
     // ---- Filtered + sorted table data ----
@@ -250,9 +366,12 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
             } else if (sortKey === 'roas') {
                 valA = a.roas ?? -Infinity;
                 valB = b.roas ?? -Infinity;
+            } else if (sortKey === 'aov') {
+                valA = a.conversions > 0 ? a.conversionValue / a.conversions : 0;
+                valB = b.conversions > 0 ? b.conversionValue / b.conversions : 0;
             } else {
-                valA = a[sortKey] as number;
-                valB = b[sortKey] as number;
+                valA = (a as any)[sortKey] as number;
+                valB = (b as any)[sortKey] as number;
             }
 
             if (valA < valB) return sortDir === 'desc' ? 1 : -1;
@@ -348,7 +467,7 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
 
             {/* ── KPI Cards ────────────────────────────────── */}
             {kpi && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-800/50 border-b border-slate-800">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-slate-800/50 border-b border-slate-800">
                     {/* Top Pattern */}
                     <div
                         className="bg-slate-900/70 px-4 py-3 cursor-pointer hover:bg-slate-800 transition-colors group"
@@ -372,6 +491,13 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                         <p className="text-lg font-black text-emerald-400 mt-1">{fmtX(kpi.avgRoas)}</p>
                         <p className="text-sm text-slate-400 mt-0.5">across {kpi.roasCount} patterns</p>
                     </div>
+                    {/* AOV by Type */}
+                    <div className="bg-slate-900/70 px-4 py-3">
+                        <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">AOV by Type</p>
+                        <p className="text-[13px] font-bold text-violet-400 mt-1 flex justify-between"><span>Brand:</span> <span>{fmtEuro(kpi.brandAov, 0)}</span></p>
+                        <p className="text-[13px] font-bold text-slate-400 mt-0.5 flex justify-between"><span>Non-brand:</span> <span>{fmtEuro(kpi.nonBrandAov, 0)}</span></p>
+                        <p className="text-[13px] font-bold text-amber-400 mt-0.5 flex justify-between"><span>Dimension:</span> <span>{fmtEuro(kpi.dimensionAov, 0)}</span></p>
+                    </div>
                     {/* Opportunity */}
                     <div className="bg-slate-900/70 px-4 py-3">
                         <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">Opportunity</p>
@@ -382,6 +508,9 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                     </div>
                 </div>
             )}
+
+            {/* ── Segment Profitability Heatmap ────────────── */}
+            <SegmentHeatmap searchTerms={searchTerms} />
 
             {/* ── Tab + Filter bar ─────────────────────────── */}
             <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/30 flex flex-wrap items-center gap-3">
@@ -458,7 +587,9 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                                     <th className="px-3 py-3">Type</th>
                                     <SortHeader label="Terms" field="termCount" right />
                                     <SortHeader label="Spend (Share)" field="cost" />
-                                    <SortHeader label="Conversions" field="conversions" right />
+                                    <SortHeader label="Conv. (DDA)" field="conversions" right />
+                                    <SortHeader label="Conv. Value" field="conversionValue" right />
+                                    <SortHeader label="AOV" field="aov" right />
                                     <SortHeader label="ROAS" field="roas" right />
                                     <SortHeader label="CPA" field="cpa" right />
                                     {activeTab === 'wasteful' && <th className="px-3 py-3" />}
@@ -488,8 +619,14 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
                                             </td>
                                             <td className="px-3 py-3 text-right">
                                                 <span className={g.conversions > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
-                                                    {g.conversions > 0 ? fmtNum(g.conversions, 1) : '—'}
+                                                    {g.conversions > 0 ? fmtNum(g.conversions, 2) : '—'}
                                                 </span>
+                                            </td>
+                                            <td className="px-3 py-3 text-right text-slate-300 tabular-nums">
+                                                {g.conversionValue > 0 ? fmtEuro(g.conversionValue, 0) : '—'}
+                                            </td>
+                                            <td className="px-3 py-3 text-right text-emerald-400 tabular-nums">
+                                                {g.conversions > 0 ? fmtEuro(g.conversionValue / g.conversions, 0) : '—'}
                                             </td>
                                             <td className="px-3 py-3 text-right">
                                                 <span className={`px-2 py-0.5 rounded text-sm font-bold ${roasClass(g.roas)}`}>
