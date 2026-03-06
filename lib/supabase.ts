@@ -41,7 +41,7 @@ export interface GadsUserAccount {
 
 // Helper functions for user management
 export async function getUserByUsername(username: string): Promise<GadsUser | null> {
-  console.log('[Supabase] Fetching user:', username);
+  console.log('[Supabase] Fetching user by username:', username);
   const { data, error } = await supabaseAdmin
     .from('gads_users')
     .select('*')
@@ -50,12 +50,24 @@ export async function getUserByUsername(username: string): Promise<GadsUser | nu
     .single();
 
   if (error) {
-    console.error('[Supabase] Error fetching user:', error.message, error.details, error.code);
+    console.error('[Supabase] Error fetching user by username:', error.message);
     return null;
   }
 
-  if (!data) {
-    console.warn('[Supabase] User not found or inactive:', username);
+  return data as GadsUser;
+}
+
+export async function getUserByEmail(email: string): Promise<GadsUser | null> {
+  console.log('[Supabase] Fetching user by email:', email);
+  const { data, error } = await supabaseAdmin
+    .from('gads_users')
+    .select('*')
+    .eq('email', email)
+    .eq('is_active', true)
+    .single();
+
+  if (error) {
+    console.error('[Supabase] Error fetching user by email:', error.message);
     return null;
   }
 

@@ -69,7 +69,7 @@ export async function GET(request: Request) {
                     apiCalls: 0
                 };
             }
-            if (row.event_type === 'HEARTBEAT') userSummary[uid].sessionMinutes++;
+            if (row.event_type === 'HEARTBEAT') userSummary[uid].sessionMinutes += 0.5;
             if (row.event_type === 'AI_ANALYSIS') userSummary[uid].aiCalls++;
             if (row.event_type === 'API_CALL') userSummary[uid].apiCalls++;
         });

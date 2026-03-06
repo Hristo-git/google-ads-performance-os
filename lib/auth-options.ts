@@ -1,7 +1,7 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import { getUserByUsername, verifyPassword, getUserAllowedAccounts } from "@/lib/supabase";
+import { getUserByUsername, verifyPassword, getUserAllowedAccounts, getUserByEmail } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-logger";
 
 // Check essential environment variables
@@ -88,11 +88,27 @@ export const authOptions: NextAuthOptions = {
     callbacks: {
         async jwt({ token, user, account }) {
             if (user) {
-                token.id = user.id;
-                // @ts-expect-error - custom user properties
-                token.role = user.role;
-                // @ts-expect-error - custom user properties
-                token.allowedCustomerIds = user.allowedCustomerIds;
+                // If logging in via Google, fetch role/id/accounts from database
+                if (account?.provider === 'google' && user.email) {
+                    const dbUser = await getUserByEmail(user.email);
+                    if (dbUser) {
+                        token.id = dbUser.id; // Switch to DB UUID!
+                        // @ts-ignore
+                        token.role = dbUser.role;
+                        const allowedAccounts = await getUserAllowedAccounts(dbUser.id);
+                        // @ts-ignore
+                        token.allowedCustomerIds = allowedAccounts;
+                    } else {
+                        token.id = user.id; // Keep Google ID if not found
+                    }
+                } else {
+                    // Standard credentials login (user object already enriched in authorize)
+                    token.id = user.id;
+                    // @ts-expect-error - custom user properties
+                    token.role = user.role;
+                    // @ts-expect-error - custom user properties
+                    token.allowedCustomerIds = user.allowedCustomerIds;
+                }
             }
             if (account) {
                 token.accessToken = account.access_token;

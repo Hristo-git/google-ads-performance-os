@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 
-const HEARTBEAT_INTERVAL = 60000; // 60 seconds
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds for better resolution
 
 export function ActivityTracker() {
     const { data: session } = useSession();
@@ -12,19 +12,23 @@ export function ActivityTracker() {
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        if (!session?.user) return;
+        if (!session?.user?.id) return;
 
         const sendHeartbeat = async () => {
-            if (document.visibilityState === 'hidden') return; // Don't track if tab is hidden
+            // Include visibility status to see if they are active or backgrounded
+            const visibility = document.visibilityState;
 
             try {
                 await fetch('/api/activity/heartbeat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: pathname }),
+                    body: JSON.stringify({
+                        path: pathname,
+                        visibility: visibility // 'visible' or 'hidden'
+                    }),
                 });
             } catch (err) {
-                console.error('Failed to send heartbeat', err);
+                // Silent fail to avoid polluting console too much
             }
         };
 
@@ -35,9 +39,13 @@ export function ActivityTracker() {
         intervalRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
 
         return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                // Last-second effort to send exit heart-beat? 
+                // Mostly handled by pathname change re-triggering sendHeartbeat
+            }
         };
-    }, [session?.user, pathname]); // Re-run on path change or login
+    }, [session?.user?.id, pathname]); // Re-run on path change or login status change
 
     return null; // Invisible component
 }
