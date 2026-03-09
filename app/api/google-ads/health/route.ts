@@ -194,6 +194,8 @@ export async function GET(request: Request) {
             cost: st.cost,
             conversions: st.conversions,
             conversionValue: st.conversionValue,
+            allConversions: st.allConversions || 0,
+            allConversionValue: st.allConversionValue || 0,
             date: st.date,
         }));
 
