@@ -289,45 +289,45 @@ export default function StrategicInsights({
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex gap-2 border-b border-slate-700">
+            <div className="flex gap-2 border-b border-slate-700 flex-wrap">
                 <button onClick={() => setActiveTab('breakdown')} className={tabClass('breakdown')}>
                     Strategic Breakdown
+                </button>
+                <button onClick={() => setActiveTab('seasonality')} className={tabClass('seasonality')}>
+                    Seasonality
+                </button>
+                <button onClick={() => setActiveTab('profitability')} className={tabClass('profitability')}>
+                    Profitability
+                </button>
+                <button onClick={() => setActiveTab('search')} className={tabClass('search')}>
+                    Search Terms
+                </button>
+                <button onClick={() => setActiveTab('audiences')} className={tabClass('audiences')}>
+                    Audiences
+                </button>
+                <button onClick={() => setActiveTab('negatives')} className={tabClass('negatives')}>
+                    Neg. Keywords
+                </button>
+                <button onClick={() => setActiveTab('device')} className={tabClass('device')}>
+                    Device Performance
+                </button>
+                <button onClick={() => setActiveTab('heatmap')} className={tabClass('heatmap')}>
+                    Day/Hour Heatmap
+                </button>
+                <button onClick={() => setActiveTab('geographic')} className={tabClass('geographic')}>
+                    Geographic
+                </button>
+                <button onClick={() => setActiveTab('conversions')} className={tabClass('conversions')}>
+                    Conversions
+                </button>
+                <button onClick={() => setActiveTab('landing')} className={tabClass('landing')}>
+                    Landing Pages
                 </button>
                 <button onClick={() => setActiveTab('audit')} className={tabClass('audit')}>
                     Quality Audit
                 </button>
                 <button onClick={() => setActiveTab('ai')} className={tabClass('ai')}>
                     AI Analysis
-                </button>
-                <button onClick={() => setActiveTab('device')} className={tabClass('device')}>
-                    Device Performance
-                </button>
-                <button onClick={() => setActiveTab('search')} className={tabClass('search')}>
-                    Search Terms
-                </button>
-                <button onClick={() => setActiveTab('heatmap')} className={tabClass('heatmap')}>
-                    Day/Hour Heatmap
-                </button>
-                <button onClick={() => setActiveTab('landing')} className={tabClass('landing')}>
-                    Landing Pages
-                </button>
-                <button onClick={() => setActiveTab('conversions')} className={tabClass('conversions')}>
-                    Conversions
-                </button>
-                <button onClick={() => setActiveTab('geographic')} className={tabClass('geographic')}>
-                    Geographic
-                </button>
-                <button onClick={() => setActiveTab('negatives')} className={tabClass('negatives')}>
-                    Neg. Keywords
-                </button>
-                <button onClick={() => setActiveTab('audiences')} className={tabClass('audiences')}>
-                    Audiences
-                </button>
-                <button onClick={() => setActiveTab('profitability')} className={tabClass('profitability')}>
-                    Profitability
-                </button>
-                <button onClick={() => setActiveTab('seasonality')} className={tabClass('seasonality')}>
-                    Seasonality
                 </button>
             </div>
 
