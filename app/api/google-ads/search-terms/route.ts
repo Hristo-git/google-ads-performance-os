@@ -97,6 +97,8 @@ export async function GET(request: Request) {
                 metrics.cost_micros,
                 metrics.conversions,
                 metrics.conversions_value,
+                metrics.all_conversions,
+                metrics.all_conversions_value,
                 metrics.ctr,
                 metrics.average_cpc
             FROM
@@ -182,6 +184,8 @@ export async function GET(request: Request) {
                 cost: Number(row.metrics?.cost_micros) / 1000000 || 0,
                 conversions: Number(row.metrics?.conversions) || 0,
                 conversionValue: Number(row.metrics?.conversions_value) || 0,
+                allConversions: Number(row.metrics?.all_conversions) || 0,
+                allConversionValue: Number(row.metrics?.all_conversions_value) || 0,
                 ctr: row.metrics?.ctr != null ? Number(row.metrics.ctr) : (Number(row.metrics?.clicks) > 0 && Number(row.metrics?.impressions) > 0 ? Number(row.metrics.clicks) / Number(row.metrics.impressions) : 0),
                 averageCpc: row.metrics?.average_cpc != null ? Number(row.metrics.average_cpc) / 1000000 : (Number(row.metrics?.clicks) > 0 ? (Number(row.metrics?.cost_micros) / 1000000) / Number(row.metrics.clicks) : 0),
                 conversionRate: Number(row.metrics?.clicks) > 0 ? Number(row.metrics?.conversions) / Number(row.metrics?.clicks) : 0,
