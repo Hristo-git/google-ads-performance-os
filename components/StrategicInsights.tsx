@@ -611,7 +611,11 @@ export default function StrategicInsights({
                 )}
 
                 {activeTab === 'profitability' && (
-                    <SegmentProfitabilityHeatmap campaigns={campaigns} />
+                    <SegmentProfitabilityHeatmap
+                        campaigns={campaigns}
+                        customerId={customerId}
+                        dateRange={dateRange}
+                    />
                 )}
 
                 {activeTab === 'seasonality' && (
