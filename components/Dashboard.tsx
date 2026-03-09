@@ -125,7 +125,7 @@ const MetricCell = ({ value, format, previous, invertColor = false }: { value: n
             )}
             {isNew && (
                 <span className={`text-[10px] ${colorClass} flex items-center`}>
-                    {arrow} 100%
+                    {arrow} new
                 </span>
             )}
             {isZeroed && (
@@ -997,6 +997,13 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     useEffect(() => {
         if (customerId && customerId !== selectedAccountId) {
             console.log(`[Dashboard] Account changed from ${selectedAccountId} to ${customerId} (reactive trigger)`);
+            // Reset navigation to account level to prevent cross-account campaign ID mismatch
+            setNavigation({
+                level: 'account',
+                campaignId: undefined,
+                adGroupId: undefined,
+                view: 'dashboard'
+            });
             // Explicitly clear all data states to prevent cross-account leakage
             setCampaigns([]);
             setAdGroups([]);
@@ -2829,12 +2836,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         let isZeroed = false;
 
         if (previous === 0 && current === 0) return null; // both zero, nothing to show
-        if (previous === 0 && current > 0) {
-            // Previous metric was exactly zero — don't show a percentage (would be infinite/misleading)
-            // Show a neutral "new" indicator without the misleading "100%"
-            const colorClass = invertColor ? "text-amber-200" : "text-emerald-200";
-            return <div className={`text-[11px] mt-2 font-medium flex items-center gap-1.5 ${colorClass}`}><span className="bg-white/10 rounded px-1.5 py-0.5">↑ new</span><span className="text-white/50 lowercase tracking-wide">vs prev</span></div>;
-        }
+        if (previous === 0 && current > 0) isNew = true;
         else if (previous > 0 && current === 0) isZeroed = true;
         else if (previous !== 0) delta = ((current - previous) / previous) * 100;
 
@@ -2844,7 +2846,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         if (isNew) {
             arrow = "↑";
             colorClass = invertColor ? "text-red-200" : "text-emerald-200";
-            return <div className={`text-[11px] mt-2 font-medium flex items-center gap-1.5 ${colorClass}`}><span className="bg-white/10 rounded px-1.5 py-0.5">{arrow} 100%</span><span className="text-white/50 lowercase tracking-wide">vs prev</span></div>;
+            return <div className={`text-[11px] mt-2 font-medium flex items-center gap-1.5 ${colorClass}`}><span className="bg-white/10 rounded px-1.5 py-0.5">↑ new</span><span className="text-white/50 lowercase tracking-wide">vs prev</span></div>;
         } else if (isZeroed) {
             arrow = "↓";
             colorClass = invertColor ? "text-emerald-200" : "text-red-200";
@@ -3674,17 +3676,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         )}
                                                                     </button>
                                                                 </th>
-                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">
-                                                                    Target Mg.
-                                                                </th>
-                                                                <th className="px-4 py-3 text-right font-medium">
-                                                                    <button onClick={() => handleSort('profitability')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                                                        Profitability
-                                                                        {sortBy === 'profitability' && (
-                                                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                        )}
-                                                                    </button>
-                                                                </th>
+
                                                                 <th className="px-4 py-3 text-center font-medium">Type</th>
                                                                 <th className="px-4 py-3 text-center font-medium">Bidding</th>
                                                             </>
@@ -3762,7 +3754,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     name={camp.name}
                                                                     type="Campaign"
                                                                     metrics={camp}
-                                                                    colSpan={isPMax ? 13 : 15}
+                                                                    colSpan={isPMax ? 11 : 13}
                                                                     layout={isPMax ? 'pmax' : 'search'}
                                                                 />
                                                             );
@@ -3784,7 +3776,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 name={currentAdGroup.name}
                                                                 type="Ad Group"
                                                                 metrics={_metrics}
-                                                                colSpan={13}
+                                                                colSpan={11}
                                                                 layout="adgroup"
                                                             />
                                                         );
@@ -3932,21 +3924,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             ) : <span className="text-slate-500">—</span>;
                                                                         })()}
                                                                     </td>
-                                                                    <td className="px-4 py-4 text-right text-slate-400">
-                                                                        {fmtPct(TARGET_MARGIN * 100, 0)}
-                                                                    </td>
-                                                                    <td className="px-4 py-4 text-right">
-                                                                        {(() => {
-                                                                            const ers = item.conversionValue > 0 ? item.cost / item.conversionValue : null;
-                                                                            if (ers == null) return <span className="text-slate-500">—</span>;
-                                                                            const profitability = TARGET_MARGIN - ers;
-                                                                            return (
-                                                                                <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                                                    {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
-                                                                                </span>
-                                                                            );
-                                                                        })()}
-                                                                    </td>
+
                                                                     <td className="px-4 py-4 text-center">
                                                                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${item.category === 'pmax_sale' || item.category === 'pmax_aon' ? 'bg-purple-500/20 text-purple-400' :
                                                                             item.category === 'search_nonbrand' || item.category === 'search_dsa' ? 'bg-blue-500/20 text-blue-400' :
@@ -4535,8 +4513,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <th className="px-4 py-3 text-right font-medium">Avg. CPC</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Conv. Value</th>
                                                                 <th className="px-4 py-3 text-right font-medium">ERS</th>
-                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">Target Mg.</th>
-                                                                <th className="px-4 py-3 text-right font-medium">Profitability</th>
+
                                                                 <th className="px-4 py-3 text-right font-medium">ROAS</th>
                                                                 <th className="px-4 py-3 text-right font-medium">IS</th>
                                                                 <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
@@ -4548,7 +4525,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     name={currentAdGroup.name}
                                                                     type="Ad Group"
                                                                     metrics={currentAdGroup}
-                                                                    colSpan={12}
+                                                                    colSpan={10}
                                                                     layout="listing_group"
                                                                 />
                                                             )}
@@ -4584,21 +4561,6 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             ) : <span className="text-slate-500">—</span>;
                                                                         })()}
                                                                     </td>
-                                                                    <td className="px-4 py-3 text-right text-slate-400">
-                                                                        {fmtPct(TARGET_MARGIN * 100, 0)}
-                                                                    </td>
-                                                                    <td className="px-4 py-3 text-right">
-                                                                        {(() => {
-                                                                            const ers = lg.conversionValue > 0 ? lg.cost / lg.conversionValue : null;
-                                                                            if (ers == null) return <span className="text-slate-500">—</span>;
-                                                                            const profitability = TARGET_MARGIN - ers;
-                                                                            return (
-                                                                                <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                                                    {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
-                                                                                </span>
-                                                                            );
-                                                                        })()}
-                                                                    </td>
                                                                     <td className="px-4 py-3 text-right">
                                                                         {lg.roas != null ? (
                                                                             <span className={`font-medium ${lg.roas >= 3 ? 'text-emerald-400' : lg.roas >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
@@ -4628,7 +4590,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                             </div>
                                         )}
 
-                                        {pmaxAssets.length > 0 ? (
+                                        {pmaxAssets.length > 0 && (
                                             <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mb-6">
                                                 <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
                                                     <div>
@@ -4762,7 +4724,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                     </table>
                                                 </div>
                                             </div>
-                                        ) : (
+                                        )}
+
+                                        {pmaxAssets.length === 0 && (
                                             <>
                                                 {/* Keywords with QS — hidden for Display/Video/DG; DSA banner shown for DSA; table for Search */}
                                                 {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && ((() => {
@@ -5083,346 +5047,325 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                     </div>
                                                 )}
                                                 {/* /Ads with Strength */}
+                                            </>
+                                        )}
 
-                                                {/* Negative Keywords — hidden for Display/Video/DG */}
-                                                {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
-                                                    <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
-                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                                            <h2 className="font-semibold text-white">Negative Keywords</h2>
-                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                                {negativeKeywords.length} keywords
-                                                            </span>
+                                        {/* Negative Keywords — hidden for Display/Video/DG */}
+                                        {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
+                                            <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
+                                                <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                    <h2 className="font-semibold text-white">Negative Keywords</h2>
+                                                    <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                        {negativeKeywords.length} keywords
+                                                    </span>
+                                                </div>
+                                                <div className="p-4">
+                                                    {negativeKeywords.length > 0 ? (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {negativeKeywords.map((kw) => (
+                                                                <span
+                                                                    key={kw.id}
+                                                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-sm border border-red-500/20"
+                                                                >
+                                                                    <span className="text-xs text-red-500/70">[{kw.matchType}]</span>
+                                                                    {kw.text}
+                                                                </span>
+                                                            ))}
                                                         </div>
-                                                        <div className="p-4">
-                                                            {negativeKeywords.length > 0 ? (
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {negativeKeywords.map((kw) => (
-                                                                        <span
-                                                                            key={kw.id}
-                                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-sm border border-red-500/20"
-                                                                        >
-                                                                            <span className="text-xs text-red-500/70">[{kw.matchType}]</span>
-                                                                            {kw.text}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            ) : (
-                                                                <p className="text-slate-500 text-sm">No negative keywords configured.</p>
+                                                    ) : (
+                                                        <p className="text-slate-500 text-sm">No negative keywords configured.</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Search Terms for Ad Group — hidden for Display/Video/DG */}
+                                        {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
+                                            <div id="search-terms-section" className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mt-6 scroll-mt-24">
+                                                <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                    <h2 className="font-semibold text-white">Search Terms</h2>
+                                                    <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                                        {searchTerms.filter(st => {
+                                                            if (String(navigation.level) === 'adgroup') {
+                                                                return String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                    (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'));
+                                                            }
+                                                            if (String(navigation.level) === 'campaign') return String(st.campaignId) === String(navigation.campaignId);
+                                                            return false;
+                                                        }).length} terms
+                                                    </span>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-sm text-left text-slate-300">
+                                                        <thead className="bg-slate-900/50 text-slate-400 uppercase text-xs">
+                                                            <tr>
+                                                                <th className="px-6 py-3 font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('searchTerm')}>
+                                                                    <div className="flex items-center gap-1">
+                                                                        Search Term
+                                                                        {searchTermSortBy === 'searchTerm' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('clicks')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        Clicks
+                                                                        {searchTermSortBy === 'clicks' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('impressions')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        Impr.
+                                                                        {searchTermSortBy === 'impressions' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('ctr')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        CTR
+                                                                        {searchTermSortBy === 'ctr' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cost')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        Cost
+                                                                        {searchTermSortBy === 'cost' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversions')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        Conv.
+                                                                        {searchTermSortBy === 'conversions' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cpa')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        CPA
+                                                                        {searchTermSortBy === 'cpa' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('roas')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        ROAS
+                                                                        {searchTermSortBy === 'roas' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionRate')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        CVR
+                                                                        {searchTermSortBy === 'conversionRate' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionValue')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        Conv. Value
+                                                                        {searchTermSortBy === 'conversionValue' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                                <th className="px-4 py-3 text-right font-medium text-slate-400 cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('ers')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        ERS
+                                                                        {searchTermSortBy === 'ers' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+
+                                                                <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('averageCpc')}>
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        Avg. CPC
+                                                                        {searchTermSortBy === 'averageCpc' && (
+                                                                            <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-700">
+                                                            {String(navigation.level) === 'campaign' && currentCampaign && (
+                                                                <ParentContextRow
+                                                                    name={currentCampaign.name}
+                                                                    type="Campaign"
+                                                                    metrics={currentCampaign}
+                                                                    colSpan={10}
+                                                                    layout="search_terms"
+                                                                />
                                                             )}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Search Terms for Ad Group — hidden for Display/Video/DG */}
-                                                {!(() => { const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId)); const _ct = _c?.advertisingChannelType || ''; return _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY'; })() && (
-                                                    <div id="search-terms-section" className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden mt-6 scroll-mt-24">
-                                                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                                                            <h2 className="font-semibold text-white">Search Terms</h2>
-                                                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                                                {searchTerms.filter(st => {
+                                                            {String(navigation.level) === 'adgroup' && currentAdGroup && (
+                                                                <ParentContextRow
+                                                                    name={currentAdGroup.name}
+                                                                    type="Ad Group"
+                                                                    metrics={currentAdGroup}
+                                                                    colSpan={10}
+                                                                    layout="search_terms"
+                                                                />
+                                                            )}
+                                                            {searchTerms
+                                                                .filter(st => {
                                                                     if (String(navigation.level) === 'adgroup') {
                                                                         return String(st.adGroupId) === String(navigation.adGroupId) ||
                                                                             (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'));
                                                                     }
                                                                     if (String(navigation.level) === 'campaign') return String(st.campaignId) === String(navigation.campaignId);
                                                                     return false;
-                                                                }).length} terms
-                                                            </span>
-                                                        </div>
-                                                        <div className="overflow-x-auto">
-                                                            <table className="w-full text-sm text-left text-slate-300">
-                                                                <thead className="bg-slate-900/50 text-slate-400 uppercase text-xs">
-                                                                    <tr>
-                                                                        <th className="px-6 py-3 font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('searchTerm')}>
-                                                                            <div className="flex items-center gap-1">
-                                                                                Search Term
-                                                                                {searchTermSortBy === 'searchTerm' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('clicks')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                Clicks
-                                                                                {searchTermSortBy === 'clicks' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('impressions')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                Impr.
-                                                                                {searchTermSortBy === 'impressions' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('ctr')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                CTR
-                                                                                {searchTermSortBy === 'ctr' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cost')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                Cost
-                                                                                {searchTermSortBy === 'cost' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversions')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                Conv.
-                                                                                {searchTermSortBy === 'conversions' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('cpa')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                CPA
-                                                                                {searchTermSortBy === 'cpa' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('roas')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                ROAS
-                                                                                {searchTermSortBy === 'roas' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionRate')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                CVR
-                                                                                {searchTermSortBy === 'conversionRate' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('conversionValue')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                Conv. Value
-                                                                                {searchTermSortBy === 'conversionValue' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium text-slate-400 cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('ers')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                ERS
-                                                                                {searchTermSortBy === 'ers' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium text-slate-400">Target Mg.</th>
-                                                                        <th className="px-4 py-3 text-right font-medium text-slate-400 cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('profitability')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                Profitability
-                                                                                {searchTermSortBy === 'profitability' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                        <th className="px-4 py-3 text-right font-medium cursor-pointer user-select-none hover:text-white" onClick={() => handleSearchTermSort('averageCpc')}>
-                                                                            <div className="flex items-center justify-end gap-1">
-                                                                                Avg. CPC
-                                                                                {searchTermSortBy === 'averageCpc' && (
-                                                                                    <span className="text-emerald-400">{searchTermSortDirection === 'asc' ? '↑' : '↓'}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="divide-y divide-slate-700">
-                                                                    {String(navigation.level) === 'campaign' && currentCampaign && (
-                                                                        <ParentContextRow
-                                                                            name={currentCampaign.name}
-                                                                            type="Campaign"
-                                                                            metrics={currentCampaign}
-                                                                            colSpan={12}
-                                                                            layout="search_terms"
-                                                                        />
-                                                                    )}
-                                                                    {String(navigation.level) === 'adgroup' && currentAdGroup && (
-                                                                        <ParentContextRow
-                                                                            name={currentAdGroup.name}
-                                                                            type="Ad Group"
-                                                                            metrics={currentAdGroup}
-                                                                            colSpan={12}
-                                                                            layout="search_terms"
-                                                                        />
-                                                                    )}
-                                                                    {searchTerms
-                                                                        .filter(st => {
-                                                                            if (String(navigation.level) === 'adgroup') {
-                                                                                return String(st.adGroupId) === String(navigation.adGroupId) ||
-                                                                                    (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'));
-                                                                            }
-                                                                            if (String(navigation.level) === 'campaign') return String(st.campaignId) === String(navigation.campaignId);
-                                                                            return false;
-                                                                        })
-                                                                        .sort((a, b) => {
-                                                                            let valA: number | string = 0;
-                                                                            let valB: number | string = 0;
+                                                                })
+                                                                .sort((a, b) => {
+                                                                    let valA: number | string = 0;
+                                                                    let valB: number | string = 0;
 
-                                                                            // Handle calculated fields
-                                                                            if (searchTermSortBy === 'cpa') {
-                                                                                // For CPA, 0 conversions means infinite cost per conversion. 
-                                                                                // We usually want low CPA at the top for ASC, but high CPA (bad) for DESC?
-                                                                                // Let's standardise: 0 conversions = Infinity
-                                                                                valA = a.conversions > 0 ? a.cost / a.conversions : Infinity;
-                                                                                valB = b.conversions > 0 ? b.cost / b.conversions : Infinity;
-                                                                            } else if (searchTermSortBy === 'roas') {
-                                                                                valA = a.cost > 0 ? a.conversionValue / a.cost : 0;
-                                                                                valB = b.cost > 0 ? b.conversionValue / b.cost : 0;
-                                                                            } else if (searchTermSortBy === 'ers') {
-                                                                                valA = a.conversionValue > 0 ? a.cost / a.conversionValue : Infinity;
-                                                                                valB = b.conversionValue > 0 ? b.cost / b.conversionValue : Infinity;
-                                                                            } else if (searchTermSortBy === 'profitability') {
-                                                                                valA = a.conversionValue > 0 ? TARGET_MARGIN - (a.cost / a.conversionValue) : -Infinity;
-                                                                                valB = b.conversionValue > 0 ? TARGET_MARGIN - (b.cost / b.conversionValue) : -Infinity;
-                                                                            } else if (searchTermSortBy === 'searchTerm') {
-                                                                                valA = (a.searchTerm || '').toLowerCase();
-                                                                                valB = (b.searchTerm || '').toLowerCase();
-                                                                            } else {
-                                                                                // Direct property access
-                                                                                valA = (a as any)[searchTermSortBy];
-                                                                                valB = (b as any)[searchTermSortBy];
-                                                                            }
+                                                                    // Handle calculated fields
+                                                                    if (searchTermSortBy === 'cpa') {
+                                                                        // For CPA, 0 conversions means infinite cost per conversion. 
+                                                                        // We usually want low CPA at the top for ASC, but high CPA (bad) for DESC?
+                                                                        // Let's standardise: 0 conversions = Infinity
+                                                                        valA = a.conversions > 0 ? a.cost / a.conversions : Infinity;
+                                                                        valB = b.conversions > 0 ? b.cost / b.conversions : Infinity;
+                                                                    } else if (searchTermSortBy === 'roas') {
+                                                                        valA = a.cost > 0 ? a.conversionValue / a.cost : 0;
+                                                                        valB = b.cost > 0 ? b.conversionValue / b.cost : 0;
+                                                                    } else if (searchTermSortBy === 'ers') {
+                                                                        valA = a.conversionValue > 0 ? a.cost / a.conversionValue : Infinity;
+                                                                        valB = b.conversionValue > 0 ? b.cost / b.conversionValue : Infinity;
+                                                                    } else if (searchTermSortBy === 'profitability') {
+                                                                        valA = a.conversionValue > 0 ? TARGET_MARGIN - (a.cost / a.conversionValue) : -Infinity;
+                                                                        valB = b.conversionValue > 0 ? TARGET_MARGIN - (b.cost / b.conversionValue) : -Infinity;
+                                                                    } else if (searchTermSortBy === 'searchTerm') {
+                                                                        valA = (a.searchTerm || '').toLowerCase();
+                                                                        valB = (b.searchTerm || '').toLowerCase();
+                                                                    } else {
+                                                                        // Direct property access
+                                                                        valA = (a as any)[searchTermSortBy];
+                                                                        valB = (b as any)[searchTermSortBy];
+                                                                    }
 
-                                                                            // Sort logic
-                                                                            if (typeof valA === 'string' && typeof valB === 'string') {
-                                                                                return searchTermSortDirection === 'asc'
-                                                                                    ? valA.localeCompare(valB)
-                                                                                    : valB.localeCompare(valA);
-                                                                            }
+                                                                    // Sort logic
+                                                                    if (typeof valA === 'string' && typeof valB === 'string') {
+                                                                        return searchTermSortDirection === 'asc'
+                                                                            ? valA.localeCompare(valB)
+                                                                            : valB.localeCompare(valA);
+                                                                    }
 
-                                                                            const numA = Number(valA) || 0;
-                                                                            const numB = Number(valB) || 0;
+                                                                    const numA = Number(valA) || 0;
+                                                                    const numB = Number(valB) || 0;
 
-                                                                            // Handle Infinity for CPA
-                                                                            if (numA === Infinity && numB === Infinity) return 0;
-                                                                            if (numA === Infinity) return searchTermSortDirection === 'asc' ? 1 : -1;
-                                                                            if (numB === Infinity) return searchTermSortDirection === 'asc' ? -1 : 1;
+                                                                    // Handle Infinity for CPA
+                                                                    if (numA === Infinity && numB === Infinity) return 0;
+                                                                    if (numA === Infinity) return searchTermSortDirection === 'asc' ? 1 : -1;
+                                                                    if (numB === Infinity) return searchTermSortDirection === 'asc' ? -1 : 1;
 
-                                                                            return searchTermSortDirection === 'asc' ? numA - numB : numB - numA;
-                                                                        })
-                                                                        .slice(0, 50) // Show top 50 by spend
-                                                                        .map((term, idx) => (
-                                                                            <tr key={idx} className="hover:bg-slate-700/50 transition-colors">
-                                                                                <td className="px-6 py-3">
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <span className="font-medium text-white max-w-md truncate" title={term.searchTerm}>
-                                                                                            {term.searchTerm}
-                                                                                        </span>
-                                                                                        {term.matchType && term.matchType !== 'BROAD' && (
-                                                                                            <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${term.matchType === 'EXACT' ? 'bg-blue-500/20 text-blue-400' : term.matchType === 'PHRASE' ? 'bg-violet-500/20 text-violet-400' : 'bg-slate-600 text-slate-400'}`}>
-                                                                                                {term.matchType}
-                                                                                            </span>
-                                                                                        )}
-                                                                                    </div>
-                                                                                    {(() => {
-                                                                                        const s = SEARCH_TERM_STATUS_MAP[String(term.searchTermStatus)] ||
-                                                                                            { label: String(term.searchTermStatus) || '—', color: 'text-slate-500 bg-slate-700' };
-                                                                                        return s.label !== 'NONE' && s.label !== '—' ? (
-                                                                                            <span className={`inline-flex mt-1 px-1.5 py-0.5 rounded text-xs font-medium ${s.color}`}>
-                                                                                                {s.label}
-                                                                                            </span>
-                                                                                        ) : null;
-                                                                                    })()}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right">{fmtInt(term.clicks)}</td>
-                                                                                <td className="px-4 py-3 text-right">{fmtInt(term.impressions)}</td>
-                                                                                <td className="px-4 py-3 text-right">
-                                                                                    <span className={term.ctr >= 0.05 ? 'text-emerald-400' : ''}>
-                                                                                        {fmtPct(term.ctr * 100, 2)}
+                                                                    return searchTermSortDirection === 'asc' ? numA - numB : numB - numA;
+                                                                })
+                                                                .slice(0, 50) // Show top 50 by spend
+                                                                .map((term, idx) => (
+                                                                    <tr key={idx} className="hover:bg-slate-700/50 transition-colors">
+                                                                        <td className="px-6 py-3">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="font-medium text-white max-w-md truncate" title={term.searchTerm}>
+                                                                                    {term.searchTerm}
+                                                                                </span>
+                                                                                {term.matchType && term.matchType !== 'BROAD' && (
+                                                                                    <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${term.matchType === 'EXACT' ? 'bg-blue-500/20 text-blue-400' : term.matchType === 'PHRASE' ? 'bg-violet-500/20 text-violet-400' : 'bg-slate-600 text-slate-400'}`}>
+                                                                                        {term.matchType}
                                                                                     </span>
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right">{fmtEuro(term.cost)}</td>
-                                                                                <td className="px-4 py-3 text-right">
-                                                                                    {term.conversions > 0 ? (
-                                                                                        <span className="text-white font-medium">{fmtNum(term.conversions, 1)}</span>
-                                                                                    ) : (
-                                                                                        <span className="text-slate-600">0</span>
-                                                                                    )}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right">
-                                                                                    {term.conversions > 0 ? (
-                                                                                        fmtEuro(term.cost / term.conversions)
-                                                                                    ) : (
-                                                                                        <span className="text-slate-600">—</span>
-                                                                                    )}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right">
-                                                                                    {term.cost > 0 ? (
-                                                                                        <span className={`font-medium ${term.conversionValue / term.cost >= 4 ? 'text-emerald-400' : term.conversionValue / term.cost < 1 ? 'text-red-400' : 'text-amber-400'}`}>
-                                                                                            {fmtX(term.conversionValue / term.cost)}
-                                                                                        </span>
-                                                                                    ) : (
-                                                                                        <span className="text-slate-600">—</span>
-                                                                                    )}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right text-slate-400 text-xs">
-                                                                                    {term.clicks > 0 ? fmtPct((term.conversionRate || (term.conversions / term.clicks)) * 100, 2) : '—'}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right">
-                                                                                    {term.conversionValue > 0 ? (
-                                                                                        <span className="text-emerald-400 text-xs">{fmtEuro(term.conversionValue)}</span>
-                                                                                    ) : <span className="text-slate-600">—</span>}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right">
-                                                                                    {(() => {
-                                                                                        const ers = term.conversionValue > 0 ? term.cost / term.conversionValue : null;
-                                                                                        return ers != null ? (
-                                                                                            <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
-                                                                                                {fmtPct(ers * 100, 2)}
-                                                                                            </span>
-                                                                                        ) : <span className="text-slate-500 text-xs">—</span>;
-                                                                                    })()}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right text-slate-400 text-xs">
-                                                                                    {fmtPct(TARGET_MARGIN * 100, 0)}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right">
-                                                                                    {(() => {
-                                                                                        const ers = term.conversionValue > 0 ? term.cost / term.conversionValue : null;
-                                                                                        if (ers == null) return <span className="text-slate-500 text-xs">—</span>;
-                                                                                        const profitability = TARGET_MARGIN - ers;
-                                                                                        return (
-                                                                                            <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
-                                                                                                {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
-                                                                                            </span>
-                                                                                        );
-                                                                                    })()}
-                                                                                </td>
-                                                                                <td className="px-4 py-3 text-right text-slate-300 text-xs">
-                                                                                    {term.averageCpc > 0 ? fmtEuro(term.averageCpc) : '—'}
-                                                                                </td>
-                                                                            </tr>
-                                                                        ))}
-                                                                    {searchTerms.filter(st =>
-                                                                        String(st.adGroupId) === String(navigation.adGroupId) ||
-                                                                        (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
-                                                                    ).length === 0 && (
-                                                                            <tr>
-                                                                                <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
-                                                                                    No search terms found for this ad group.
-                                                                                </td>
-                                                                            </tr>
-                                                                        )}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </>
+                                                                                )}
+                                                                            </div>
+                                                                            {(() => {
+                                                                                const s = SEARCH_TERM_STATUS_MAP[String(term.searchTermStatus)] ||
+                                                                                    { label: String(term.searchTermStatus) || '—', color: 'text-slate-500 bg-slate-700' };
+                                                                                return s.label !== 'NONE' && s.label !== '—' ? (
+                                                                                    <span className={`inline-flex mt-1 px-1.5 py-0.5 rounded text-xs font-medium ${s.color}`}>
+                                                                                        {s.label}
+                                                                                    </span>
+                                                                                ) : null;
+                                                                            })()}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">{fmtInt(term.clicks)}</td>
+                                                                        <td className="px-4 py-3 text-right">{fmtInt(term.impressions)}</td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            <span className={term.ctr >= 0.05 ? 'text-emerald-400' : ''}>
+                                                                                {fmtPct(term.ctr * 100, 2)}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">{fmtEuro(term.cost)}</td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {term.conversions > 0 ? (
+                                                                                <span className="text-white font-medium">{fmtNum(term.conversions, 1)}</span>
+                                                                            ) : (
+                                                                                <span className="text-slate-600">0</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {term.conversions > 0 ? (
+                                                                                fmtEuro(term.cost / term.conversions)
+                                                                            ) : (
+                                                                                <span className="text-slate-600">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {term.cost > 0 ? (
+                                                                                <span className={`font-medium ${term.conversionValue / term.cost >= 4 ? 'text-emerald-400' : term.conversionValue / term.cost < 1 ? 'text-red-400' : 'text-amber-400'}`}>
+                                                                                    {fmtX(term.conversionValue / term.cost)}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-600">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right text-slate-400 text-xs">
+                                                                            {term.clicks > 0 ? fmtPct((term.conversionRate || (term.conversions / term.clicks)) * 100, 2) : '—'}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {term.conversionValue > 0 ? (
+                                                                                <span className="text-emerald-400 text-xs">{fmtEuro(term.conversionValue)}</span>
+                                                                            ) : <span className="text-slate-600">—</span>}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {(() => {
+                                                                                const ers = term.conversionValue > 0 ? term.cost / term.conversionValue : null;
+                                                                                return ers != null ? (
+                                                                                    <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
+                                                                                        {fmtPct(ers * 100, 2)}
+                                                                                    </span>
+                                                                                ) : <span className="text-slate-500 text-xs">—</span>;
+                                                                            })()}
+                                                                        </td>
+
+
+                                                                        <td className="px-4 py-3 text-right text-slate-300 text-xs">
+                                                                            {term.averageCpc > 0 ? fmtEuro(term.averageCpc) : '—'}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            {searchTerms.filter(st =>
+                                                                String(st.adGroupId) === String(navigation.adGroupId) ||
+                                                                (String(st.campaignId) === String(navigation.campaignId) && st.searchTerm?.includes('[PMax Insight]'))
+                                                            ).length === 0 && (
+                                                                    <tr>
+                                                                        <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                                                                            No search terms found for this ad group.
+                                                                        </td>
+                                                                    </tr>
+                                                                )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
                                         )}
 
                                         {/* PMax Listing Groups — Product Coverage */}
@@ -5450,8 +5393,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <th className="px-4 py-3 text-right font-medium">Conv.Value</th>
                                                                 <th className="px-4 py-3 text-right font-medium">ROAS</th>
                                                                 <th className="px-4 py-3 text-right font-medium text-slate-400">ERS</th>
-                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">Target Mg.</th>
-                                                                <th className="px-4 py-3 text-right font-medium text-slate-400">Profitability</th>
+
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-700">
@@ -5499,21 +5441,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             ) : <span className="text-slate-500 text-xs">—</span>;
                                                                         })()}
                                                                     </td>
-                                                                    <td className="px-4 py-3 text-right text-slate-400 text-xs">
-                                                                        {fmtPct(TARGET_MARGIN * 100, 0)}
-                                                                    </td>
-                                                                    <td className="px-4 py-3 text-right">
-                                                                        {(() => {
-                                                                            const ers = lg.conversionValue > 0 ? lg.cost / lg.conversionValue : null;
-                                                                            if (ers == null) return <span className="text-slate-500 text-xs">—</span>;
-                                                                            const profitability = TARGET_MARGIN - ers;
-                                                                            return (
-                                                                                <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
-                                                                                    {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
-                                                                                </span>
-                                                                            );
-                                                                        })()}
-                                                                    </td>
+
                                                                 </tr>
                                                             ))}
                                                         </tbody>
