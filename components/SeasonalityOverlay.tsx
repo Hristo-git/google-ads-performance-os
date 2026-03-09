@@ -245,7 +245,7 @@ export default function SeasonalityOverlay({ customerId, dateRange }: Props) {
                                 contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }}
                                 labelStyle={{ color: "#94a3b8" }}
                                 labelFormatter={(v) => `Day ${v}`}
-                                formatter={(value: any, name: string) => [
+                                formatter={(value: any, name: any) => [
                                     formatTooltipValue(metric, value),
                                     name === "current" ? `Current (${periodLabels.current})`
                                         : name === "prev" ? `Prev. Period (${periodLabels.prev})`
