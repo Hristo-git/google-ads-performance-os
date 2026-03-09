@@ -112,6 +112,7 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [viewMode, setViewMode] = useState<'countries' | 'cities' | 'matrix'>('countries');
     const [typeFilter, setTypeFilter] = useState<string>('all');
+    const [citySearch, setCitySearch] = useState<string>('');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -425,9 +426,13 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                             </span>
                         )}
                         {viewMode === 'matrix' && (
-                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                                Top {matrixData.cities.length} cities
-                            </span>
+                            <input
+                                type="text"
+                                value={citySearch}
+                                onChange={e => setCitySearch(e.target.value)}
+                                placeholder="Filter cities…"
+                                className="bg-slate-700 border border-slate-600 text-slate-300 placeholder-slate-500 text-xs rounded-lg px-3 py-1.5 w-36 focus:outline-none focus:border-violet-500"
+                            />
                         )}
                     </div>
                 </div>
@@ -439,14 +444,32 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                             <div className="p-8 text-center text-slate-500 text-sm">No city-level data available.</div>
                         ) : (
                             <>
-                                <p className="px-5 py-2 text-xs text-slate-500">
-                                    Each cell shows ROAS · hover for spend & conversions. Color: <span className="text-emerald-400">green ≥ 3×</span> · <span className="text-amber-400">amber ≥ 1×</span> · <span className="text-red-400">red &lt; 1×</span>
-                                </p>
+                                {/* Legend */}
+                                <div className="px-5 py-3 border-b border-slate-700/50 flex flex-wrap items-center gap-x-6 gap-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-slate-400 text-xs font-medium">Клетка:</span>
+                                        <span className="inline-flex flex-col items-center bg-slate-700/40 rounded px-2 py-0.5 border border-slate-600/50">
+                                            <span className="text-emerald-400 text-xs font-semibold leading-tight">32.3×</span>
+                                            <span className="text-slate-500 text-[10px] leading-tight">€522</span>
+                                        </span>
+                                        <span className="text-slate-500 text-xs">= ROAS · Разход</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs">
+                                        <span className="text-slate-400 font-medium">Цвят:</span>
+                                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-900/60 border border-emerald-700/50 inline-block"></span><span className="text-emerald-400">≥ 3× добро</span></span>
+                                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-900/40 border border-amber-700/50 inline-block"></span><span className="text-amber-400">1–3× средно</span></span>
+                                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-900/50 border border-red-700/50 inline-block"></span><span className="text-red-400">&lt; 1× загуба</span></span>
+                                        <span className="flex items-center gap-1"><span className="text-slate-600">—</span><span className="text-slate-500">без данни</span></span>
+                                    </div>
+                                    <span className="ml-auto text-xs text-slate-500">
+                                        {matrixData.cities.filter(c => !citySearch || c.name.toLowerCase().includes(citySearch.toLowerCase())).length} от {matrixData.cities.length} града
+                                    </span>
+                                </div>
                                 <table className="w-full text-xs">
                                     <thead className="bg-slate-700/50 text-slate-300 uppercase">
                                         <tr>
-                                            <th className="px-4 py-3 text-left font-medium sticky left-0 bg-slate-800 z-10 min-w-[180px]">City</th>
-                                            <th className="px-3 py-3 text-right font-medium text-slate-400">Total spend</th>
+                                            <th className="px-4 py-3 text-left font-medium sticky left-0 bg-slate-800 z-10 min-w-[180px]">Град</th>
+                                            <th className="px-3 py-3 text-right font-medium text-slate-400">Общ разход</th>
                                             {matrixData.activeCats.map(cat => (
                                                 <th key={cat} className={`px-3 py-3 text-center font-medium ${CAMP_CAT_META[cat]?.color || 'text-slate-400'}`}>
                                                     {CAMP_CAT_META[cat]?.label || cat}
@@ -455,7 +478,7 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-700/50">
-                                        {matrixData.cities.map(city => (
+                                        {matrixData.cities.filter(c => !citySearch || c.name.toLowerCase().includes(citySearch.toLowerCase())).map(city => (
                                             <tr key={city.id} className="hover:bg-slate-700/20 transition-colors">
                                                 <td className="px-4 py-2.5 text-white font-medium sticky left-0 bg-slate-800 z-10 truncate max-w-[180px]">
                                                     {city.name}
