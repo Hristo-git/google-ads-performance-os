@@ -225,20 +225,22 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
     // ── Campaign × City matrix ──
     const matrixData = useMemo(() => {
         // Build map: locationId → campCategory → aggregated metrics
-        type CellData = { cost: number; conversions: number; conversionValue: number };
+        type CellData = { cost: number; clicks: number; conversions: number; conversionValue: number };
         const cityMap: Record<string, { name: string; total: CellData; cats: Record<string, CellData> }> = {};
 
         for (const row of regionalData) {
             const cat = getCampCategory(row.campaignName, row.campaignType);
             if (!cityMap[row.locationId]) {
-                cityMap[row.locationId] = { name: row.locationName, total: { cost: 0, conversions: 0, conversionValue: 0 }, cats: {} };
+                cityMap[row.locationId] = { name: row.locationName, total: { cost: 0, clicks: 0, conversions: 0, conversionValue: 0 }, cats: {} };
             }
             const city = cityMap[row.locationId];
             city.total.cost            += row.cost;
+            city.total.clicks          += row.clicks;
             city.total.conversions     += row.conversions;
             city.total.conversionValue += row.conversionValue;
-            if (!city.cats[cat]) city.cats[cat] = { cost: 0, conversions: 0, conversionValue: 0 };
+            if (!city.cats[cat]) city.cats[cat] = { cost: 0, clicks: 0, conversions: 0, conversionValue: 0 };
             city.cats[cat].cost            += row.cost;
+            city.cats[cat].clicks          += row.clicks;
             city.cats[cat].conversions     += row.conversions;
             city.cats[cat].conversionValue += row.conversionValue;
         }
@@ -448,11 +450,12 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                                 <div className="px-5 py-3 border-b border-slate-700/50 flex flex-wrap items-center gap-x-6 gap-y-2">
                                     <div className="flex items-center gap-2">
                                         <span className="text-slate-400 text-xs font-medium">Клетка:</span>
-                                        <span className="inline-flex flex-col items-center bg-slate-700/40 rounded px-2 py-0.5 border border-slate-600/50">
+                                        <span className="inline-flex flex-col items-center bg-slate-700/40 rounded px-2 py-1 border border-slate-600/50">
                                             <span className="text-emerald-400 text-xs font-semibold leading-tight">32.3×</span>
                                             <span className="text-slate-500 text-[10px] leading-tight">€522</span>
+                                            <span className="text-slate-500 text-[10px] leading-tight">5 конв · 4.2%</span>
                                         </span>
-                                        <span className="text-slate-500 text-xs">= ROAS · Разход</span>
+                                        <span className="text-slate-500 text-xs">= ROAS · Разход · Конверсии · CVR</span>
                                     </div>
                                     <div className="flex items-center gap-3 text-xs">
                                         <span className="text-slate-400 font-medium">Цвят:</span>
@@ -492,13 +495,15 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                                                         return <td key={cat} className="px-3 py-2.5 text-center text-slate-700">—</td>;
                                                     }
                                                     const roas = cell.cost > 0 ? cell.conversionValue / cell.cost : null;
+                                                    const cvr = cell.clicks > 0 ? cell.conversions / cell.clicks : null;
                                                     const roasColor = roas === null ? 'text-slate-500' : roas >= 3 ? 'text-emerald-400' : roas >= 1 ? 'text-amber-400' : 'text-red-400';
                                                     const bgColor = roas === null ? '' : roas >= 3 ? 'bg-emerald-950/30' : roas >= 1 ? 'bg-amber-950/20' : 'bg-red-950/30';
                                                     return (
                                                         <td key={cat} className={`px-3 py-2.5 text-center ${bgColor}`}>
-                                                            <div title={`Spend: ${fmtEuro(cell.cost, 0)} · Conv: ${fmtNum(cell.conversions, 1)}`}>
+                                                            <div title={`Разход: ${fmtEuro(cell.cost, 0)} · Конв: ${fmtNum(cell.conversions, 1)} · CVR: ${cvr !== null ? fmtPct(cvr) : '—'}`}>
                                                                 <div className={`font-semibold ${roasColor}`}>{fmtX(roas)}</div>
                                                                 <div className="text-slate-500 text-[10px]">{fmtEuro(cell.cost, 0)}</div>
+                                                                <div className="text-slate-500 text-[10px]">{fmtNum(cell.conversions, 1)} конв · {cvr !== null ? fmtPct(cvr) : '—'}</div>
                                                             </div>
                                                         </td>
                                                     );
