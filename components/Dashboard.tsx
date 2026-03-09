@@ -5471,6 +5471,107 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
 
                                     </>
                                 )}
+
+                                {/* Campaign-level Keywords Section */}
+                                {navigation.level === 'campaign' && keywords.length > 0 && (() => {
+                                    const _c = campaigns.find(c => String(c.id) === String(navigation.campaignId));
+                                    const _ct = _c?.advertisingChannelType || '';
+                                    if (_ct === 'PERFORMANCE_MAX' || _ct === '10' || _ct === 'DISPLAY' || _ct === 'VIDEO' || _ct === 'DEMAND_GEN' || _ct === 'DISCOVERY') return null;
+                                    return (
+                                        <div id="keywords-section" className="rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden scroll-mt-24 mt-6">
+                                            <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                                                <h2 className="font-semibold text-white">Keywords & Quality Score</h2>
+                                                <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{keywords.length} keywords</span>
+                                            </div>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left text-sm">
+                                                    <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
+                                                        <tr>
+                                                            <th className="px-4 py-3 font-medium">Keyword</th>
+                                                            <th className="px-4 py-3 font-medium text-slate-400">Ad Group</th>
+                                                            <th className="px-4 py-3 text-right font-medium">Cost</th>
+                                                            <th className="px-4 py-3 text-right font-medium">Clicks</th>
+                                                            <th className="px-4 py-3 text-right font-medium">Conv.</th>
+                                                            <th className="px-4 py-3 text-right font-medium">CVR</th>
+                                                            <th className="px-4 py-3 text-right font-medium">Avg. CPC</th>
+                                                            <th className="px-4 py-3 text-right font-medium">CPA</th>
+                                                            <th className="px-4 py-3 text-right font-medium">IS</th>
+                                                            <th className="px-4 py-3 text-right font-medium">Lost (Rank)</th>
+                                                            <th className="px-4 py-3 text-center font-medium">QS</th>
+                                                            <th className="px-4 py-3 text-center font-medium">Exp. CTR</th>
+                                                            <th className="px-4 py-3 text-center font-medium">Ad Rel.</th>
+                                                            <th className="px-4 py-3 text-center font-medium">LP Exp.</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-700">
+                                                        {currentCampaign && (
+                                                            <ParentContextRow
+                                                                name={currentCampaign.name}
+                                                                type="Campaign"
+                                                                metrics={currentCampaign}
+                                                                colSpan={14}
+                                                                layout="keywords_campaign"
+                                                            />
+                                                        )}
+                                                        {keywords.map((kw) => (
+                                                            <tr key={kw.id} className="hover:bg-slate-700/30">
+                                                                <td className="px-4 py-3 text-white">
+                                                                    <span className="text-xs text-slate-500 mr-1">[{kw.matchType}]</span>
+                                                                    {kw.text}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-slate-400 text-xs max-w-[160px] truncate" title={kw.adGroupName}>
+                                                                    {kw.adGroupName || '—'}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right text-slate-300 text-sm">{kw.cost > 0 ? fmtEuro(kw.cost) : <span className="text-slate-600">—</span>}</td>
+                                                                <td className="px-4 py-3 text-right text-slate-300 text-sm">{kw.clicks > 0 ? fmtInt(kw.clicks) : <span className="text-slate-600">—</span>}</td>
+                                                                <td className="px-4 py-3 text-right text-slate-300 text-sm">{kw.conversions != null ? (kw.conversions === 0 ? '0' : fmtNum(kw.conversions, 1)) : <span className="text-slate-600">—</span>}</td>
+                                                                <td className="px-4 py-3 text-right text-slate-300 text-sm">{kw.conversions > 0 && kw.clicks > 0 ? fmtPct(kw.conversions / kw.clicks * 100, 2) : <span className="text-slate-600">—</span>}</td>
+                                                                <td className="px-4 py-3 text-right text-slate-300 text-sm">{kw.cost > 0 && kw.clicks > 0 ? fmtEuro(kw.cost / kw.clicks) : <span className="text-slate-600">—</span>}</td>
+                                                                <td className="px-4 py-3 text-right text-slate-300 text-sm">{kw.conversions > 0 && kw.cost > 0 ? fmtEuro(kw.cost / kw.conversions) : <span className="text-slate-600">—</span>}</td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    {kw.searchImpressionShare != null ? <span className={`font-medium ${getISColor(kw.searchImpressionShare)}`}>{fmtPct(kw.searchImpressionShare * 100)}</span> : <span className="text-slate-500 text-xs">—</span>}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    {kw.searchLostISRank != null ? <span className={`font-medium text-sm ${kw.searchLostISRank > 0.3 ? 'text-red-400' : 'text-slate-400'}`}>{fmtPct(kw.searchLostISRank * 100)}</span> : <span className="text-slate-500 text-xs">—</span>}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    {kw.qualityScore !== null && kw.qualityScore <= 6 ? (
+                                                                        <Tooltip text={getQSValueTip(kw.qualityScore)}>
+                                                                            <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)} border-b border-dashed ${kw.qualityScore <= 4 ? 'border-red-400/40' : 'border-amber-400/40'}`}>{kw.qualityScore}</span>
+                                                                        </Tooltip>
+                                                                    ) : (
+                                                                        <span className={`font-bold text-lg ${getQSColor(kw.qualityScore)}`}>{kw.qualityScore ?? '—'}</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    {kw.expectedCtr ? (kw.expectedCtr === 'BELOW_AVERAGE' ? (
+                                                                        <Tooltip text={getQSComponentTip('expectedCtr', kw.expectedCtr)}><span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">BELOW AVG</span></Tooltip>
+                                                                    ) : (
+                                                                        <span className={`text-xs px-2 py-0.5 rounded ${kw.expectedCtr === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>{kw.expectedCtr.replace('_', ' ')}</span>
+                                                                    )) : <span className="text-slate-600">—</span>}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    {kw.adRelevance ? (kw.adRelevance === 'BELOW_AVERAGE' ? (
+                                                                        <Tooltip text={getQSComponentTip('adRelevance', kw.adRelevance)}><span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">BELOW AVG</span></Tooltip>
+                                                                    ) : (
+                                                                        <span className={`text-xs px-2 py-0.5 rounded ${kw.adRelevance === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>{kw.adRelevance.replace('_', ' ')}</span>
+                                                                    )) : <span className="text-slate-600">—</span>}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    {kw.landingPageExperience ? (kw.landingPageExperience === 'BELOW_AVERAGE' ? (
+                                                                        <Tooltip text={getQSComponentTip('landingPageExperience', kw.landingPageExperience)}><span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border-b border-dashed border-red-400/40">BELOW AVG</span></Tooltip>
+                                                                    ) : (
+                                                                        <span className={`text-xs px-2 py-0.5 rounded ${kw.landingPageExperience === 'ABOVE_AVERAGE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/50 text-slate-300'}`}>{kw.landingPageExperience.replace('_', ' ')}</span>
+                                                                    )) : <span className="text-slate-600">—</span>}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                         </div>
