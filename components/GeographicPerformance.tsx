@@ -20,6 +20,9 @@ interface RegionalData {
     locationId: string;
     locationName: string;
     locationType: string;
+    campaignId: string;
+    campaignName: string;
+    campaignType: string;
     impressions: number;
     clicks: number;
     cost: number;
@@ -27,6 +30,35 @@ interface RegionalData {
     conversionValue: number;
     roas: number | null;
     cpa: number | null;
+}
+
+// Campaign category logic (mirrors SegmentProfitabilityHeatmap)
+const CAMP_CAT_META: Record<string, { label: string; color: string }> = {
+    pmax_aon:        { label: 'PMax AON',      color: 'text-purple-400' },
+    pmax_sale:       { label: 'PMax Sale',      color: 'text-pink-400' },
+    search_nonbrand: { label: 'Search NB',      color: 'text-blue-400' },
+    search_dsa:      { label: 'DSA',            color: 'text-cyan-400' },
+    brand:           { label: 'Brand',          color: 'text-emerald-400' },
+    upper_funnel:    { label: 'Video/Display',  color: 'text-orange-400' },
+    shopping:        { label: 'Shopping',       color: 'text-yellow-400' },
+    other:           { label: 'Other',          color: 'text-slate-400' },
+};
+
+function getCampCategory(name: string, chType: string): string {
+    const n = (name || '').toLowerCase();
+    const ch = String(chType || '');
+    if (n.includes('brand') || n.includes('защита')) return 'brand';
+    const isPMax = ch === 'PERFORMANCE_MAX' || ch === '10' || n.includes('pmax') || n.includes('performance');
+    if (isPMax) {
+        if (n.includes('[sale]') || n.includes('sale') || n.includes('promo') || n.includes('намал') || n.includes('промо') || n.includes('reducere')) return 'pmax_sale';
+        return 'pmax_aon';
+    }
+    if (n.includes('dsa')) return 'search_dsa';
+    if (n.includes('sn') || n.includes('search') || n.includes('wd_s')) return 'search_nonbrand';
+    if (ch === 'VIDEO' || ch === 'DISPLAY' || ch === 'DEMAND_GEN' || ch === '6' || ch === '3' || ch === '14' || ch === '12' ||
+        n.includes('video') || n.includes('display') || n.includes('youtube') || n.includes('dg - video')) return 'upper_funnel';
+    if (n.includes('shop') || ch === 'SHOPPING' || ch === '4') return 'shopping';
+    return 'other';
 }
 
 interface GeographicPerformanceProps {
@@ -76,7 +108,7 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
     const [citiesError, setCitiesError] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<string>('cost');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-    const [viewMode, setViewMode] = useState<'countries' | 'cities'>('countries');
+    const [viewMode, setViewMode] = useState<'countries' | 'cities' | 'matrix'>('countries');
     const [typeFilter, setTypeFilter] = useState<string>('all');
 
     useEffect(() => {
@@ -185,6 +217,41 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
             cpa: item.conversions > 0 ? item.cost / item.conversions : null,
             ctr: item.impressions > 0 ? item.clicks / item.impressions : 0,
         }));
+    }, [regionalData]);
+
+    // ── Campaign × City matrix ──
+    const matrixData = useMemo(() => {
+        // Build map: locationId → campCategory → aggregated metrics
+        type CellData = { cost: number; conversions: number; conversionValue: number };
+        const cityMap: Record<string, { name: string; total: CellData; cats: Record<string, CellData> }> = {};
+
+        for (const row of regionalData) {
+            const cat = getCampCategory(row.campaignName, row.campaignType);
+            if (!cityMap[row.locationId]) {
+                cityMap[row.locationId] = { name: row.locationName, total: { cost: 0, conversions: 0, conversionValue: 0 }, cats: {} };
+            }
+            const city = cityMap[row.locationId];
+            city.total.cost            += row.cost;
+            city.total.conversions     += row.conversions;
+            city.total.conversionValue += row.conversionValue;
+            if (!city.cats[cat]) city.cats[cat] = { cost: 0, conversions: 0, conversionValue: 0 };
+            city.cats[cat].cost            += row.cost;
+            city.cats[cat].conversions     += row.conversions;
+            city.cats[cat].conversionValue += row.conversionValue;
+        }
+
+        // Top 25 cities by total cost
+        const cities = Object.entries(cityMap)
+            .sort((a, b) => b[1].total.cost - a[1].total.cost)
+            .slice(0, 25)
+            .map(([id, d]) => ({ id, name: d.name, total: d.total, cats: d.cats }));
+
+        // Which campaign categories have any spend across these cities
+        const catSet = new Set<string>();
+        cities.forEach(c => Object.keys(c.cats).forEach(cat => catSet.add(cat)));
+        const activeCats = Object.keys(CAMP_CAT_META).filter(k => catSet.has(k));
+
+        return { cities, activeCats };
     }, [regionalData]);
 
     // Available location types for filtering
@@ -325,6 +392,15 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                             >
                                 Cities
                             </button>
+                            <button
+                                onClick={() => setViewMode('matrix')}
+                                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${viewMode === 'matrix'
+                                    ? 'bg-violet-600 text-white'
+                                    : 'text-slate-400 hover:text-white'
+                                }`}
+                            >
+                                Campaign × City
+                            </button>
                         </div>
 
                         {/* Type Filter (only in cities view) */}
@@ -341,11 +417,78 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                             </select>
                         )}
 
-                        <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-                            {displayData.length} {viewMode === 'countries' ? 'countries' : 'cities'}
-                        </span>
+                        {viewMode !== 'matrix' && (
+                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                {displayData.length} {viewMode === 'countries' ? 'countries' : 'cities'}
+                            </span>
+                        )}
+                        {viewMode === 'matrix' && (
+                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
+                                Top {matrixData.cities.length} cities
+                            </span>
+                        )}
                     </div>
                 </div>
+
+                {/* ── Matrix View ── */}
+                {viewMode === 'matrix' && (
+                    <div className="overflow-x-auto">
+                        {matrixData.cities.length === 0 ? (
+                            <div className="p-8 text-center text-slate-500 text-sm">No city-level data available.</div>
+                        ) : (
+                            <>
+                                <p className="px-5 py-2 text-xs text-slate-500">
+                                    Each cell shows ROAS · hover for spend & conversions. Color: <span className="text-emerald-400">green ≥ 3×</span> · <span className="text-amber-400">amber ≥ 1×</span> · <span className="text-red-400">red &lt; 1×</span>
+                                </p>
+                                <table className="w-full text-xs">
+                                    <thead className="bg-slate-700/50 text-slate-300 uppercase">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left font-medium sticky left-0 bg-slate-800 z-10 min-w-[180px]">City</th>
+                                            <th className="px-3 py-3 text-right font-medium text-slate-400">Total spend</th>
+                                            {matrixData.activeCats.map(cat => (
+                                                <th key={cat} className={`px-3 py-3 text-center font-medium ${CAMP_CAT_META[cat]?.color || 'text-slate-400'}`}>
+                                                    {CAMP_CAT_META[cat]?.label || cat}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700/50">
+                                        {matrixData.cities.map(city => (
+                                            <tr key={city.id} className="hover:bg-slate-700/20 transition-colors">
+                                                <td className="px-4 py-2.5 text-white font-medium sticky left-0 bg-slate-800 z-10 truncate max-w-[180px]">
+                                                    {city.name}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-right text-slate-300">
+                                                    {fmtEuro(city.total.cost, 0)}
+                                                </td>
+                                                {matrixData.activeCats.map(cat => {
+                                                    const cell = city.cats[cat];
+                                                    if (!cell || cell.cost === 0) {
+                                                        return <td key={cat} className="px-3 py-2.5 text-center text-slate-700">—</td>;
+                                                    }
+                                                    const roas = cell.cost > 0 ? cell.conversionValue / cell.cost : null;
+                                                    const roasColor = roas === null ? 'text-slate-500' : roas >= 3 ? 'text-emerald-400' : roas >= 1 ? 'text-amber-400' : 'text-red-400';
+                                                    const bgColor = roas === null ? '' : roas >= 3 ? 'bg-emerald-950/30' : roas >= 1 ? 'bg-amber-950/20' : 'bg-red-950/30';
+                                                    return (
+                                                        <td key={cat} className={`px-3 py-2.5 text-center ${bgColor}`}>
+                                                            <div title={`Spend: ${fmtEuro(cell.cost, 0)} · Conv: ${fmtNum(cell.conversions, 1)}`}>
+                                                                <div className={`font-semibold ${roasColor}`}>{fmtX(roas)}</div>
+                                                                <div className="text-slate-500 text-[10px]">{fmtEuro(cell.cost, 0)}</div>
+                                                            </div>
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* ── Countries / Cities Table ── */}
+                {viewMode !== 'matrix' && (
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
                         <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
@@ -428,6 +571,7 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                         </tbody>
                     </table>
                 </div>
+                )}
             </div>
         </div>
     );

@@ -2576,6 +2576,9 @@ export interface RegionalPerformance {
     locationId: string;
     locationName: string;
     locationType: string;
+    campaignId: string;
+    campaignName: string;
+    campaignType: string;
     impressions: number;
     clicks: number;
     cost: number;
@@ -2609,7 +2612,10 @@ export async function getRegionalPerformance(
         // Use geographic_view with geo_target_most_specific_location for city/region data
         const result = await customer.query(`
 SELECT
-segments.geo_target_most_specific_location,
+    campaign.id,
+    campaign.name,
+    campaign.advertising_channel_type,
+    segments.geo_target_most_specific_location,
     metrics.impressions,
     metrics.clicks,
     metrics.cost_micros,
@@ -2619,7 +2625,7 @@ segments.geo_target_most_specific_location,
         WHERE metrics.impressions > 0
             ${dateFilter}
         ORDER BY metrics.cost_micros DESC
-        LIMIT 1000
+        LIMIT 3000
     `);
 
         console.log(`[GoogleAds] getRegionalPerformance: got ${result.length} rows`);
@@ -2711,6 +2717,9 @@ geo_target_constant.id,
                     locationId,
                     locationName: locInfo?.canonicalName || locInfo?.name || `Location ${locationId} `,
                     locationType: locInfo?.type || 'Location',
+                    campaignId: row.campaign?.id?.toString() || '',
+                    campaignName: row.campaign?.name || '',
+                    campaignType: row.campaign?.advertising_channel_type?.toString() || '',
                     impressions: Number(row.metrics?.impressions) || 0,
                     clicks: Number(row.metrics?.clicks) || 0,
                     cost,
