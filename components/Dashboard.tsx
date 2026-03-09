@@ -428,6 +428,9 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                         {metrics.conversionValue > 0 ? fmtEuro(metrics.conversionValue, 0) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-400">
+                        {metrics.conversionValue > 0 ? fmtPct(metrics.cost / metrics.conversionValue * 100, 2) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
                         {metrics.clicks > 0 ? fmtEuro(metrics.cost / metrics.clicks) : '—'}
                     </td>
                 </>
@@ -3055,7 +3058,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                     className="bg-transparent text-xs text-white border-none focus:ring-0 cursor-pointer appearance-none hover:text-blue-400 transition-colors pl-0 pr-4"
                                 >
                                     <option value="none" className="bg-slate-800">None</option>
-                                    <option value="PoP" className="bg-slate-800">MoM / Previous</option>
+                                    <option value="PoP" className="bg-slate-800">Prev. Period</option>
                                     <option value="YoY" className="bg-slate-800">YoY (Last Year)</option>
                                 </select>
                             </div>
