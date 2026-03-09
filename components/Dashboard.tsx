@@ -409,7 +409,6 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
 
             {layout === 'search_terms' && (
                 <>
-                    <td colSpan={1}></td>
                     <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
                     <td className="px-4 py-3 text-right">{fmtInt(metrics.impressions || 0)}</td>
                     <td className="px-4 py-3 text-right text-slate-300">
@@ -486,7 +485,7 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                             layout === 'search' ? 18 :
                                 layout === 'pmax' ? 16 :
                                     layout === 'adgroup' ? 16 :
-                                        layout === 'search_terms' ? 12 :
+                                        layout === 'search_terms' ? 11 :
                                             layout === 'keywords' ? 13 :
                                                 layout === 'ads' ? 4 : 1
                 ) as number;
