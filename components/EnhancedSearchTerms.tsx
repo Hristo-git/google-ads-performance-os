@@ -11,7 +11,7 @@ interface EnhancedSearchTermsProps {
 
 export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) {
     const [groupByTerm, setGroupByTerm] = useState(false);
-    const [brandKeywords, setBrandKeywords] = useState('');
+    const [brandKeywords, setBrandKeywords] = useState('виденов, videnov, vellea, вилеа');
     const [brandFilter, setBrandFilter] = useState<'all' | 'branded' | 'non-branded'>('all');
 
     // Sorting State
