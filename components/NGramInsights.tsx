@@ -8,6 +8,8 @@ import { fmtNum, fmtInt, fmtEuro, fmtX, fmtPct } from '@/lib/format';
 interface NGramInsightsProps {
     searchTerms: any[];
     loading?: boolean;
+    dateRange?: { start: string; end: string };
+    onRequestLongerRange?: () => void;
 }
 
 // ---------- Brand / Dimension classification ----------
@@ -247,7 +249,12 @@ function BubbleChart({ data, typeFilter, fullscreen = false }: { data: (NGram & 
 }
 
 // ---------- Main component ----------
-export default function NGramInsights({ searchTerms, loading }: NGramInsightsProps) {
+export default function NGramInsights({ searchTerms, loading, dateRange, onRequestLongerRange }: NGramInsightsProps) {
+    const dayCount = dateRange
+        ? Math.round((new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / 86400000) + 1
+        : null;
+    const shortPeriod = dayCount !== null && dayCount < 30;
+
     const [activeTab, setActiveTab] = useState<TabType>('winning');
     const [nSize, setNSize] = useState<SizeFilter>(0);
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -440,6 +447,22 @@ export default function NGramInsights({ searchTerms, loading }: NGramInsightsPro
 
     return (
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
+
+            {/* ── Short period warning ─────────────────────── */}
+            {shortPeriod && (
+                <div className="flex items-center gap-3 px-5 py-3 bg-amber-500/10 border-b border-amber-500/30 text-amber-300 text-sm">
+                    <span className="text-amber-400 text-base">⚠</span>
+                    <span>Избраният период е <strong>{dayCount} дни</strong> — N-gram анализът е най-точен при 30+ дни (Google conversion window).</span>
+                    {onRequestLongerRange && (
+                        <button
+                            onClick={onRequestLongerRange}
+                            className="ml-auto shrink-0 px-3 py-1 text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg transition-colors"
+                        >
+                            Смени на последни 30 дни
+                        </button>
+                    )}
+                </div>
+            )}
 
             {/* ── Header ───────────────────────────────────── */}
             <div className="px-5 py-4 border-b border-slate-800 bg-slate-900/60 flex justify-between items-center">

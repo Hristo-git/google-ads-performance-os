@@ -11,6 +11,7 @@ import ConversionBreakdown from "./ConversionBreakdown";
 import GeographicPerformance from "./GeographicPerformance";
 import NegativeKeywordMiner from "./NegativeKeywordMiner";
 import AudiencesTab from "./AudiencesTab";
+import SegmentProfitabilityHeatmap from "./SegmentProfitabilityHeatmap";
 import ReactMarkdown from 'react-markdown';
 import { Campaign, AdGroup, NavigationState, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
 import { fmtNum, fmtPct } from '@/lib/format';
@@ -57,7 +58,7 @@ export default function StrategicInsights({
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
     const [selectedModel, setSelectedModel] = useState<string>('sonnet-4.5');
-    const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives' | 'audiences'>('breakdown');
+    const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives' | 'audiences' | 'profitability'>('breakdown');
 
     // --- Tab Persistence Logic ---
     const router = useRouter();
@@ -67,7 +68,7 @@ export default function StrategicInsights({
     // 1. Initialize tab from URL on mount
     useEffect(() => {
         const tabParam = searchParams.get('tab');
-        if (tabParam && ['breakdown', 'audit', 'ai', 'device', 'search', 'heatmap', 'landing', 'conversions', 'geographic', 'negatives', 'audiences'].includes(tabParam)) {
+        if (tabParam && ['breakdown', 'audit', 'ai', 'device', 'search', 'heatmap', 'landing', 'conversions', 'geographic', 'negatives', 'audiences', 'profitability'].includes(tabParam)) {
             if (activeTab !== tabParam) {
                 setActiveTab(tabParam as any);
             }
@@ -320,6 +321,9 @@ export default function StrategicInsights({
                 </button>
                 <button onClick={() => setActiveTab('audiences')} className={tabClass('audiences')}>
                     Audiences
+                </button>
+                <button onClick={() => setActiveTab('profitability')} className={tabClass('profitability')}>
+                    Profitability
                 </button>
             </div>
 
@@ -600,6 +604,10 @@ export default function StrategicInsights({
                         language={language}
                         campaignIds={filteredCampaignIds}
                     />
+                )}
+
+                {activeTab === 'profitability' && (
+                    <SegmentProfitabilityHeatmap campaigns={campaigns} />
                 )}
             </div>
         </div>

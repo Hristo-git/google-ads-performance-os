@@ -137,9 +137,9 @@ const MetricCell = ({ value, format, previous, invertColor = false }: { value: n
     );
 };
 
-const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: { name: string; type: string; metrics: any; colSpan: number; layout?: 'pmax' | 'search' | 'adgroup' | 'search_terms' | 'listing_group' | 'pmax_assets' | 'keywords' | 'ads' }) => {
+const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: { name: string; type: string; metrics: any; colSpan: number; layout?: 'pmax' | 'search' | 'adgroup' | 'search_terms' | 'listing_group' | 'pmax_assets' | 'keywords' | 'keywords_campaign' | 'ads' }) => {
     // Determine number of leading columns (before metrics)
-    const baseColSpan = layout === 'listing_group' ? 2 : 1;
+    const baseColSpan = layout === 'keywords_campaign' ? 2 : layout === 'listing_group' ? 2 : 1;
 
     return (
         <tr className="bg-slate-700/40 border-b border-slate-700 font-medium text-xs text-slate-300">
@@ -208,7 +208,7 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                 </>
             )}
 
-            {layout === 'keywords' && (
+            {(layout === 'keywords' || layout === 'keywords_campaign') && (
                 <>
                     <td className="px-4 py-3 text-right">{fmtEuro(metrics.cost || 0, 0)}</td>
                     <td className="px-4 py-3 text-right">{fmtInt(metrics.clicks || 0)}</td>
@@ -487,7 +487,8 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                                     layout === 'adgroup' ? 16 :
                                         layout === 'search_terms' ? 11 :
                                             layout === 'keywords' ? 13 :
-                                                layout === 'ads' ? 4 : 1
+                                                layout === 'keywords_campaign' ? 14 :
+                                                    layout === 'ads' ? 4 : 1
                 ) as number;
                 return colSpan > renderedCols ? <td colSpan={colSpan - renderedCols}></td> : null;
             })()}
@@ -3215,6 +3216,13 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             <NGramInsights
                                 searchTerms={healthData?.searchTerms || []}
                                 loading={loadingHealth}
+                                dateRange={dateRange}
+                                onRequestLongerRange={() => {
+                                    const end = new Date();
+                                    const start = new Date();
+                                    start.setDate(start.getDate() - 29);
+                                    setDateRange({ start: fmtDate(start), end: fmtDate(end) });
+                                }}
                             />
                         </div>
                     </main>
@@ -4758,6 +4766,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 <thead className="bg-slate-700/50 text-slate-300 uppercase text-xs">
                                                                     <tr>
                                                                         <th className="px-4 py-3 font-medium">Keyword</th>
+                                                                        {String(navigation.level) === 'campaign' && (
+                                                                            <th className="px-4 py-3 font-medium text-slate-400">Ad Group</th>
+                                                                        )}
                                                                         <th className="px-4 py-3 text-right font-medium">Cost</th>
                                                                         <th className="px-4 py-3 text-right font-medium">Clicks</th>
                                                                         <th className="px-4 py-3 text-right font-medium">Conv.</th>
@@ -4778,8 +4789,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             name={currentCampaign.name}
                                                                             type="Campaign"
                                                                             metrics={currentCampaign}
-                                                                            colSpan={13}
-                                                                            layout="keywords"
+                                                                            colSpan={14}
+                                                                            layout="keywords_campaign"
                                                                         />
                                                                     )}
                                                                     {String(navigation.level) === 'adgroup' && currentAdGroup && (
@@ -4797,6 +4808,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                                 <span className="text-xs text-slate-500 mr-1">[{kw.matchType}]</span>
                                                                                 {kw.text}
                                                                             </td>
+                                                                            {String(navigation.level) === 'campaign' && (
+                                                                                <td className="px-4 py-3 text-slate-400 text-xs max-w-[160px] truncate" title={kw.adGroupName}>
+                                                                                    {kw.adGroupName || '—'}
+                                                                                </td>
+                                                                            )}
                                                                             <td className="px-4 py-3 text-right text-slate-300 text-sm">
                                                                                 {kw.cost > 0 ? fmtEuro(kw.cost) : <span className="text-slate-600">—</span>}
                                                                             </td>
@@ -4895,7 +4911,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                     ))}
                                                                     {keywords.length === 0 && (
                                                                         <tr>
-                                                                            <td colSpan={13} className="px-6 py-8 text-center text-slate-500">
+                                                                            <td colSpan={String(navigation.level) === 'campaign' ? 14 : 13} className="px-6 py-8 text-center text-slate-500">
                                                                                 No keywords found.
                                                                             </td>
                                                                         </tr>
