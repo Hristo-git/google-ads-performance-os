@@ -54,9 +54,11 @@ function getCampCategory(name: string, chType: string): string {
         return 'pmax_aon';
     }
     if (n.includes('dsa')) return 'search_dsa';
-    if (n.includes('sn') || n.includes('search') || n.includes('wd_s')) return 'search_nonbrand';
-    if (ch === 'VIDEO' || ch === 'DISPLAY' || ch === 'DEMAND_GEN' || ch === '6' || ch === '3' || ch === '14' || ch === '12' ||
-        n.includes('video') || n.includes('display') || n.includes('youtube') || n.includes('dg - video')) return 'upper_funnel';
+    if (n.includes('sn - ') || n.includes('search') || n.includes('wd_s')) return 'search_nonbrand';
+    // DEMAND_GEN enum=16, VIDEO=6, DISPLAY=3; also match DG/DN campaign name prefix (Demand Gen / Display Network)
+    if (ch === 'VIDEO' || ch === 'DISPLAY' || ch === 'DEMAND_GEN' || ch === '6' || ch === '3' || ch === '16' || ch === '14' || ch === '12' ||
+        n.includes('video') || n.includes('display') || n.includes('youtube') ||
+        /^dg[\s\-]/.test(n) || /^dn[\s\-]/.test(n)) return 'upper_funnel';
     if (n.includes('shop') || ch === 'SHOPPING' || ch === '4') return 'shopping';
     return 'other';
 }
