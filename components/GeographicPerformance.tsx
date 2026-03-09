@@ -464,8 +464,12 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                                         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-900/50 border border-red-700/50 inline-block"></span><span className="text-red-400">&lt; 1× загуба</span></span>
                                         <span className="flex items-center gap-1"><span className="text-slate-600">—</span><span className="text-slate-500">без данни</span></span>
                                     </div>
-                                    <span className="ml-auto text-xs text-slate-500">
-                                        {matrixData.cities.filter(c => !citySearch || c.name.toLowerCase().includes(citySearch.toLowerCase())).length} от {matrixData.cities.length} града
+                                    <span className="ml-auto text-xs text-slate-500 flex flex-col items-end gap-0.5">
+                                        <span>{matrixData.cities.filter(c => !citySearch || c.name.toLowerCase().includes(citySearch.toLowerCase())).length} от {matrixData.cities.length} града</span>
+                                        {/* DEBUG – remove after diagnosis */}
+                                        <span className="text-[10px] text-amber-600/70 font-mono max-w-xs truncate" title={[...new Set(regionalData.map(r => r.campaignName))].join(' | ')}>
+                                            🔍 {[...new Set(regionalData.map(r => r.campaignName))].slice(0, 2).join(' · ') || '(no names)'}
+                                        </span>
                                     </span>
                                 </div>
                                 <table className="w-full text-xs">
