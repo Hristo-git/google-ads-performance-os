@@ -12,6 +12,7 @@ import GeographicPerformance from "./GeographicPerformance";
 import NegativeKeywordMiner from "./NegativeKeywordMiner";
 import AudiencesTab from "./AudiencesTab";
 import SegmentProfitabilityHeatmap from "./SegmentProfitabilityHeatmap";
+import SeasonalityOverlay from "./SeasonalityOverlay";
 import ReactMarkdown from 'react-markdown';
 import { Campaign, AdGroup, NavigationState, DeviceBreakdown as DeviceBreakdownType, SearchTerm } from "@/types/google-ads";
 import { fmtNum, fmtPct } from '@/lib/format';
@@ -58,7 +59,7 @@ export default function StrategicInsights({
     const [analysis, setAnalysis] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
     const [selectedModel, setSelectedModel] = useState<string>('sonnet-4.5');
-    const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives' | 'audiences' | 'profitability'>('breakdown');
+    const [activeTab, setActiveTab] = useState<'breakdown' | 'audit' | 'ai' | 'device' | 'search' | 'heatmap' | 'landing' | 'conversions' | 'geographic' | 'negatives' | 'audiences' | 'profitability' | 'seasonality'>('breakdown');
 
     // --- Tab Persistence Logic ---
     const router = useRouter();
@@ -68,7 +69,7 @@ export default function StrategicInsights({
     // 1. Initialize tab from URL on mount
     useEffect(() => {
         const tabParam = searchParams.get('tab');
-        if (tabParam && ['breakdown', 'audit', 'ai', 'device', 'search', 'heatmap', 'landing', 'conversions', 'geographic', 'negatives', 'audiences', 'profitability'].includes(tabParam)) {
+        if (tabParam && ['breakdown', 'audit', 'ai', 'device', 'search', 'heatmap', 'landing', 'conversions', 'geographic', 'negatives', 'audiences', 'profitability', 'seasonality'].includes(tabParam)) {
             if (activeTab !== tabParam) {
                 setActiveTab(tabParam as any);
             }
@@ -324,6 +325,9 @@ export default function StrategicInsights({
                 </button>
                 <button onClick={() => setActiveTab('profitability')} className={tabClass('profitability')}>
                     Profitability
+                </button>
+                <button onClick={() => setActiveTab('seasonality')} className={tabClass('seasonality')}>
+                    Seasonality
                 </button>
             </div>
 
@@ -608,6 +612,16 @@ export default function StrategicInsights({
 
                 {activeTab === 'profitability' && (
                     <SegmentProfitabilityHeatmap campaigns={campaigns} />
+                )}
+
+                {activeTab === 'seasonality' && (
+                    <div>
+                        <h2 className="text-xl font-bold text-white mb-4">Seasonality Overlay</h2>
+                        <p className="text-sm text-slate-400 mb-6">
+                            Compare the selected period against the previous period and the same period last year (YoY).
+                        </p>
+                        <SeasonalityOverlay customerId={customerId} dateRange={dateRange} />
+                    </div>
                 )}
             </div>
         </div>
