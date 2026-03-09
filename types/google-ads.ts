@@ -369,6 +369,8 @@ export interface SearchTerm {
     ctr: number;
     averageCpc: number;
     conversionRate: number;
+    allConversions?: number;
+    allConversionValue?: number;
 }
 
 export interface DeviceBreakdown {

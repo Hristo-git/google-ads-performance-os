@@ -2753,7 +2753,9 @@ SELECT
     metrics.clicks,
     metrics.cost_micros,
     metrics.conversions,
-    metrics.conversions_value
+    metrics.conversions_value,
+    metrics.all_conversions,
+    metrics.all_conversions_value
 FROM
     search_term_view
 WHERE
@@ -2792,6 +2794,8 @@ WHERE
                     cost,
                     conversions,
                     conversionValue: Number(row.metrics?.conversions_value) || 0,
+                    allConversions: Number(row.metrics?.all_conversions) || 0,
+                    allConversionValue: Number(row.metrics?.all_conversions_value) || 0,
                     ctr: impressions > 0 ? clicks / impressions : 0,
                     averageCpc: clicks > 0 ? cost / clicks : 0,
                     conversionRate: clicks > 0 ? conversions / clicks : 0,

@@ -45,7 +45,7 @@ function roasText(roas: number | null) {
 type TabType = 'winning' | 'wasteful';
 type SizeFilter = 0 | 1 | 2 | 3;
 type TypeFilter = 'all' | 'Brand' | 'Non-brand' | 'Dimension';
-type SortKey = 'conversions' | 'conversionValue' | 'aov' | 'roas' | 'cost' | 'cpa' | 'termCount';
+type SortKey = 'conversions' | 'conversionValue' | 'aov' | 'roas' | 'cost' | 'cpa' | 'termCount' | 'allConversions' | 'allConversionValue';
 type ViewDisplay = 'table' | 'bubble';
 
 // ---------- Bubble chart ----------
@@ -355,9 +355,9 @@ export default function NGramInsights({ searchTerms, loading, dateRange, onReque
             .filter(g => typeFilter === 'all' || (g as any).gramType === typeFilter);
 
         if (activeTab === 'winning') {
-            data = data.filter(g => g.conversions > 0);
+            data = data.filter(g => g.conversions > 0 || g.allConversions > 0);
         } else {
-            data = data.filter(g => g.conversions === 0 && g.cost > 2);
+            data = data.filter(g => g.conversions === 0 && g.allConversions === 0 && g.cost > 2);
         }
 
         if (searchTerm.trim()) {
@@ -610,8 +610,9 @@ export default function NGramInsights({ searchTerms, loading, dateRange, onReque
                                     <th className="px-3 py-3">Type</th>
                                     <SortHeader label="Terms" field="termCount" right />
                                     <SortHeader label="Spend (Share)" field="cost" />
-                                    <SortHeader label="Conv. (DDA)" field="conversions" right />
-                                    <SortHeader label="Conv. Value" field="conversionValue" right />
+                                    <SortHeader label="Conv. (LC)" field="conversions" right />
+                                    <SortHeader label="Conv. (DDA)" field="allConversions" right />
+                                    <SortHeader label="Value (DDA)" field="allConversionValue" right />
                                     <SortHeader label="AOV" field="aov" right />
                                     <SortHeader label="ROAS" field="roas" right />
                                     <SortHeader label="CPA" field="cpa" right />
@@ -641,15 +642,20 @@ export default function NGramInsights({ searchTerms, loading, dateRange, onReque
                                                 </div>
                                             </td>
                                             <td className="px-3 py-3 text-right">
-                                                <span className={g.conversions > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
+                                                <span className={g.conversions > 0 ? 'text-slate-300 font-semibold' : 'text-slate-600'}>
                                                     {g.conversions > 0 ? fmtNum(g.conversions, 2) : '—'}
                                                 </span>
                                             </td>
-                                            <td className="px-3 py-3 text-right text-slate-300 tabular-nums">
-                                                {g.conversionValue > 0 ? fmtEuro(g.conversionValue, 0) : '—'}
+                                            <td className="px-3 py-3 text-right">
+                                                <span className={g.allConversions > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
+                                                    {g.allConversions > 0 ? fmtNum(g.allConversions, 2) : '—'}
+                                                </span>
                                             </td>
                                             <td className="px-3 py-3 text-right text-emerald-400 tabular-nums">
-                                                {g.conversions > 0 ? fmtEuro(g.conversionValue / g.conversions, 0) : '—'}
+                                                {g.allConversionValue > 0 ? fmtEuro(g.allConversionValue, 0) : '—'}
+                                            </td>
+                                            <td className="px-3 py-3 text-right text-emerald-400 tabular-nums">
+                                                {g.allConversions > 0 ? fmtEuro(g.allConversionValue / g.allConversions, 0) : '—'}
                                             </td>
                                             <td className="px-3 py-3 text-right">
                                                 <span className={`px-2 py-0.5 rounded text-sm font-bold ${roasClass(g.roas)}`}>

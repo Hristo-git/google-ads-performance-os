@@ -59,6 +59,8 @@ export interface NGram {
     cost: number;
     conversions: number;
     conversionValue: number;
+    allConversions: number;
+    allConversionValue: number;
     termCount: number;      // how many distinct search terms contain this gram
     ctr: number;
     cpc: number;
@@ -73,6 +75,8 @@ export interface SearchTermInput {
     cost: number;
     conversions: number;
     conversionValue: number;
+    allConversions?: number;
+    allConversionValue?: number;
     date?: string; // ISO format date for lag filtering
 }
 
@@ -967,6 +971,8 @@ export function buildNGrams(
                     cost: 0,
                     conversions: 0,
                     conversionValue: 0,
+                    allConversions: 0,
+                    allConversionValue: 0,
                     termCount: 0,
                 };
 
@@ -975,6 +981,8 @@ export function buildNGrams(
                 existing.cost += term.cost;
                 existing.conversions += term.conversions;
                 existing.conversionValue += term.conversionValue;
+                existing.allConversions += term.allConversions || 0;
+                existing.allConversionValue += term.allConversionValue || 0;
                 existing.termCount += 1;
 
                 gramMap.set(gram, existing);
