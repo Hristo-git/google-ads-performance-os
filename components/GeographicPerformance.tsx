@@ -453,7 +453,7 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                                         <span className="inline-flex flex-col items-center bg-slate-700/40 rounded px-2 py-1 border border-slate-600/50">
                                             <span className="text-emerald-400 text-xs font-semibold leading-tight">32.3×</span>
                                             <span className="text-slate-500 text-[10px] leading-tight">€522</span>
-                                            <span className="text-slate-500 text-[10px] leading-tight">5 конв · 4.2%</span>
+                                            <span className="text-slate-400 text-[11px] leading-tight">5 конв · 4.2%</span>
                                         </span>
                                         <span className="text-slate-500 text-xs">= ROAS · Разход · Конверсии · CVR</span>
                                     </div>
@@ -464,12 +464,8 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                                         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-900/50 border border-red-700/50 inline-block"></span><span className="text-red-400">&lt; 1× загуба</span></span>
                                         <span className="flex items-center gap-1"><span className="text-slate-600">—</span><span className="text-slate-500">без данни</span></span>
                                     </div>
-                                    <span className="ml-auto text-xs text-slate-500 flex flex-col items-end gap-0.5">
-                                        <span>{matrixData.cities.filter(c => !citySearch || c.name.toLowerCase().includes(citySearch.toLowerCase())).length} от {matrixData.cities.length} града</span>
-                                        {/* DEBUG – remove after diagnosis */}
-                                        <span className="text-[10px] text-amber-600/70 font-mono max-w-xs truncate" title={[...new Set(regionalData.map(r => r.campaignName))].join(' | ')}>
-                                            🔍 {[...new Set(regionalData.map(r => r.campaignName))].slice(0, 2).join(' · ') || '(no names)'}
-                                        </span>
+                                    <span className="ml-auto text-xs text-slate-500">
+                                        {matrixData.cities.filter(c => !citySearch || c.name.toLowerCase().includes(citySearch.toLowerCase())).length} от {matrixData.cities.length} града
                                     </span>
                                 </div>
                                 <table className="w-full text-xs">
@@ -504,10 +500,10 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
                                                     const bgColor = roas === null ? '' : roas >= 3 ? 'bg-emerald-950/30' : roas >= 1 ? 'bg-amber-950/20' : 'bg-red-950/30';
                                                     return (
                                                         <td key={cat} className={`px-3 py-2.5 text-center ${bgColor}`}>
-                                                            <div title={`Разход: ${fmtEuro(cell.cost, 0)} · Конв: ${fmtNum(cell.conversions, 1)} · CVR: ${cvr !== null ? fmtPct(cvr) : '—'}`}>
-                                                                <div className={`font-semibold ${roasColor}`}>{fmtX(roas)}</div>
-                                                                <div className="text-slate-500 text-[10px]">{fmtEuro(cell.cost, 0)}</div>
-                                                                <div className="text-slate-500 text-[10px]">{fmtNum(cell.conversions, 1)} конв · {cvr !== null ? fmtPct(cvr) : '—'}</div>
+                                                            <div title={`Разход: ${fmtEuro(cell.cost, 0)} · Конв: ${fmtNum(cell.conversions, 1)} · CVR: ${cvr !== null ? fmtPct(cvr * 100) : '—'}`}>
+                                                                <div className={`text-sm font-semibold ${roasColor}`}>{fmtX(roas)}</div>
+                                                                <div className="text-slate-400 text-[11px]">{fmtEuro(cell.cost, 0)}</div>
+                                                                <div className="text-slate-400 text-[11px]">{fmtNum(cell.conversions, 1)} конв · {cvr !== null ? fmtPct(cvr * 100) : '—'}</div>
                                                             </div>
                                                         </td>
                                                     );
