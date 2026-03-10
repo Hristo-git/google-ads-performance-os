@@ -187,7 +187,9 @@ export async function GET(request: Request) {
         console.log(`[API/Health] Data counts: campaigns=${campaigns.length}, adGroups=${adGroups.length}, keywords=${keywords.length}, ads=${ads.length}, negatives=${negatives.length}, searchTerms=${searchTerms.length}`);
 
         // Map search terms to the format expected by runPreAnalysis
-        const searchTermInputs: SearchTermInput[] = searchTerms.map((st: any) => ({
+        const searchTermInputs: SearchTermInput[] = searchTerms
+            .filter((st: any) => st.term && typeof st.term === 'string')
+            .map((st: any) => ({
             searchTerm: st.term,
             impressions: st.impressions,
             clicks: st.clicks,

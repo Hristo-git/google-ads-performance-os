@@ -954,6 +954,7 @@ export function buildNGrams(
     const gramMap = new Map<string, Omit<NGram, 'ctr' | 'cpc' | 'roas' | 'conversionRate'>>();
 
     for (const term of searchTerms) {
+        if (!term.searchTerm) continue;  // skip rows with missing search term
         const words = term.searchTerm.toLowerCase().trim().split(/\s+/).filter(w => w.length > 0);
 
         for (let n = 1; n <= Math.min(maxN, words.length); n++) {

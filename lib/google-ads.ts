@@ -2772,6 +2772,7 @@ WHERE
             ORDER BY
                 segments.date DESC,
                 metrics.impressions DESC
+            LIMIT 15000
         `;
 
             const rows = await customer.query(query);
