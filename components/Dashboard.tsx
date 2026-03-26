@@ -997,6 +997,11 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     };
 
     // Sync state with URL parameter (from props) and trigger data refresh
+    // NOTE: selectedAccountId is intentionally NOT in the deps array.
+    // This effect should only fire when the customerId PROP changes (from the URL/parent).
+    // Including selectedAccountId caused an infinite loop: effect-1040 would update
+    // selectedAccountId → this effect would see customerId !== selectedAccountId (stale URL)
+    // → reset back to forbidden account → effect-1040 corrects again → repeat indefinitely.
     useEffect(() => {
         if (customerId && customerId !== selectedAccountId) {
             console.log(`[Dashboard] Account changed from ${selectedAccountId} to ${customerId} (reactive trigger)`);
@@ -1023,7 +1028,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
             // Update the selected account ID - this will trigger fetchCoreData via its dependency
             setSelectedAccountId(customerId);
         }
-    }, [customerId, selectedAccountId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [customerId]); // Only react to customerId prop changes, NOT selectedAccountId state changes
 
     // Derived state for filtered accounts based on permissions
     const filteredAccounts = useMemo(() => {
