@@ -1312,6 +1312,15 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
     const profit = data.profitabilityInputs || null;
     const frameworksBlock: string = data.frameworksBlock || '';
 
+    const conversionActions = data.conversionActions || [];
+    const searchTerms = data.searchTerms || [];
+    const deviceBreakdown = data.deviceBreakdown || [];
+    const landingPages = data.landingPages || [];
+    const hourOfDay = data.hourOfDay || [];
+    const dayOfWeek = data.dayOfWeek || [];
+    const negativeKeywords = data.negativeKeywords || [];
+    const auctionInsights = data.auctionInsights || [];
+
     const topAdGroups = [...adGroups]
       .sort((a: any, b: any) => (b.cost || 0) - (a.cost || 0))
       .slice(0, 30);
@@ -1329,6 +1338,14 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
 
     const topPmax = [...pmaxAssets]
       .sort((a: any, b: any) => (b.cost || b.impressions || 0) - (a.cost || a.impressions || 0))
+      .slice(0, 20);
+
+    const topSearchTerms = [...searchTerms]
+      .sort((a: any, b: any) => (b.cost || b.spend || 0) - (a.cost || a.spend || 0))
+      .slice(0, 50);
+
+    const topLandingPages = [...landingPages]
+      .sort((a: any, b: any) => (b.cost || 0) - (a.cost || 0))
       .slice(0, 20);
 
     const languageInstruction = isEn
@@ -1361,7 +1378,12 @@ ${frameworksBlock || '(Framework knowledge not available — proceed with genera
 ${profitBlock}
 
 === CAMPAIGN INVENTORY (Top ${topCampaigns.length} by spend of ${campaigns.length}) ===
-${topCampaigns.map((c: any) => `- ${c.name} | Channel: ${c.advertisingChannelType || 'N/A'} | Spend: €${(c.cost || 0).toFixed(2)} | Conv: ${c.conversions || 0} | ROAS: ${(c.roas || 0).toFixed(2)}x | CTR: ${(c.ctr || 0).toFixed(2)}%`).join('\n')}
+${topCampaigns.map((c: any) => `- ${c.name} | Channel: ${c.advertisingChannelType || 'N/A'} | Bidding: ${c.biddingStrategyType || 'N/A'} | Spend: €${(c.cost || 0).toFixed(2)} | Conv: ${(c.conversions || 0).toFixed(2)} | ROAS: ${(c.roas || 0).toFixed(2)}x | CTR: ${(c.ctr || 0).toFixed(2)}% | ImprShare: ${c.searchImpressionShare != null ? (c.searchImpressionShare * 100).toFixed(1) + '%' : 'N/A'} | LostBudget: ${c.searchLostISBudget != null ? (c.searchLostISBudget * 100).toFixed(1) + '%' : 'N/A'} | LostRank: ${c.searchLostISRank != null ? (c.searchLostISRank * 100).toFixed(1) + '%' : 'N/A'}`).join('\n')}
+
+=== CONVERSION ACTIONS (${conversionActions.length} total) ===
+${conversionActions.length
+  ? conversionActions.map((ca: any) => `- ${ca.name || 'N/A'} | Category: ${ca.category || 'N/A'} | Type: ${ca.type || 'N/A'} | Status: ${ca.status || 'N/A'} | PrimaryForGoal: ${ca.primaryForGoal ?? 'N/A'} | IncludeInConvMetric: ${ca.includeInConversionsMetric ?? 'N/A'} | CountingType: ${ca.countingType || 'N/A'} | ValuePerConv: ${ca.valuePerConversion != null ? ca.valuePerConversion.toFixed(2) : 'N/A'} | Attribution: ${ca.attributionModel || 'N/A'}`).join('\n')
+  : 'NOT AVAILABLE — conversion action breakdown was not retrieved. Flag tracking integrity as UNKNOWN in Section 2/4.'}
 
 === AD GROUPS (Top ${topAdGroups.length} by spend of ${adGroups.length}) ===
 ${topAdGroups.map((ag: any) => {
@@ -1384,6 +1406,45 @@ ${displayAssets.length ? displayAssets.slice(0, 30).map((a: any) => `- ${a.type 
 
 === ACCOUNT-LEVEL ASSETS (Sitelinks, Callouts, etc.) — ${accountAssets.length} total ===
 ${accountAssets.length ? accountAssets.slice(0, 20).map((a: any) => `- ${a.type || 'asset'} [${a.fieldType || 'N/A'}] ${a.name || ''} | Label: ${a.performanceLabel || 'N/A'}`).join('\n') : 'None'}
+
+=== SEARCH TERMS (Top ${topSearchTerms.length} by spend of ${searchTerms.length}) ===
+${topSearchTerms.length
+  ? topSearchTerms.map((st: any) => `- "${st.searchTerm || st.term || 'N/A'}" | Match: ${st.matchType || 'N/A'} | Campaign: ${st.campaignName || 'N/A'} | Impr: ${st.impressions || 0} | Clicks: ${st.clicks || 0} | Cost: €${(st.cost || st.spend || 0).toFixed(2)} | Conv: ${(st.conversions || 0).toFixed(2)} | ROAS: ${(st.roas || 0).toFixed(2)}x`).join('\n')
+  : 'NOT AVAILABLE — Search Terms not retrieved. Branded leakage status is UNKNOWN; all scaling recommendations are CONDITIONAL.'}
+
+=== NEGATIVE KEYWORDS (${negativeKeywords.length} total) ===
+${negativeKeywords.length
+  ? `Sample (first 30):\n${negativeKeywords.slice(0, 30).map((nk: any) => `- "${nk.text || nk.keyword || 'N/A'}" [${nk.matchType || 'N/A'}] @ ${nk.scope || nk.level || 'N/A'}${nk.campaignName ? ` / ${nk.campaignName}` : ''}`).join('\n')}`
+  : 'None or not available. Flag as gap in Section 3 (negative keyword coverage) and T-series action items.'}
+
+=== AUCTION INSIGHTS (Top ${auctionInsights.length} campaigns by spend) ===
+${auctionInsights.length
+  ? auctionInsights.map((ai: any) => {
+      const rows = Array.isArray(ai.auctionInsights) ? ai.auctionInsights : Array.isArray(ai.competitors) ? ai.competitors : Array.isArray(ai.data) ? ai.data : [];
+      const top = rows.slice(0, 10);
+      return `Campaign ${ai.campaignId}:\n${top.length ? top.map((r: any) => `  - ${r.displayName || r.domain || 'competitor'} | ImprShare: ${r.impressionShare != null ? (r.impressionShare * 100).toFixed(1) + '%' : 'N/A'} | Overlap: ${r.overlapRate != null ? (r.overlapRate * 100).toFixed(1) + '%' : 'N/A'} | TopOfPage: ${r.topOfPageRate != null ? (r.topOfPageRate * 100).toFixed(1) + '%' : 'N/A'} | Outrank: ${r.outrankingShare != null ? (r.outrankingShare * 100).toFixed(1) + '%' : 'N/A'}`).join('\n') : '  (no auction data)'}`;
+    }).join('\n\n')
+  : 'NOT AVAILABLE — Auction Insights not retrieved. Ad Rank diagnosis is limited.'}
+
+=== DEVICE BREAKDOWN (${deviceBreakdown.length} segments) ===
+${deviceBreakdown.length
+  ? deviceBreakdown.map((d: any) => `- ${d.device || d.deviceType || 'N/A'}: Impr ${d.impressions || 0} | Clicks ${d.clicks || 0} | CTR ${(d.ctr || 0).toFixed(2)}% | Cost €${(d.cost || 0).toFixed(2)} | Conv ${(d.conversions || 0).toFixed(2)} | CVR ${(d.conversionRate || d.cvr || 0).toFixed(2)}% | ROAS ${(d.roas || 0).toFixed(2)}x`).join('\n')
+  : 'NOT AVAILABLE — device split not retrieved.'}
+
+=== LANDING PAGES (Top ${topLandingPages.length} by spend of ${landingPages.length}) ===
+${topLandingPages.length
+  ? topLandingPages.map((lp: any) => `- ${lp.url || lp.expandedFinalUrl || 'N/A'} | Clicks: ${lp.clicks || 0} | Cost: €${(lp.cost || 0).toFixed(2)} | Conv: ${(lp.conversions || 0).toFixed(2)} | CVR: ${(lp.conversionRate || lp.cvr || 0).toFixed(2)}% | MobileFriendly: ${lp.mobileFriendlyClickRate != null ? (lp.mobileFriendlyClickRate * 100).toFixed(1) + '%' : 'N/A'} | ValidAMP: ${lp.validAcceleratedMobilePagesClickRate != null ? (lp.validAcceleratedMobilePagesClickRate * 100).toFixed(1) + '%' : 'N/A'}`).join('\n')
+  : 'NOT AVAILABLE — landing page data not retrieved.'}
+
+=== HOUR-OF-DAY PERFORMANCE (${hourOfDay.length} buckets) ===
+${hourOfDay.length
+  ? hourOfDay.map((h: any) => `- ${String(h.hour ?? h.hourOfDay ?? 'N/A').padStart(2, '0')}h: Clicks ${h.clicks || 0} | Cost €${(h.cost || 0).toFixed(2)} | Conv ${(h.conversions || 0).toFixed(2)} | CVR ${(h.conversionRate || h.cvr || 0).toFixed(2)}% | ROAS ${(h.roas || 0).toFixed(2)}x`).join('\n')
+  : 'NOT AVAILABLE — hourly data not retrieved.'}
+
+=== DAY-OF-WEEK PERFORMANCE (${dayOfWeek.length} days) ===
+${dayOfWeek.length
+  ? dayOfWeek.map((d: any) => `- ${d.dayOfWeek || d.day || 'N/A'}: Clicks ${d.clicks || 0} | Cost €${(d.cost || 0).toFixed(2)} | Conv ${(d.conversions || 0).toFixed(2)} | CVR ${(d.conversionRate || d.cvr || 0).toFixed(2)}% | ROAS ${(d.roas || 0).toFixed(2)}x`).join('\n')
+  : 'NOT AVAILABLE — day-of-week data not retrieved.'}
 
 === OUTPUT STRUCTURE (MANDATORY) ===
 
@@ -1409,11 +1470,16 @@ Follow this exact structure from the Ad Audit & Optimization System skill:
 - CVR evaluation and funnel alignment
 - Cost Efficiency per top creative = (Revenue − Ad Spend) ÷ Ad Spend
 - MER vs platform ROAS discrepancy — flag drift > 20%
+- **Tracking integrity check using the CONVERSION ACTIONS block**: verify which actions are PrimaryForGoal=true and IncludeInConversionsMetric=true. Flag any non-purchase action (page view, add-to-cart, get-directions, store-visit) that is primary — this inflates ROAS. Cross-reference implied AOV (campaign revenue ÷ conversions) against AOV from profitability inputs; if implied AOV is <10% of real AOV for a campaign, flag as micro-conversion inflation.
+- Device breakdown: identify device-level performance gaps using DEVICE BREAKDOWN data
 - CM2 impact and LTV:CAC commentary if profitability inputs were provided; otherwise note "inputs missing — enter AOV, COGS%, CM2%, LTV, target CAC"
 
 ### 3. Campaign Structure Audit
-- Branded vs non-branded isolation check
+- **Branded vs non-branded isolation check using the SEARCH TERMS block**: classify top terms as branded vs non-branded. If a ToF campaign shows >10% spend on branded terms, flag branded leakage explicitly and quantify the leaked spend. If SEARCH TERMS is NOT AVAILABLE, mark branded leakage as UNKNOWN and list it as a critical data gap.
+- **Bidding strategy alignment**: use the Bidding field in CAMPAIGN INVENTORY. Flag Smart Bidding on campaigns with fewer than 30 conversions/month as underpowered.
+- **Auction Insights**: if AUCTION INSIGHTS data is present, diagnose Ad Rank / position problems for the top campaigns (top-of-page rate, outranking share).
 - PMax cannibalization risk assessment
+- Negative keyword coverage: reference the NEGATIVE KEYWORDS count and flag campaigns that appear under-negativized.
 - Match types and Smart Bidding alignment
 - Ad-group-per-theme fragmentation or over-consolidation
 - Asset coverage: sitelinks, callouts, structured snippets, images
@@ -1423,10 +1489,10 @@ Follow this exact structure from the Ad Audit & Optimization System skill:
 - If inputs NOT provided: state this plainly and list the exact values the user must enter (AOV, COGS%, CM2%, LTV, target CAC, blended MER)
 
 ### 5. Offer Engineering Evaluation
-- Value stack assessment from ad copy and landing page signals
+- Value stack assessment from ad copy and LANDING PAGES data (top URLs by spend and their CVR)
 - Risk reversal presence and strength
 - Urgency implementation (ethical vs fake scarcity)
-- Conversion friction points and clarity issues
+- Conversion friction points: identify LANDING PAGES with low CVR relative to spend; flag as friction hotspots
 
 ### 6. Optimized Ad Variations
 Provide 3–5 rewritten variations. Each variation uses ONE framework. Keep product, offer, and URL identical across variations. For each variation:
@@ -1443,7 +1509,13 @@ Provide 3–5 rewritten variations. Each variation uses ONE framework. Keep prod
 - Success criteria and statistical significance guidelines
 
 ### 8. Technical Action Items
-Prioritized fix list, each item tied to a specific Google Ads Audit Kit line item. Cover: tracking corrections, negative keywords, bid strategy adjustments, feed optimization, asset refresh cadence.
+Prioritized fix list, each item tied to a specific Google Ads Audit Kit line item. Cover:
+- Tracking corrections (specific conversion actions to move to SECONDARY, based on CONVERSION ACTIONS data)
+- Negative keywords (specific branded or irrelevant terms surfaced by SEARCH TERMS data)
+- Bid strategy adjustments (per Bidding field in CAMPAIGN INVENTORY)
+- Feed optimization
+- Asset refresh cadence
+- Ad scheduling: if HOUR-OF-DAY or DAY-OF-WEEK shows ROAS variance > 30% between buckets, recommend ad scheduling rules with specific hours/days.
 
 ### 9. Strategic Recommendations
 - Scaling readiness verdict: GREEN / YELLOW / RED — based on the Precision Scaling Checklist

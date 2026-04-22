@@ -96,23 +96,70 @@ export default function CreativeAuditPage({
         setAnalysis('');
 
         try {
-            // Fan out parallel fetches for creative assets
-            const qs = `customerId=${encodeURIComponent(customerId)}${dateRange ? `&start=${dateRange.start}&end=${dateRange.end}` : ''}`;
-            const [pmaxRes, displayRes, assetsRes] = await Promise.allSettled([
+            // Fan out parallel fetches for creative assets + diagnostic data
+            const qs = `customerId=${encodeURIComponent(customerId)}`;
+            const qsDate = dateRange
+                ? `${qs}&startDate=${dateRange.start}&endDate=${dateRange.end}`
+                : qs;
+
+            // Top 3 campaigns by spend for Auction Insights (per-campaign endpoint)
+            const topCampaignIds = [...campaigns]
+                .sort((a: any, b: any) => (b.cost || 0) - (a.cost || 0))
+                .slice(0, 3)
+                .map((c: any) => c.id)
+                .filter(Boolean);
+
+            const [
+                pmaxRes,
+                displayRes,
+                assetsRes,
+                conversionActionsRes,
+                searchTermsRes,
+                deviceRes,
+                landingPagesRes,
+                hourOfDayRes,
+                dayOfWeekRes,
+                negativeKeywordsRes,
+                ...auctionInsightsResList
+            ] = await Promise.allSettled([
                 fetch(`/api/google-ads/pmax-assets?${qs}`).then(r => (r.ok ? r.json() : null)),
                 fetch(`/api/google-ads/display-ad-assets?${qs}`).then(r => (r.ok ? r.json() : null)),
                 fetch(`/api/google-ads/assets?${qs}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/google-ads/conversion-actions?${qsDate}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/google-ads/search-terms?${qsDate}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/google-ads/device-breakdown?${qsDate}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/google-ads/landing-pages?${qsDate}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/google-ads/hour-of-day?${qsDate}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/google-ads/day-of-week?${qsDate}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/google-ads/negative-keywords?${qs}`).then(r => (r.ok ? r.json() : null)),
+                ...topCampaignIds.map(id =>
+                    fetch(`/api/google-ads/auction-insights?${qsDate}&campaignId=${encodeURIComponent(id)}`)
+                        .then(r => (r.ok ? r.json() : null))
+                        .then(json => (json ? { campaignId: id, ...json } : null))
+                ),
             ]);
 
-            const pickArray = (res: PromiseSettledResult<any>): any[] => {
+            const pickArray = (res: PromiseSettledResult<any>, keys: string[] = []): any[] => {
                 if (res.status !== 'fulfilled' || !res.value) return [];
                 const v = res.value;
                 if (Array.isArray(v)) return v;
+                for (const k of keys) if (Array.isArray(v[k])) return v[k];
                 if (Array.isArray(v.assets)) return v.assets;
                 if (Array.isArray(v.data)) return v.data;
                 if (Array.isArray(v.items)) return v.items;
                 return [];
             };
+
+            const pickObject = (res: PromiseSettledResult<any>): any => {
+                if (res.status !== 'fulfilled' || !res.value) return null;
+                return res.value;
+            };
+
+            const auctionInsights = auctionInsightsResList
+                .map(r => pickObject(r))
+                .filter(Boolean);
+
+            const conversionActionsPayload = pickObject(conversionActionsRes);
 
             const dataPayload: any = {
                 customerId,
@@ -123,6 +170,15 @@ export default function CreativeAuditPage({
                 pmaxAssets: pickArray(pmaxRes),
                 displayAdAssets: pickArray(displayRes),
                 accountAssets: pickArray(assetsRes),
+                conversionActions: conversionActionsPayload?.conversionActions || [],
+                conversionTrends: conversionActionsPayload?.conversionTrends || [],
+                searchTerms: pickArray(searchTermsRes, ['searchTerms']),
+                deviceBreakdown: pickArray(deviceRes, ['deviceBreakdown']),
+                landingPages: pickArray(landingPagesRes, ['landingPages']),
+                hourOfDay: pickArray(hourOfDayRes, ['hourOfDayPerformance']),
+                dayOfWeek: pickArray(dayOfWeekRes, ['dayOfWeekPerformance']),
+                negativeKeywords: pickArray(negativeKeywordsRes, ['negativeKeywords']),
+                auctionInsights,
             };
 
             const res = await fetch('/api/reports/generate', {
