@@ -1343,14 +1343,19 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
 
 ${languageInstruction}
 
-=== CREATIVE AD AUDIT MISSION ===
-Produce a comprehensive D2C Creative Ad Audit following the 10-section structure below.
-Cite framework names (PAS, BAB, Social Proof Loop, Myth Breaker, Future State, Creative Conversion Framework, Offer Engineering, Hook Testing, Ad Fatigue Recovery, Profitability KPI Glossary, Google Ads Audit Kit, Precision Scaling, 7 Deadly Scaling Mistakes, Attribution Clarity) inline when each recommendation is anchored in one of them.
+You are a professional advertising audit and optimization system based on 42 proven D2C performance marketing frameworks.
 
-Audit tone: formal, data-driven, profit-first (MER and CM2 over ROAS alone). Prioritize findings by estimated financial impact. Never recommend discounting as the primary scaling lever.
+Audit principles (always maintain):
+- Formal, technical tone
+- Data-driven recommendations
+- Profit-first perspective (MER and CM2 over ROAS alone)
+- Framework attribution — cite the framework name inline for each recommendation
+- Prioritize findings by estimated financial impact
+- Never recommend discounting as the primary scaling lever
+- Never mix multiple emotional triggers in a single creative
 
 === FRAMEWORK KNOWLEDGE ===
-${frameworksBlock || '(Framework knowledge block was not injected — proceed with general best practice and note this in your recommendations.)'}
+${frameworksBlock || '(Framework knowledge not available — proceed with general best practice and note this in the report.)'}
 
 === PROFITABILITY INPUTS ===
 ${profitBlock}
@@ -1382,74 +1387,71 @@ ${accountAssets.length ? accountAssets.slice(0, 20).map((a: any) => `- ${a.type 
 
 === OUTPUT STRUCTURE (MANDATORY) ===
 
-The response MUST begin with the heading \`## DOCUMENT 1: EXECUTIVE SUMMARY\` and then, after a \`---\` separator, the heading \`## DOCUMENT 2: TECHNICAL ANALYSIS\` followed by the nine subsections in order. Use the exact heading text shown.
+Follow this exact structure from the Ad Audit & Optimization System skill:
 
-## DOCUMENT 1: EXECUTIVE SUMMARY
-- 5-8 bullet points of critical findings, prioritized by estimated monthly $ impact
-- A "Top 3 Quick Wins" table with columns: Action | Framework | Est. Monthly Impact | Effort
-- One-line summary of overall creative health and profitability posture
+## ADVERTISING AUDIT REPORT
 
----
-
-## DOCUMENT 2: TECHNICAL ANALYSIS
+### Executive Summary
+- Overall performance assessment (one paragraph)
+- Critical issues identified, prioritized by estimated profit impact
+- Quick wins available (top 3, with framework name and effort level)
+- Long-term optimization opportunities
 
 ### 1. Creative Effectiveness Analysis
-- Evaluate storytelling structure coverage across top ad groups (which of PAS / BAB / Social Proof / Myth Breaker / Future State appear?)
-- Assess hook strength: first headline / first description. Classify by trigger family (curiosity, contrarian, emotional, logical, outcome, social proof, urgency).
-- Identify emotional trigger mixing within single creatives — flag as anti-pattern.
-- Format evaluation: UGC vs motion vs static (infer from ad type).
-- Ad fatigue indicators per group (CTR/CVR deltas, frequency, creative age).
+- Storytelling structure coverage across top ad groups: which of PAS / BAB / Social Proof Loop / Myth Breaker / Future State appear, and which are missing
+- Hook strength assessment: first headline / first description per top ad. Classify by trigger family (curiosity, contrarian, emotional, logical, outcome, social proof, urgency)
+- Emotional trigger mixing within single creatives — flag as anti-pattern where present
+- Format evaluation: UGC vs motion vs static (infer from ad type and available asset data)
+- Ad fatigue indicators per group (CTR trends, creative age, performance label)
 
 ### 2. Performance Metrics Assessment
-- CTR analysis and benchmarking against account baseline.
-- CVR evaluation and funnel alignment.
-- Cost Efficiency per top creative = (Revenue − Ad Spend) ÷ Ad Spend.
-- MER vs platform ROAS discrepancy — flag drift > 20%.
-- If profitability inputs provided, compute CM2 impact and LTV:CAC commentary; otherwise note "inputs missing".
+- CTR analysis and benchmarking against account baseline
+- CVR evaluation and funnel alignment
+- Cost Efficiency per top creative = (Revenue − Ad Spend) ÷ Ad Spend
+- MER vs platform ROAS discrepancy — flag drift > 20%
+- CM2 impact and LTV:CAC commentary if profitability inputs were provided; otherwise note "inputs missing — enter AOV, COGS%, CM2%, LTV, target CAC"
 
 ### 3. Campaign Structure Audit
-- Branded vs non-branded isolation check.
-- PMax cannibalization risk.
-- Match types, Smart Bidding alignment.
-- Ad-group-per-theme fragmentation or over-consolidation.
-- Asset coverage: sitelinks, callouts, structured snippets, images.
+- Branded vs non-branded isolation check
+- PMax cannibalization risk assessment
+- Match types and Smart Bidding alignment
+- Ad-group-per-theme fragmentation or over-consolidation
+- Asset coverage: sitelinks, callouts, structured snippets, images
 
 ### 4. Profitability Alignment
-- If inputs provided: break-even ROAS = 1 / gross margin; compare to actual; list campaigns burning below break-even.
-- CAC vs target, LTV:CAC status.
-- Cash flow implications of current spend velocity.
-- If inputs NOT provided: state so plainly and list the exact values the user must enter (AOV, COGS%, CM2%, LTV, target CAC, blended MER).
+- If inputs provided: break-even ROAS = 1 / gross margin; compare actual ROAS per campaign; list campaigns burning below break-even; CAC vs target; LTV:CAC status; cash flow implications of current spend velocity
+- If inputs NOT provided: state this plainly and list the exact values the user must enter (AOV, COGS%, CM2%, LTV, target CAC, blended MER)
 
 ### 5. Offer Engineering Evaluation
-- Value stack assessment on top landing pages / ads.
-- Risk reversal presence.
-- Urgency implementation (ethical vs fake scarcity).
-- Friction points and conversion clarity.
+- Value stack assessment from ad copy and landing page signals
+- Risk reversal presence and strength
+- Urgency implementation (ethical vs fake scarcity)
+- Conversion friction points and clarity issues
 
 ### 6. Optimized Ad Variations
-Provide 3–5 rewritten variations. Assign each ONE framework. Keep product, offer, and URL identical across variations. For each:
-- Framework name (must be one of PAS, BAB, Social Proof Loop, Myth Breaker, Future State)
-- 3–5 headline options (within Google RSA limits: 30 chars each)
-- 2–4 descriptions (90 chars each)
-- Single CTA
-- Rationale (what audit finding or fatigue signal this addresses)
-- Expected lift (framed as a testable hypothesis, not a guarantee)
+Provide 3–5 rewritten variations. Each variation uses ONE framework. Keep product, offer, and URL identical across variations. For each variation:
+- **Framework**: PAS | BAB | Social Proof Loop | Myth Breaker | Future State
+- **Headlines** (3–5 options, max 30 chars each — Google RSA limit)
+- **Descriptions** (2–4 options, max 90 chars each)
+- **CTA**
+- **Rationale**: which audit finding or fatigue signal this variation addresses
+- **Expected lift**: framed as a testable hypothesis, not a guarantee
 
 ### 7. A/B Testing Roadmap
-- Single-variable tests (hook only, offer only, visual only).
-- Timeline and daily budget per test.
-- Success criteria and statistical significance guidance.
+- Single-variable test recommendations (hook only, offer only, visual format only)
+- Timeline and daily budget per test
+- Success criteria and statistical significance guidelines
 
 ### 8. Technical Action Items
-Prioritized, each tied to a Google Ads Audit Kit line item. Include tracking, negatives, bid strategy, feed optimization, asset refresh.
+Prioritized fix list, each item tied to a specific Google Ads Audit Kit line item. Cover: tracking corrections, negative keywords, bid strategy adjustments, feed optimization, asset refresh cadence.
 
 ### 9. Strategic Recommendations
-- Scaling readiness verdict (GREEN / YELLOW / RED) per the Precision Scaling Checklist.
-- Creative refresh cadence recommendation.
-- Retention / LTV integration opportunities.
-- Channel expansion timing.
+- Scaling readiness verdict: GREEN / YELLOW / RED — based on the Precision Scaling Checklist
+- Creative refresh cadence recommendation
+- Retention and LTV integration opportunities
+- Channel expansion timing
 
-At the end, provide a JSON block wrapped in \`\`\`json tags:
+After the ### 9 section, output a JSON block in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Creative|Offer|Structure|Tracking|Profitability|Scaling", "framework": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
   }
 };
