@@ -15,8 +15,6 @@ import * as dotenv from 'dotenv';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
-import { upsertFramework } from '../lib/pinecone';
-
 const CONTENT_DIR = path.resolve(process.cwd(), 'scripts', 'framework-content');
 
 // ~1000 tokens ≈ 4000 chars (conservative); 100 token overlap ≈ 400 chars
@@ -54,6 +52,8 @@ async function main() {
     }
 
     console.log(`[embed-frameworks] Embedding ${indexEntries.length} frameworks into Pinecone namespace "frameworks"`);
+
+    const { upsertFramework } = await import('../lib/pinecone');
 
     let totalChunks = 0;
     let succeeded = 0;
