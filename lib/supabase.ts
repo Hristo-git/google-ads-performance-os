@@ -448,3 +448,60 @@ export async function deleteReport(reportId: string): Promise<boolean> {
 
   return true;
 }
+
+// ============================================================
+// Profitability Inputs (per-customer margin/LTV/CAC data)
+// Used by the Creative Ad Audit template since Google Ads API
+// does not expose COGS, contribution margins, LTV, CAC, etc.
+// ============================================================
+
+export interface ProfitabilityInputsRow {
+  customer_id: string;
+  currency: string | null;
+  avg_order_value: number | null;
+  cogs_percent: number | null;
+  cm1_percent: number | null;
+  cm2_percent: number | null;
+  cm3_percent: number | null;
+  target_ltv: number | null;
+  target_cac: number | null;
+  blended_mer: number | null;
+  break_even_roas: number | null;
+  notes: string | null;
+  updated_at: string;
+}
+
+export async function getProfitabilityInputs(customerId: string): Promise<ProfitabilityInputsRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from('customer_profitability_inputs')
+    .select('*')
+    .eq('customer_id', customerId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Supabase] Error fetching profitability inputs:', error.message);
+    return null;
+  }
+
+  return (data as ProfitabilityInputsRow) || null;
+}
+
+export async function saveProfitabilityInputs(
+  inputs: Partial<ProfitabilityInputsRow> & { customer_id: string }
+): Promise<{ saved: boolean; error?: string }> {
+  const payload = {
+    ...inputs,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabaseAdmin
+    .from('customer_profitability_inputs')
+    .upsert(payload, { onConflict: 'customer_id' });
+
+  if (error) {
+    console.error('[Supabase] Error saving profitability inputs:', error);
+    return { saved: false, error: error.message };
+  }
+
+  return { saved: true };
+}

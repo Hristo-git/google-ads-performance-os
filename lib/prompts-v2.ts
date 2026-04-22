@@ -1299,6 +1299,158 @@ Based on confidence level:
 
 At the end, provide a JSON block wrapped in \`\`\`json tags:
 { "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Scale Change|Revert|Refine|Monitor", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
+  },
+
+  creative_ad_audit: (data: any, language: 'bg' | 'en') => {
+    const isEn = language === 'en';
+    const adGroups = data.adGroups || [];
+    const ads = data.ads || [];
+    const campaigns = data.campaigns || [];
+    const pmaxAssets = data.pmaxAssets || [];
+    const displayAssets = data.displayAdAssets || [];
+    const accountAssets = data.accountAssets || [];
+    const profit = data.profitabilityInputs || null;
+    const frameworksBlock: string = data.frameworksBlock || '';
+
+    const topAdGroups = [...adGroups]
+      .sort((a: any, b: any) => (b.cost || 0) - (a.cost || 0))
+      .slice(0, 30);
+
+    const adsByGroup = new Map<string, any[]>();
+    for (const ad of ads) {
+      const list = adsByGroup.get(ad.adGroupId) || [];
+      list.push(ad);
+      adsByGroup.set(ad.adGroupId, list);
+    }
+
+    const topCampaigns = [...campaigns]
+      .sort((a: any, b: any) => (b.cost || 0) - (a.cost || 0))
+      .slice(0, 20);
+
+    const topPmax = [...pmaxAssets]
+      .sort((a: any, b: any) => (b.cost || b.impressions || 0) - (a.cost || a.impressions || 0))
+      .slice(0, 20);
+
+    const languageInstruction = isEn
+      ? 'IMPORTANT: Your entire response MUST be in English.'
+      : 'IMPORTANT: Целият ти отговор ТРЯБВА да бъде на български език.';
+
+    const profitBlock = profit
+      ? `AOV: ${profit.avgOrderValue ?? 'N/A'} ${profit.currency || ''} | COGS%: ${profit.cogsPercent ?? 'N/A'} | CM1%: ${profit.cm1Percent ?? 'N/A'} | CM2%: ${profit.cm2Percent ?? 'N/A'} | CM3%: ${profit.cm3Percent ?? 'N/A'} | Target LTV: ${profit.targetLtv ?? 'N/A'} | Target CAC: ${profit.targetCac ?? 'N/A'} | Blended MER: ${profit.blendedMer ?? 'N/A'} | Break-even ROAS: ${profit.breakEvenRoas ?? 'N/A'}${profit.notes ? ` | Notes: ${profit.notes}` : ''}`
+      : 'NOT PROVIDED — In Section 4 (Profitability Alignment), explicitly state that CM1/CM2/CM3, LTV, CAC, and MER inputs were NOT provided. List the specific values the user needs to enter. Do NOT fabricate numbers. The rest of the audit can proceed without them.';
+
+    return `${ANALYSIS_SYSTEM_PROMPT_V3}
+
+${languageInstruction}
+
+=== CREATIVE AD AUDIT MISSION ===
+Produce a comprehensive D2C Creative Ad Audit following the 10-section structure below.
+Cite framework names (PAS, BAB, Social Proof Loop, Myth Breaker, Future State, Creative Conversion Framework, Offer Engineering, Hook Testing, Ad Fatigue Recovery, Profitability KPI Glossary, Google Ads Audit Kit, Precision Scaling, 7 Deadly Scaling Mistakes, Attribution Clarity) inline when each recommendation is anchored in one of them.
+
+Audit tone: formal, data-driven, profit-first (MER and CM2 over ROAS alone). Prioritize findings by estimated financial impact. Never recommend discounting as the primary scaling lever.
+
+=== FRAMEWORK KNOWLEDGE ===
+${frameworksBlock || '(Framework knowledge block was not injected — proceed with general best practice and note this in your recommendations.)'}
+
+=== PROFITABILITY INPUTS ===
+${profitBlock}
+
+=== CAMPAIGN INVENTORY (Top ${topCampaigns.length} by spend of ${campaigns.length}) ===
+${topCampaigns.map((c: any) => `- ${c.name} | Channel: ${c.advertisingChannelType || 'N/A'} | Spend: €${(c.cost || 0).toFixed(2)} | Conv: ${c.conversions || 0} | ROAS: ${(c.roas || 0).toFixed(2)}x | CTR: ${(c.ctr || 0).toFixed(2)}%`).join('\n')}
+
+=== AD GROUPS (Top ${topAdGroups.length} by spend of ${adGroups.length}) ===
+${topAdGroups.map((ag: any) => {
+    const groupAds = (adsByGroup.get(ag.id) || []).slice(0, 15);
+    const adBlock = groupAds.length
+      ? groupAds.map((ad: any) => `    Ad ${ad.id} [${ad.adStrength || 'N/A'} | ${ad.type || 'N/A'}] CTR: ${(ad.ctr || 0).toFixed(2)}% | Conv: ${ad.conversions || 0}
+      Headlines: ${(ad.headlines || []).join(' | ') || 'N/A'}
+      Descriptions: ${(ad.descriptions || []).join(' | ') || 'N/A'}
+      URL: ${(ad.finalUrls || [])[0] || 'N/A'}`).join('\n')
+      : '    (no ads available)';
+    return `- ${ag.name} | ${ag.campaignName || 'N/A'} | Strength: ${ag.adStrength || 'N/A'} | Spend: €${(ag.cost || 0).toFixed(2)} | CTR: ${(ag.ctr || 0).toFixed(2)}% | Conv: ${ag.conversions || 0}
+${adBlock}`;
+  }).join('\n')}
+
+=== PMAX ASSET GROUPS (Top ${topPmax.length} of ${pmaxAssets.length}) ===
+${topPmax.length ? topPmax.map((ag: any) => `- ${ag.name || ag.id} | Campaign: ${ag.campaignName || 'N/A'} | Strength: ${ag.strength || 'N/A'} | Spend: €${(ag.cost || 0).toFixed(2)} | Conv: ${ag.conversions || 0}${ag.performanceLabel ? ` | Label: ${ag.performanceLabel}` : ''}`).join('\n') : 'None'}
+
+=== DISPLAY / RESPONSIVE DISPLAY ASSETS (${displayAssets.length}) ===
+${displayAssets.length ? displayAssets.slice(0, 30).map((a: any) => `- ${a.type || a.fieldType || 'asset'} | Label: ${a.performanceLabel || 'N/A'} | Impr: ${a.impressions || 0} | CTR: ${(a.ctr || 0).toFixed(2)}%`).join('\n') : 'None'}
+
+=== ACCOUNT-LEVEL ASSETS (Sitelinks, Callouts, etc.) — ${accountAssets.length} total ===
+${accountAssets.length ? accountAssets.slice(0, 20).map((a: any) => `- ${a.type || 'asset'} [${a.fieldType || 'N/A'}] ${a.name || ''} | Label: ${a.performanceLabel || 'N/A'}`).join('\n') : 'None'}
+
+=== OUTPUT STRUCTURE (MANDATORY) ===
+
+The response MUST begin with the heading \`## DOCUMENT 1: EXECUTIVE SUMMARY\` and then, after a \`---\` separator, the heading \`## DOCUMENT 2: TECHNICAL ANALYSIS\` followed by the nine subsections in order. Use the exact heading text shown.
+
+## DOCUMENT 1: EXECUTIVE SUMMARY
+- 5-8 bullet points of critical findings, prioritized by estimated monthly $ impact
+- A "Top 3 Quick Wins" table with columns: Action | Framework | Est. Monthly Impact | Effort
+- One-line summary of overall creative health and profitability posture
+
+---
+
+## DOCUMENT 2: TECHNICAL ANALYSIS
+
+### 1. Creative Effectiveness Analysis
+- Evaluate storytelling structure coverage across top ad groups (which of PAS / BAB / Social Proof / Myth Breaker / Future State appear?)
+- Assess hook strength: first headline / first description. Classify by trigger family (curiosity, contrarian, emotional, logical, outcome, social proof, urgency).
+- Identify emotional trigger mixing within single creatives — flag as anti-pattern.
+- Format evaluation: UGC vs motion vs static (infer from ad type).
+- Ad fatigue indicators per group (CTR/CVR deltas, frequency, creative age).
+
+### 2. Performance Metrics Assessment
+- CTR analysis and benchmarking against account baseline.
+- CVR evaluation and funnel alignment.
+- Cost Efficiency per top creative = (Revenue − Ad Spend) ÷ Ad Spend.
+- MER vs platform ROAS discrepancy — flag drift > 20%.
+- If profitability inputs provided, compute CM2 impact and LTV:CAC commentary; otherwise note "inputs missing".
+
+### 3. Campaign Structure Audit
+- Branded vs non-branded isolation check.
+- PMax cannibalization risk.
+- Match types, Smart Bidding alignment.
+- Ad-group-per-theme fragmentation or over-consolidation.
+- Asset coverage: sitelinks, callouts, structured snippets, images.
+
+### 4. Profitability Alignment
+- If inputs provided: break-even ROAS = 1 / gross margin; compare to actual; list campaigns burning below break-even.
+- CAC vs target, LTV:CAC status.
+- Cash flow implications of current spend velocity.
+- If inputs NOT provided: state so plainly and list the exact values the user must enter (AOV, COGS%, CM2%, LTV, target CAC, blended MER).
+
+### 5. Offer Engineering Evaluation
+- Value stack assessment on top landing pages / ads.
+- Risk reversal presence.
+- Urgency implementation (ethical vs fake scarcity).
+- Friction points and conversion clarity.
+
+### 6. Optimized Ad Variations
+Provide 3–5 rewritten variations. Assign each ONE framework. Keep product, offer, and URL identical across variations. For each:
+- Framework name (must be one of PAS, BAB, Social Proof Loop, Myth Breaker, Future State)
+- 3–5 headline options (within Google RSA limits: 30 chars each)
+- 2–4 descriptions (90 chars each)
+- Single CTA
+- Rationale (what audit finding or fatigue signal this addresses)
+- Expected lift (framed as a testable hypothesis, not a guarantee)
+
+### 7. A/B Testing Roadmap
+- Single-variable tests (hook only, offer only, visual only).
+- Timeline and daily budget per test.
+- Success criteria and statistical significance guidance.
+
+### 8. Technical Action Items
+Prioritized, each tied to a Google Ads Audit Kit line item. Include tracking, negatives, bid strategy, feed optimization, asset refresh.
+
+### 9. Strategic Recommendations
+- Scaling readiness verdict (GREEN / YELLOW / RED) per the Precision Scaling Checklist.
+- Creative refresh cadence recommendation.
+- Retention / LTV integration opportunities.
+- Channel expansion timing.
+
+At the end, provide a JSON block wrapped in \`\`\`json tags:
+{ "todos": [{ "task": "string", "impact": "High|Medium|Low", "timeframe": "Immediate|Short-term|Medium-term", "category": "Creative|Offer|Structure|Tracking|Profitability|Scaling", "framework": "string", "estimated_lift": "string", "effort": "Low|Medium|High" }] }`;
   }
 };
 

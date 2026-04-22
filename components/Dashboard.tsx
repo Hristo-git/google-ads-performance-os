@@ -17,6 +17,7 @@ import AIAnalysisModal from "./AIAnalysisModal";
 import StrategicInsights from "./StrategicInsights";
 
 import AIReportsHub from "./AIReportsHub";
+import CreativeAuditPage from "./CreativeAuditPage";
 import AccountHealthWidget from "./AccountHealthWidget";
 import NGramInsights from "./NGramInsights";
 import { BackgroundReportIndicator } from "./BackgroundReportIndicator";
@@ -2936,8 +2937,9 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             <h1 className="text-xl font-bold text-white mt-1">
                                 {navigation.view === 'insights' ? 'Strategic Insights' :
                                     navigation.view === 'reports' ? 'AI Reports' :
-                                        navigation.view === 'diagnostics' ? 'Diagnostics' :
-                                            navigation.view === 'ngrams' ? 'N-Grams' :
+                                        navigation.view === 'creative_audit' ? 'Creative Audit' :
+                                            navigation.view === 'diagnostics' ? 'Diagnostics' :
+                                                navigation.view === 'ngrams' ? 'N-Grams' :
                                                 navigation.level === 'campaign' ? (
                                                     (campaigns.find(c => String(c.id) === String(navigation.campaignId))?.advertisingChannelType === 'PERFORMANCE_MAX' ||
                                                         campaigns.find(c => String(c.id) === String(navigation.campaignId))?.name.toLowerCase().includes('pmax'))
@@ -3201,6 +3203,17 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                             userRole={((session?.user as any)?.role === 'admin') ? 'admin' : 'viewer'}
                         />
                     </main>
+                ) : navigation.view === 'creative_audit' ? (
+                    <CreativeAuditPage
+                        campaigns={enrichWithSmartBidding(campaigns)}
+                        adGroups={adGroups}
+                        ads={ads}
+                        language={language}
+                        setLanguage={setLanguage}
+                        customerId={selectedAccountId}
+                        dateRange={dateRange}
+                        userRole={((session?.user as any)?.role === 'admin') ? 'admin' : 'viewer'}
+                    />
                 ) : navigation.view === 'diagnostics' ? (
                     <main className="flex-1 overflow-auto p-6 space-y-6">
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">

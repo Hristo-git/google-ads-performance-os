@@ -311,7 +311,7 @@ export interface Account {
 }
 
 export type NavigationLevel = 'account' | 'campaign' | 'adgroup';
-export type ViewMode = 'dashboard' | 'insights' | 'reports' | 'diagnostics' | 'ngrams' | 'auction_insights';
+export type ViewMode = 'dashboard' | 'insights' | 'reports' | 'diagnostics' | 'ngrams' | 'auction_insights' | 'creative_audit';
 
 export interface NavigationState {
     level: NavigationLevel;
@@ -393,7 +393,8 @@ export type ReportTemplateId =
     | 'ad_strength_performance'
     | 'budget_allocation_efficiency'
     | 'campaign_structure_health'
-    | 'change_impact_analysis';
+    | 'change_impact_analysis'
+    | 'creative_ad_audit';
 
 export type ReportCategory = 'quality' | 'efficiency' | 'insights' | 'structure';
 
@@ -405,7 +406,23 @@ export interface ReportTemplate {
     descriptionBG: string;
     icon: string; // emoji or icon identifier
     category: ReportCategory;
-    requiredData: ('campaigns' | 'adGroups' | 'keywords' | 'searchTerms' | 'ads')[];
+    requiredData: ('campaigns' | 'adGroups' | 'keywords' | 'searchTerms' | 'ads' | 'creativeAssets' | 'profitabilityInputs')[];
+}
+
+export interface ProfitabilityInputs {
+    customerId: string;
+    currency?: string;
+    avgOrderValue?: number | null;
+    cogsPercent?: number | null;
+    cm1Percent?: number | null;
+    cm2Percent?: number | null;
+    cm3Percent?: number | null;
+    targetLtv?: number | null;
+    targetCac?: number | null;
+    blendedMer?: number | null;
+    breakEvenRoas?: number | null;
+    notes?: string | null;
+    updatedAt?: string;
 }
 
 export interface ReportSettings {

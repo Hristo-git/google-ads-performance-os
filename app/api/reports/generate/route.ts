@@ -3,8 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import anthropic from "@/lib/anthropic";
 import { REPORT_TEMPLATES } from "@/lib/prompts-v2";
-import { saveReport, GadsReport } from "@/lib/supabase";
+import { saveReport, GadsReport, getProfitabilityInputs } from "@/lib/supabase";
 import { upsertReport } from "@/lib/pinecone"; // Keep for RAG/Vectors
+import { buildFrameworksBlock } from "@/lib/frameworks";
 import { logActivity } from "@/lib/activity-logger";
 import { buildQualityScoreRequest, QSKeyword, QSAdGroup, QSComponent, mapKeyword, AD_LEVEL_URL_QUERY, validateQSData } from "@/lib/quality-score";
 import { getQSSnapshotsForDate } from "@/lib/supabase";
@@ -213,6 +214,34 @@ export async function POST(request: Request) {
             }
         }
 
+        // --- Creative Ad Audit Enrichment (profitability inputs + framework knowledge) ---
+        if (templateId === 'creative_ad_audit' && data.customerId) {
+            try {
+                const profitRow = await getProfitabilityInputs(data.customerId);
+                data.profitabilityInputs = profitRow
+                    ? {
+                        customerId: profitRow.customer_id,
+                        currency: profitRow.currency,
+                        avgOrderValue: profitRow.avg_order_value,
+                        cogsPercent: profitRow.cogs_percent,
+                        cm1Percent: profitRow.cm1_percent,
+                        cm2Percent: profitRow.cm2_percent,
+                        cm3Percent: profitRow.cm3_percent,
+                        targetLtv: profitRow.target_ltv,
+                        targetCac: profitRow.target_cac,
+                        blendedMer: profitRow.blended_mer,
+                        breakEvenRoas: profitRow.break_even_roas,
+                        notes: profitRow.notes,
+                        updatedAt: profitRow.updated_at,
+                    }
+                    : null;
+
+                data.frameworksBlock = await buildFrameworksBlock(data);
+            } catch (error) {
+                console.error('[Report/CreativeAudit] Enrichment failed:', error);
+            }
+        }
+
         // Build prompt using template (no RAG — each report is a clean snapshot of the period)
         const promptBuilder = REPORT_TEMPLATES[templateId];
         let prompt = customPrompt || promptBuilder(data, settings.language);
@@ -402,6 +431,7 @@ Izvedi podobreniq analiz direktno — bez meta-komentari, bez "belezhki na recen
                             budget_allocation_efficiency: 'Budget Allocation',
                             campaign_structure_health: 'Structure Health',
                             change_impact_analysis: 'Change Impact',
+                            creative_ad_audit: 'Creative Ad Audit',
                         };
 
                         let periodLabel = '';

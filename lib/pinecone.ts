@@ -118,3 +118,58 @@ export async function querySimilarReports(query: string, customerId?: string, li
         return [];
     }
 }
+
+// ============================================================
+// Framework Knowledge Base (D2C performance marketing playbooks)
+// Used by the Creative Ad Audit template to inject relevant
+// framework chunks into prompts via RAG.
+// ============================================================
+
+const FRAMEWORKS_NAMESPACE = 'frameworks';
+
+export interface FrameworkChunkMetadata {
+    frameworkName: string;
+    sourceFile: string;
+    chunkIndex: number;
+    totalChunks: number;
+    [key: string]: any;
+}
+
+export async function upsertFramework(
+    chunkId: string,
+    content: string,
+    metadata: FrameworkChunkMetadata
+): Promise<boolean> {
+    try {
+        const values = await getEmbeddings(content, false);
+        const record = {
+            id: chunkId,
+            values,
+            metadata: {
+                ...metadata,
+                content: content.substring(0, 10000),
+                timestamp: new Date().toISOString(),
+            },
+        };
+        await index.namespace(FRAMEWORKS_NAMESPACE).upsert({ records: [record] });
+        return true;
+    } catch (error) {
+        console.error('[Pinecone] ❌ Error upserting framework chunk:', chunkId, error);
+        return false;
+    }
+}
+
+export async function querySimilarFrameworks(query: string, limit: number = 3) {
+    try {
+        const values = await getEmbeddings(query, true);
+        const results = await index.namespace(FRAMEWORKS_NAMESPACE).query({
+            topK: limit,
+            vector: values,
+            includeMetadata: true,
+        });
+        return results.matches || [];
+    } catch (error) {
+        console.error('[Pinecone] ❌ Error querying frameworks namespace:', error);
+        return [];
+    }
+}

@@ -70,6 +70,16 @@ export const REPORT_TEMPLATE_DEFINITIONS: ReportTemplate[] = [
         icon: '📈',
         category: 'insights',
         requiredData: ['campaigns']
+    },
+    {
+        id: 'creative_ad_audit',
+        nameEN: 'Creative Ad Audit & Optimizer',
+        nameBG: 'Креативен одит и оптимизация',
+        descriptionEN: 'Comprehensive D2C creative + profitability audit with 3-5 rewrite variations using proven frameworks (PAS, BAB, Social Proof, Myth Breaker, Future State)',
+        descriptionBG: 'Цялостен D2C креативен + profitability одит с 3-5 пренаписани варианта по доказани frameworks (PAS, BAB, Social Proof, Myth Breaker, Future State)',
+        icon: '🎨',
+        category: 'quality',
+        requiredData: ['adGroups', 'ads', 'campaigns', 'creativeAssets', 'profitabilityInputs']
     }
 ];
 
