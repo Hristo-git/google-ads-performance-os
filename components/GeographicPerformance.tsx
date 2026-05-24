@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { fmtInt, fmtNum, fmtEuro, fmtPct, fmtX } from '@/lib/format';
+import { classifyCampaign } from '@/lib/campaign-taxonomy';
 
 interface GeoData {
     campaignId: string;
@@ -45,22 +46,7 @@ const CAMP_CAT_META: Record<string, { label: string; color: string }> = {
 };
 
 function getCampCategory(name: string, chType: string): string {
-    const n = (name || '').toLowerCase();
-    const ch = String(chType || '');
-    if (n.includes('brand') || n.includes('защита')) return 'brand';
-    const isPMax = ch === 'PERFORMANCE_MAX' || ch === '10' || n.includes('pmax') || n.includes('performance');
-    if (isPMax) {
-        if (n.includes('[sale]') || n.includes('sale') || n.includes('promo') || n.includes('намал') || n.includes('промо') || n.includes('reducere')) return 'pmax_sale';
-        return 'pmax_aon';
-    }
-    if (n.includes('dsa')) return 'search_dsa';
-    if (n.includes('sn - ') || n.includes('search') || n.includes('wd_s')) return 'search_nonbrand';
-    // DEMAND_GEN enum=16, VIDEO=6, DISPLAY=3; also match DG/DN campaign name prefix (Demand Gen / Display Network)
-    if (ch === 'VIDEO' || ch === 'DISPLAY' || ch === 'DEMAND_GEN' || ch === '6' || ch === '3' || ch === '16' || ch === '14' || ch === '12' ||
-        n.includes('video') || n.includes('display') || n.includes('youtube') ||
-        /^dg[\s\-]/.test(n) || /^dn[\s\-]/.test(n)) return 'upper_funnel';
-    if (n.includes('shop') || ch === 'SHOPPING' || ch === '4') return 'shopping';
-    return 'other';
+    return classifyCampaign(name, chType);
 }
 
 interface GeographicPerformanceProps {

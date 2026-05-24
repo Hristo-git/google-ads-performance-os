@@ -1,51 +1,10 @@
 import { NextResponse } from "next/server";
 import { getGoogleAdsDataFromWindsor } from "@/lib/windsor";
+import { classifyCampaign } from "@/lib/campaign-taxonomy";
 
 // Helper to determine campaign category for strategic analysis
 function getCampaignCategory(name: string): string {
-    const n = name.trim().toLowerCase().replace(/\s+/g, ' ');
-
-    // (1) Brand
-    if (n.includes('brand') || n.includes('brand protection') ||
-        n.includes('бренд') || n.includes('защита')) {
-        return 'brand';
-    }
-
-    // (2) PMax – Sale
-    if (n.includes('pmax') && (
-        n.includes('[sale]') || n.includes('sale') || n.includes('promo') ||
-        n.includes('promotion') || n.includes('bf') || n.includes('black friday') ||
-        n.includes('cyber') || n.includes('discount') || n.includes('намал') ||
-        n.includes('промо')
-    )) {
-        return 'pmax_sale';
-    }
-
-    // (3) PMax – AON
-    if (n.includes('pmax') && (
-        n.includes('[aon]') || n.includes('always on') || n.includes('always-on') || n.includes('aon')
-    )) {
-        return 'pmax_aon';
-    }
-
-    // (4) Search – DSA
-    if (n.includes('dsa')) {
-        return 'search_dsa';
-    }
-
-    // (5) Search – NonBrand
-    if (n.includes('sn') || n.includes('search')) {
-        return 'search_nonbrand';
-    }
-
-    // (6) Video/Display
-    if (n.includes('video') || n.includes('display') ||
-        n.includes('youtube') || n.includes('yt') ||
-        n.includes('dg - video') || n.includes('gdn')) {
-        return 'upper_funnel';
-    }
-
-    return 'other';
+    return classifyCampaign(name);
 }
 
 export async function GET(request: Request) {

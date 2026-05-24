@@ -11,6 +11,7 @@ import {
     PlacementPerformance, DemographicPerformance, TimeAnalysisPerformance, AssetPerformance, AudiencePerformance
 } from "@/types/google-ads";
 import { ACCOUNTS, DEFAULT_ACCOUNT_ID, getDefaultMargin } from "../config/accounts";
+import { classifyCampaign } from "../lib/campaign-taxonomy";
 import { fmtNum, fmtInt, fmtEuro, fmtPct, fmtX } from '@/lib/format';
 import { processNGrams } from "@/lib/n-gram";
 import AIAnalysisModal from "./AIAnalysisModal";
@@ -550,63 +551,7 @@ const loadCompareMode = (): 'none' | 'PoP' | 'YoY' => {
 };
 
 // Helper to categorize campaigns
-const getCampaignCategory = (c: any) => {
-    const name = (c.name || "").trim().toLowerCase().replace(/\s+/g, ' ');
-    const channelType = String(c.advertisingChannelType || "");
-
-    // (1) Brand
-    if (name.includes('brand') || name.includes('brand protection') ||
-        name.includes('бренд') || name.includes('защита')) {
-        return 'brand';
-    }
-
-    // PMax Check (Channel Type OR Name)
-    const isPMax = channelType === 'PERFORMANCE_MAX' ||
-        channelType === '10' ||
-        name.includes('pmax') ||
-        name.includes('performance');
-
-    if (isPMax) {
-        // (2) PMax – Sale
-        if (name.includes('[sale]') || name.includes('sale') || name.includes('promo') ||
-            name.includes('promotion') || name.includes('bf') || name.includes('black friday') ||
-            name.includes('cyber') || name.includes('discount') || name.includes('намал') ||
-            name.includes('промо') || name.includes('reducere') || name.includes('oferta') ||
-            name.includes('promotie')) {
-            return 'pmax_sale';
-        }
-        // (3) PMax – AON (Default for PMax)
-        return 'pmax_aon';
-    }
-
-    // (4) Search – DSA
-    if (name.includes('dsa')) {
-        return 'search_dsa';
-    }
-
-    // (5) Search – NonBrand
-    if (name.includes('sn') || name.includes('search') || name.includes('wd_s')) {
-        return 'search_nonbrand';
-    }
-
-    // (6) Video/Display / Demand Gen
-    if (name.includes('video') || name.includes('display') ||
-        name.includes('youtube') || name.includes('yt') ||
-        name.includes('dg - video') || name.includes('gdn') ||
-        channelType === 'VIDEO' || channelType === 'DISPLAY' ||
-        channelType === '6' || channelType === '3' ||
-        channelType === 'DEMAND_GEN' || channelType === '14' ||
-        channelType === 'DISCOVERY' || channelType === '12') {
-        return 'upper_funnel';
-    }
-
-    // (7) Shopping
-    if (name.includes('shop') || channelType === 'SHOPPING' || channelType === '4') {
-        return 'shopping';
-    }
-
-    return 'other';
-};
+const getCampaignCategory = (c: any) => classifyCampaign(c?.name, c?.advertisingChannelType);
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
     'PERFORMANCE_MAX': 'PMax',

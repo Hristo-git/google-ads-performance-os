@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { fmtEuro, fmtPct, fmtX, fmtNum } from "@/lib/format";
 import { getDefaultMargin } from "@/config/accounts";
+import { classifyCampaign } from "@/lib/campaign-taxonomy";
 
 const LS_KEY = "product-category-taxonomy";
 
@@ -20,23 +21,7 @@ const CATEGORY_META: Record<string, { label: string; color: string }> = {
 };
 
 function getCampaignCategory(c: any): string {
-    const name = (c.name || "").trim().toLowerCase().replace(/\s+/g, " ");
-    const ch = String(c.advertisingChannelType || "");
-    if (name.includes("brand") || name.includes("бренд") || name.includes("защита")) return "brand";
-    const isPMax = ch === "PERFORMANCE_MAX" || ch === "10" || name.includes("pmax") || name.includes("performance");
-    if (isPMax) {
-        if (name.includes("[sale]") || name.includes("sale") || name.includes("promo") ||
-            name.includes("discount") || name.includes("намал") || name.includes("промо") ||
-            name.includes("reducere") || name.includes("oferta")) return "pmax_sale";
-        return "pmax_aon";
-    }
-    if (name.includes("dsa")) return "search_dsa";
-    if (name.includes("sn") || name.includes("search") || name.includes("wd_s")) return "search_nonbrand";
-    if (ch === "VIDEO" || ch === "DISPLAY" || ch === "DEMAND_GEN" || ch === "DISCOVERY" ||
-        ch === "6" || ch === "3" || ch === "14" || ch === "12" ||
-        name.includes("video") || name.includes("display") || name.includes("youtube") || name.includes("dg - video")) return "upper_funnel";
-    if (name.includes("shop") || ch === "SHOPPING" || ch === "4") return "shopping";
-    return "other";
+    return classifyCampaign(c?.name, c?.advertisingChannelType);
 }
 
 // ─── Product Category Taxonomy ────────────────────────────────────────────────
