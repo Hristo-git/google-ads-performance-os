@@ -320,11 +320,9 @@ export default function GeographicPerformance({ customerId, dateRange }: Geograp
 
     return (
         <div className="space-y-6">
-            {/* Cities error/debug info */}
             {citiesError && (
                 <div className="rounded-xl bg-slate-800 border border-amber-900/30 p-4">
-                    <p className="text-amber-400 text-sm font-medium">Cities query error:</p>
-                    <p className="text-amber-300/70 text-xs mt-1 font-mono">{citiesError}</p>
+                    <p className="text-amber-400 text-sm">City-level data is temporarily unavailable. Country-level data is shown below.</p>
                 </div>
             )}
 

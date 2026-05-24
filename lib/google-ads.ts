@@ -2628,13 +2628,6 @@ SELECT
         LIMIT 3000
     `);
 
-        console.log(`[GoogleAds] getRegionalPerformance: got ${result.length} rows`);
-        if (result.length > 0) {
-            const sample = result[0] as any;
-            console.log(`[GoogleAds] Sample row segments: `, JSON.stringify(sample.segments));
-            console.log(`[GoogleAds] Sample row keys: `, Object.keys(sample));
-        }
-
         // Extract unique geo_target_constant IDs from location resource names
         const locationIds = new Set<string>();
         result.forEach((row: any) => {

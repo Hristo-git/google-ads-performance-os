@@ -168,7 +168,6 @@ export default function AIReportsHub({
             // Ad Groups
             if (selectedTemplate.requiredData.includes('adGroups')) {
                 if (adGroups.length === 0 && customerId) {
-                    console.log("[AIReports] Queuing ad groups fetch...");
                     fetchPromises.push({
                         key: 'adGroups',
                         required: true,
@@ -184,7 +183,6 @@ export default function AIReportsHub({
             // Keywords
             if (selectedTemplate.requiredData.includes('keywords')) {
                 if (keywords.length === 0 && customerId) {
-                    console.log("[AIReports] Queuing keywords fetch...");
                     const qsFilter = selectedTemplate.id === 'quality_score_diagnostics' ? '&maxQualityScore=5' : '';
                     fetchPromises.push({
                         key: 'keywords',
@@ -201,7 +199,6 @@ export default function AIReportsHub({
             // Ads
             if (selectedTemplate.requiredData.includes('ads')) {
                 if (ads.length === 0 && customerId) {
-                    console.log("[AIReports] Queuing ads fetch...");
                     fetchPromises.push({
                         key: 'ads',
                         required: true,
@@ -232,7 +229,6 @@ export default function AIReportsHub({
 
             // Execute all fetches in parallel
             if (fetchPromises.length > 0) {
-                console.log(`[AIReports] Fetching ${fetchPromises.length} data sources in parallel...`);
                 const results = await Promise.allSettled(fetchPromises.map(f => f.promise));
 
                 const failedRequired: string[] = [];
@@ -246,11 +242,9 @@ export default function AIReportsHub({
                             if (ctxData.contextBlock) dataPayload.contextBlock = ctxData.contextBlock;
                             if (ctxData.pmaxBlock) dataPayload.pmaxBlock = ctxData.pmaxBlock;
                             if (ctxData.context?.device) dataPayload.deviceData = ctxData.context.device;
-                            console.log(`[AIReports] Context signals loaded`);
                         } else {
                             const rows = Array.isArray(result.value) ? result.value : [];
                             dataPayload[key] = rows.slice(0, settings.rowLimit);
-                            console.log(`[AIReports] ${key}: ${rows.length} rows loaded`);
                             if (rows.length === 0 && required) {
                                 failedRequired.push(key);
                             }
@@ -390,7 +384,6 @@ export default function AIReportsHub({
             }
         } catch (err: any) {
             if (err.name === 'AbortError') {
-                console.log('Report generation aborted by user');
                 clearActiveReport();
                 return;
             }
@@ -419,11 +412,9 @@ export default function AIReportsHub({
     };
 
     const handleSearchHistory = async () => {
-        console.log(`[AIReportsHub] Searching history for customerId: ${customerId}, query: ${historySearchQuery}`);
         setSearchingHistory(true);
         try {
             const historyUrl = `/api/reports/history?query=${encodeURIComponent(historySearchQuery)}&customerId=${customerId}&limit=30&t=${Date.now()}`;
-            console.log(`[AIReports] Fetching from URL: ${historyUrl}`);
 
             const response = await fetch(historyUrl, {
                 headers: {
@@ -433,7 +424,6 @@ export default function AIReportsHub({
             });
             if (!response.ok) throw new Error(`History fetch failed: ${response.status}`);
             const data = await response.json();
-            console.log(`[AIReportsHub] History loaded:`, data.reports?.length || 0, 'items');
             setHistoryResults(data.reports || []);
             setHistoryLoaded(true);
         } catch (err: any) {
