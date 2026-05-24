@@ -8,6 +8,7 @@ import {
     PMaxSearchInsight,
     DemographicPerformance
 } from "../types/google-ads";
+import { getBrandTerms } from "../config/accounts";
 
 // ==========================================
 // TYPES
@@ -108,25 +109,23 @@ interface CategoryStats {
 // CONFIGURATION
 // ==========================================
 
-const BRAND_TERMS = ['виденов', 'videnov', 'videnov.bg', 'мебели виденов', 'видинов'];
-
 // ==========================================
 // HELPERS
 // ==========================================
 
-function classifyTerm(term: string): TermCategory {
+function classifyTerm(term: string, brandTerms: string[]): TermCategory {
     const lowerTerm = term.toLowerCase().trim();
 
     // 1. Exact Brand Match (or common misspellings)
     // The user rule: "ONLY brand name without product modifier"
-    if (BRAND_TERMS.includes(lowerTerm)) {
+    if (brandTerms.includes(lowerTerm)) {
         return 'brand_exact';
     }
 
     // 2. Brand + Category logic
     // If it contains a brand term but is NO LONGER than the brand term (handled above), it's brand_modified.
     // We already checked exact match. So if it includes brand, it has modifiers.
-    const containsBrand = BRAND_TERMS.some(brand => lowerTerm.includes(brand));
+    const containsBrand = brandTerms.some(brand => lowerTerm.includes(brand));
     if (containsBrand) {
         return 'brand_modified';
     }
@@ -153,7 +152,8 @@ export function prepareSearchTermData(
     networkPerformance: NetworkPerformance[] = [],
     pmaxInsights: PMaxSearchInsight[] = [],
     demographicPerformance: DemographicPerformance[] = [],
-    language: string = "bg"
+    language: string = "bg",
+    brandTerms: string[] = getBrandTerms()
 ): PreparedData {
     const termMap = new Map<string, {
         raw: SearchTerm[];
@@ -260,7 +260,7 @@ export function prepareSearchTermData(
         const totalConversionValue = data.raw.reduce((sum, r) => sum + r.conversionValue, 0);
 
         // Classify
-        const cat = classifyTerm(termKey);
+        const cat = classifyTerm(termKey, brandTerms);
 
         // Update Category Stats
         categoryStats[cat].count++;

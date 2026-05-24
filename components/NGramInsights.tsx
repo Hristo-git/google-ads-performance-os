@@ -4,21 +4,22 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Layers, TrendingUp, TrendingDown, MinusCircle, Check, BarChart2, Circle, X, Maximize2, Loader2, ChevronUp, ChevronDown, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildNGrams, type NGram } from '@/lib/account-health';
 import { fmtNum, fmtInt, fmtEuro, fmtX, fmtPct } from '@/lib/format';
+import { getBrandTerms, getDefaultMargin } from '@/config/accounts';
 
 interface NGramInsightsProps {
     searchTerms: any[];
     loading?: boolean;
     dateRange?: { start: string; end: string };
     onRequestLongerRange?: () => void;
+    customerId?: string;
 }
 
 // ---------- Brand / Dimension classification ----------
-const BRAND_WORDS = ['виденов', 'videnov', 'vellea', 'вилеа', 'videhov'];
-function classifyGram(gram?: string): 'Brand' | 'Non-brand' | 'Dimension' {
+function classifyGram(gram: string | undefined, brandWords: string[]): 'Brand' | 'Non-brand' | 'Dimension' {
     if (!gram) return 'Non-brand';
     const lower = gram.toLowerCase();
 
-    if (BRAND_WORDS.some(b => lower.includes(b))) return 'Brand';
+    if (brandWords.some(b => lower.includes(b))) return 'Brand';
 
     // Match common dimension patterns in furniture (e.g., 120x200, 160/200, 90 на 200, 144х190, 82 190)
     // Looks for numbers separated by x, х (cyrillic), *, /, ' на ', or just spaces ANYWHERE in the string
@@ -49,7 +50,7 @@ type SortKey = 'conversions' | 'conversionValue' | 'aov' | 'roas' | 'cost' | 'cp
 type ViewDisplay = 'table' | 'bubble';
 
 // ---------- Bubble chart ----------
-function SegmentHeatmap({ searchTerms }: { searchTerms: any[] }) {
+function SegmentHeatmap({ searchTerms, brandWords, targetMargin }: { searchTerms: any[]; brandWords: string[]; targetMargin: number }) {
     const segments = useMemo(() => {
         if (!searchTerms?.length) return [];
 
@@ -61,7 +62,7 @@ function SegmentHeatmap({ searchTerms }: { searchTerms: any[] }) {
 
         searchTerms.forEach(term => {
             const text = term.searchTerm || term.text || term.gram;
-            const type = classifyGram(text);
+            const type = classifyGram(text, brandWords);
             if (data[type]) {
                 data[type].cost += (term.cost || 0);
                 data[type].conv += (term.conversions || 0);
@@ -69,22 +70,20 @@ function SegmentHeatmap({ searchTerms }: { searchTerms: any[] }) {
             }
         });
 
-        const TARGET_MARGIN = 0.31; // 31% static margin for now
-
         return Object.entries(data).map(([name, metrics]) => {
             const ers = metrics.rev > 0 ? (metrics.cost / metrics.rev) : null;
             const aov = metrics.conv > 0 ? (metrics.rev / metrics.conv) : 0;
-            const profitability = ers != null ? (TARGET_MARGIN - ers) : null;
+            const profitability = ers != null ? (targetMargin - ers) : null;
             return {
                 name,
                 ...metrics,
                 ers,
-                margin: TARGET_MARGIN,
+                margin: targetMargin,
                 profitability,
                 aov
             };
         });
-    }, [searchTerms]);
+    }, [searchTerms, brandWords, targetMargin]);
 
     if (!segments.length) return null;
 
@@ -249,7 +248,9 @@ function BubbleChart({ data, typeFilter, fullscreen = false }: { data: (NGram & 
 }
 
 // ---------- Main component ----------
-export default function NGramInsights({ searchTerms, loading, dateRange, onRequestLongerRange }: NGramInsightsProps) {
+export default function NGramInsights({ searchTerms, loading, dateRange, onRequestLongerRange, customerId }: NGramInsightsProps) {
+    const brandWords = useMemo(() => getBrandTerms(customerId), [customerId]);
+    const targetMargin = useMemo(() => getDefaultMargin(customerId), [customerId]);
     const dayCount = dateRange
         ? Math.round((new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / 86400000) + 1
         : null;
@@ -308,9 +309,9 @@ export default function NGramInsights({ searchTerms, loading, dateRange, onReque
         if (!searchTerms?.length) return [];
         return buildNGrams(searchTerms, 3, 2).map(g => ({
             ...g,
-            gramType: classifyGram(g.gram),
+            gramType: classifyGram(g.gram, brandWords),
         }));
-    }, [searchTerms]);
+    }, [searchTerms, brandWords]);
 
     // ---- KPI values ----
     const kpi = useMemo(() => {
@@ -533,7 +534,7 @@ export default function NGramInsights({ searchTerms, loading, dateRange, onReque
             )}
 
             {/* ── Segment Profitability Heatmap ────────────── */}
-            <SegmentHeatmap searchTerms={searchTerms} />
+            <SegmentHeatmap searchTerms={searchTerms} brandWords={brandWords} targetMargin={targetMargin} />
 
             {/* ── Tab + Filter bar ─────────────────────────── */}
             <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/30 flex flex-wrap items-center gap-3">

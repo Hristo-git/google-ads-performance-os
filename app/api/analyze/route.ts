@@ -7,6 +7,7 @@ import { upsertReport, querySimilarReports } from "@/lib/pinecone";
 import { runPreAnalysis, type SearchTermInput } from "@/lib/account-health";
 import { logActivity } from "@/lib/activity-logger";
 import { prepareSearchTermData } from "@/lib/ai-data-prep";
+import { getBrandTerms } from "@/config/accounts";
 import {
     getAuctionInsights,
     getConversionActions,
@@ -89,7 +90,8 @@ function buildPrompt(data: any): string {
         data.networkPerformance || [],
         data.pmaxInsights || [],
         data.demographicPerformance || [],
-        language
+        language,
+        getBrandTerms(data.customerId)
     );
 
     // 2. Build Advanced Prompt (Block 2)

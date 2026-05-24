@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { fmtInt, fmtEuro, fmtPct, fmtNum } from '@/lib/format';
+import { getBrandTerms } from '@/config/accounts';
 
 interface SearchTermRow {
     searchTerm: string;
@@ -38,9 +39,8 @@ type ScopeFilter = 'all' | 'account' | 'campaign';
 type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
 type SortKey = 'cost' | 'clicks' | 'impressions' | 'monthlyCost' | 'cpc' | 'ctr' | 'conversions' | 'conversionValue';
 
-const BRAND_TERMS = ['videnov', 'vellea', 'videhov', 'виденов'];
-
 export default function NegativeKeywordMiner({ customerId, dateRange }: NegativeKeywordMinerProps) {
+    const brandTerms = useMemo(() => getBrandTerms(customerId), [customerId]);
     const [rawData, setRawData] = useState<SearchTermRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -155,7 +155,8 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
         return Object.values(byTerm)
             .filter(t => {
                 // exclude brand terms for safety
-                if (BRAND_TERMS.some(brand => t.searchTerm.includes(brand))) return false;
+                const termLower = t.searchTerm.toLowerCase();
+                if (brandTerms.some(brand => termLower.includes(brand))) return false;
                 if (t.cost < minCost || t.clicks < minClicks) return false;
                 // In default mode show only 0-conversion terms; toggle shows all
                 if (!showConverting && t.conversions > 0) return false;
@@ -210,7 +211,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                     confidence,
                 };
             });
-    }, [rawData, minCost, minClicks, periodDays, avgCPA, avgCTR, showConverting]);
+    }, [rawData, minCost, minClicks, periodDays, avgCPA, avgCTR, showConverting, brandTerms]);
 
     const accountLevel = useMemo(() => wastefulTerms.filter(t => t.campaigns.length >= 2), [wastefulTerms]);
     const campaignLevel = useMemo(() => wastefulTerms.filter(t => t.campaigns.length === 1), [wastefulTerms]);
@@ -398,7 +399,7 @@ export default function NegativeKeywordMiner({ customerId, dateRange }: Negative
                 <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span> Medium</span> = spent 1x CPA or 5+ clicks with normal CTR.{' '}
                 <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span> Low / Review</span> = few clicks, high CTR (likely relevant), or short period — review before adding.
                 <br className="mt-1" />
-                <span className="text-emerald-400 font-medium">Safety:</span> Brand terms ({BRAND_TERMS.join(', ')}) are automatically excluded.
+                <span className="text-emerald-400 font-medium">Safety:</span> Brand terms ({brandTerms.join(', ')}) are automatically excluded.
             </div>
 
             {/* Selection Actions Bar */}

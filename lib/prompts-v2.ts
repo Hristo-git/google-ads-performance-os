@@ -1,5 +1,6 @@
 
 import { PreparedData } from "./ai-data-prep";
+import { getBrandTerms } from "../config/accounts";
 
 export const ANALYSIS_SYSTEM_PROMPT_V3 = `
 # Data Enrichment & Interpretation Guide for Google Ads Impact Analysis
@@ -881,7 +882,7 @@ At the end, provide a JSON block wrapped in \`\`\`json tags:
     const isEn = language === 'en';
     const searchTerms = data.searchTerms || [];
     const nGramAnalysis = data.nGramAnalysis || null;
-    const brandedKeywords = data.brandedKeywords || ['videnov', 'мебели виденов', 'виденов мебели'];
+    const brandedKeywords = data.brandedKeywords || getBrandTerms(data.customerId);
 
     const totalSearchTermCost = searchTerms.reduce((sum: number, st: any) => sum + (st.cost || 0), 0);
     const totalSearchTermConversions = searchTerms.reduce((sum: number, st: any) => sum + (st.conversions || 0), 0);

@@ -4,14 +4,16 @@ import { SearchTerm } from "@/types/google-ads";
 import { useState } from "react";
 import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 import { fmtInt, fmtEuro, fmtPct, fmtNum } from '@/lib/format';
+import { getBrandTerms } from '@/config/accounts';
 
 interface EnhancedSearchTermsProps {
     data: SearchTerm[];
+    customerId?: string;
 }
 
-export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) {
+export default function EnhancedSearchTerms({ data, customerId }: EnhancedSearchTermsProps) {
     const [groupByTerm, setGroupByTerm] = useState(false);
-    const [brandKeywords, setBrandKeywords] = useState('виденов, videnov, vellea, вилеа');
+    const [brandKeywords, setBrandKeywords] = useState(() => getBrandTerms(customerId).join(', '));
     const [brandFilter, setBrandFilter] = useState<'all' | 'branded' | 'non-branded'>('all');
 
     // Sorting State
@@ -149,7 +151,7 @@ export default function EnhancedSearchTerms({ data }: EnhancedSearchTermsProps) 
                             type="text"
                             value={brandKeywords}
                             onChange={(e) => setBrandKeywords(e.target.value)}
-                            placeholder="e.g. videnov, виденов"
+                            placeholder="comma-separated brand terms"
                             className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs text-white placeholder-slate-500 w-48"
                         />
                     </div>

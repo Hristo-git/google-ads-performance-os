@@ -559,7 +559,7 @@ export default function StrategicInsights({
                 )}
 
                 {activeTab === 'search' && (
-                    <EnhancedSearchTerms data={searchTerms} />
+                    <EnhancedSearchTerms data={searchTerms} customerId={customerId} />
                 )}
 
                 {activeTab === 'heatmap' && (

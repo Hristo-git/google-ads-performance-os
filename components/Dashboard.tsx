@@ -10,7 +10,7 @@ import {
     DeviceBreakdown as DeviceBreakdownType, SearchTerm,
     PlacementPerformance, DemographicPerformance, TimeAnalysisPerformance, AssetPerformance, AudiencePerformance
 } from "@/types/google-ads";
-import { ACCOUNTS, DEFAULT_ACCOUNT_ID } from "../config/accounts";
+import { ACCOUNTS, DEFAULT_ACCOUNT_ID, getDefaultMargin } from "../config/accounts";
 import { fmtNum, fmtInt, fmtEuro, fmtPct, fmtX } from '@/lib/format';
 import { processNGrams } from "@/lib/n-gram";
 import AIAnalysisModal from "./AIAnalysisModal";
@@ -137,7 +137,7 @@ const MetricCell = ({ value, format, previous, invertColor = false }: { value: n
     );
 };
 
-const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: { name: string; type: string; metrics: any; colSpan: number; layout?: 'pmax' | 'search' | 'adgroup' | 'search_terms' | 'listing_group' | 'pmax_assets' | 'keywords' | 'keywords_campaign' | 'ads' }) => {
+const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search', targetMargin = getDefaultMargin() }: { name: string; type: string; metrics: any; colSpan: number; layout?: 'pmax' | 'search' | 'adgroup' | 'search_terms' | 'listing_group' | 'pmax_assets' | 'keywords' | 'keywords_campaign' | 'ads'; targetMargin?: number }) => {
     // Determine number of leading columns (before metrics)
     const baseColSpan = layout === 'keywords_campaign' ? 2 : layout === 'listing_group' ? 2 : 1;
 
@@ -285,20 +285,20 @@ const ParentContextRow = ({ name, type, metrics, colSpan, layout = 'search' }: {
                         {(() => {
                             const ers = metrics.conversionValue > 0 ? metrics.cost / metrics.conversionValue : null;
                             return ers != null ? (
-                                <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'}`}>
+                                <span className={`font-medium ${ers <= targetMargin ? 'text-emerald-400' : 'text-red-400'}`}>
                                     {fmtPct(ers * 100, 2)}
                                 </span>
                             ) : <span className="text-slate-500">—</span>;
                         })()}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-400">
-                        {fmtPct(TARGET_MARGIN * 100, 0)}
+                        {fmtPct(targetMargin * 100, 0)}
                     </td>
                     <td className="px-4 py-3 text-right">
                         {(() => {
                             const ers = metrics.conversionValue > 0 ? metrics.cost / metrics.conversionValue : null;
                             if (ers == null) return <span className="text-slate-500">—</span>;
-                            const profitability = TARGET_MARGIN - ers;
+                            const profitability = targetMargin - ers;
                             return (
                                 <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                     {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
@@ -515,9 +515,6 @@ const getLastMonthRange = () => {
     const end = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of last month
     return { start: fmtDate(start), end: fmtDate(end) };
 };
-
-// Global Target Margin
-const TARGET_MARGIN = 0.31; // 31%
 
 // Helper to get "Last 7 Days" date range
 const getLast7DaysRange = () => {
@@ -858,6 +855,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
     const [strategicBreakdown, setStrategicBreakdown] = useState<any>(null);
     const [selectedAccountId, setSelectedAccountId] = useState<string>(DEFAULT_ACCOUNT_ID);
+    const targetMargin = useMemo(() => getDefaultMargin(selectedAccountId), [selectedAccountId]);
     const [dateRange, setDateRangeRaw] = useState<{ start: string, end: string }>(loadDateRange);
     const [sortBy, setSortBy] = useState<string>('cost'); // Default sort by cost
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // Default descending
@@ -2788,8 +2786,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
         if (sortBy === 'profitability') {
             const ersA = (a as any).conversionValue > 0 ? ((a as any).cost || 0) / (a as any).conversionValue : Infinity;
             const ersB = (b as any).conversionValue > 0 ? ((b as any).cost || 0) / (b as any).conversionValue : Infinity;
-            aVal = TARGET_MARGIN - ersA;
-            bVal = TARGET_MARGIN - ersB;
+            aVal = targetMargin - ersA;
+            bVal = targetMargin - ersB;
         }
 
         // Handle null/undefined
@@ -3217,6 +3215,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                 searchTerms={healthData?.searchTerms || []}
                                 loading={loadingHealth}
                                 dateRange={dateRange}
+                                customerId={selectedAccountId}
                                 onRequestLongerRange={() => {
                                     const end = new Date();
                                     const start = new Date();
@@ -3760,7 +3759,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                             const ct = camp.advertisingChannelType || '';
                                                             const isPMax = ct === 'PERFORMANCE_MAX' || camp.name?.toLowerCase().includes('pmax');
                                                             return (
-                                                                <ParentContextRow
+                                                                <ParentContextRow targetMargin={targetMargin}
                                                                     name={camp.name}
                                                                     type="Campaign"
                                                                     metrics={camp}
@@ -3782,7 +3781,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                             searchLostISRank: currentAdGroup.searchLostISRank ?? _camp.searchLostISRank,
                                                         } : currentAdGroup;
                                                         return (
-                                                            <ParentContextRow
+                                                            <ParentContextRow targetMargin={targetMargin}
                                                                 name={currentAdGroup.name}
                                                                 type="Ad Group"
                                                                 metrics={_metrics}
@@ -3928,7 +3927,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         {(() => {
                                                                             const ers = item.conversionValue > 0 ? item.cost / item.conversionValue : null;
                                                                             return ers != null ? (
-                                                                                <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                <span className={`font-medium ${ers <= targetMargin ? 'text-emerald-400' : 'text-red-400'}`}>
                                                                                     {fmtPct(ers * 100, 2)}
                                                                                 </span>
                                                                             ) : <span className="text-slate-500">—</span>;
@@ -4102,20 +4101,20 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             {(() => {
                                                                                 const ers = item.conversionValue > 0 ? item.cost / item.conversionValue : null;
                                                                                 return ers != null ? (
-                                                                                    <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                    <span className={`font-medium ${ers <= targetMargin ? 'text-emerald-400' : 'text-red-400'}`}>
                                                                                         {fmtPct(ers * 100, 2)}
                                                                                     </span>
                                                                                 ) : <span className="text-slate-500">—</span>;
                                                                             })()}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right text-slate-400">
-                                                                            {fmtPct(TARGET_MARGIN * 100, 0)}
+                                                                            {fmtPct(targetMargin * 100, 0)}
                                                                         </td>
                                                                         <td className="px-4 py-4 text-right">
                                                                             {(() => {
                                                                                 const ers = item.conversionValue > 0 ? item.cost / item.conversionValue : null;
                                                                                 if (ers == null) return <span className="text-slate-500">—</span>;
-                                                                                const profitability = TARGET_MARGIN - ers;
+                                                                                const profitability = targetMargin - ers;
                                                                                 return (
                                                                                     <span className={`font-medium ${profitability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                                                         {profitability > 0 ? '+' : ''}{fmtPct(profitability * 100, 2)}
@@ -4531,7 +4530,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-700">
                                                             {currentAdGroup && (
-                                                                <ParentContextRow
+                                                                <ParentContextRow targetMargin={targetMargin}
                                                                     name={currentAdGroup.name}
                                                                     type="Ad Group"
                                                                     metrics={currentAdGroup}
@@ -4565,7 +4564,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         {(() => {
                                                                             const ers = lg.conversionValue > 0 ? lg.cost / lg.conversionValue : null;
                                                                             return ers != null ? (
-                                                                                <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                <span className={`font-medium ${ers <= targetMargin ? 'text-emerald-400' : 'text-red-400'}`}>
                                                                                     {fmtPct(ers * 100, 2)}
                                                                                 </span>
                                                                             ) : <span className="text-slate-500">—</span>;
@@ -4663,7 +4662,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-700">
                                                             {String(navigation.level) === 'campaign' && currentCampaign && (
-                                                                <ParentContextRow
+                                                                <ParentContextRow targetMargin={targetMargin}
                                                                     name={currentCampaign.name}
                                                                     type="Campaign"
                                                                     metrics={currentCampaign}
@@ -4672,7 +4671,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 />
                                                             )}
                                                             {String(navigation.level) === 'adgroup' && currentAdGroup && (
-                                                                <ParentContextRow
+                                                                <ParentContextRow targetMargin={targetMargin}
                                                                     name={currentAdGroup.name}
                                                                     type="Asset Group"
                                                                     metrics={currentAdGroup}
@@ -4785,7 +4784,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 </thead>
                                                                 <tbody className="divide-y divide-slate-700">
                                                                     {String(navigation.level) === 'campaign' && currentCampaign && (
-                                                                        <ParentContextRow
+                                                                        <ParentContextRow targetMargin={targetMargin}
                                                                             name={currentCampaign.name}
                                                                             type="Campaign"
                                                                             metrics={currentCampaign}
@@ -4794,7 +4793,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         />
                                                                     )}
                                                                     {String(navigation.level) === 'adgroup' && currentAdGroup && (
-                                                                        <ParentContextRow
+                                                                        <ParentContextRow targetMargin={targetMargin}
                                                                             name={currentAdGroup.name}
                                                                             type="Ad Group"
                                                                             metrics={currentAdGroup}
@@ -5218,7 +5217,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-700">
                                                             {String(navigation.level) === 'campaign' && currentCampaign && (
-                                                                <ParentContextRow
+                                                                <ParentContextRow targetMargin={targetMargin}
                                                                     name={currentCampaign.name}
                                                                     type="Campaign"
                                                                     metrics={currentCampaign}
@@ -5227,7 +5226,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                 />
                                                             )}
                                                             {String(navigation.level) === 'adgroup' && currentAdGroup && (
-                                                                <ParentContextRow
+                                                                <ParentContextRow targetMargin={targetMargin}
                                                                     name={currentAdGroup.name}
                                                                     type="Ad Group"
                                                                     metrics={currentAdGroup}
@@ -5262,8 +5261,8 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         valA = a.conversionValue > 0 ? a.cost / a.conversionValue : Infinity;
                                                                         valB = b.conversionValue > 0 ? b.cost / b.conversionValue : Infinity;
                                                                     } else if (searchTermSortBy === 'profitability') {
-                                                                        valA = a.conversionValue > 0 ? TARGET_MARGIN - (a.cost / a.conversionValue) : -Infinity;
-                                                                        valB = b.conversionValue > 0 ? TARGET_MARGIN - (b.cost / b.conversionValue) : -Infinity;
+                                                                        valA = a.conversionValue > 0 ? targetMargin - (a.cost / a.conversionValue) : -Infinity;
+                                                                        valB = b.conversionValue > 0 ? targetMargin - (b.cost / b.conversionValue) : -Infinity;
                                                                     } else if (searchTermSortBy === 'searchTerm') {
                                                                         valA = (a.searchTerm || '').toLowerCase();
                                                                         valB = (b.searchTerm || '').toLowerCase();
@@ -5357,7 +5356,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                             {(() => {
                                                                                 const ers = term.conversionValue > 0 ? term.cost / term.conversionValue : null;
                                                                                 return ers != null ? (
-                                                                                    <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
+                                                                                    <span className={`font-medium ${ers <= targetMargin ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
                                                                                         {fmtPct(ers * 100, 2)}
                                                                                     </span>
                                                                                 ) : <span className="text-slate-500 text-xs">—</span>;
@@ -5453,7 +5452,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                                         {(() => {
                                                                             const ers = lg.conversionValue > 0 ? lg.cost / lg.conversionValue : null;
                                                                             return ers != null ? (
-                                                                                <span className={`font-medium ${ers <= TARGET_MARGIN ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
+                                                                                <span className={`font-medium ${ers <= targetMargin ? 'text-emerald-400' : 'text-red-400'} text-xs`}>
                                                                                     {fmtPct(ers * 100, 2)}
                                                                                 </span>
                                                                             ) : <span className="text-slate-500 text-xs">—</span>;
@@ -5505,7 +5504,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-700">
                                                         {currentCampaign && (
-                                                            <ParentContextRow
+                                                            <ParentContextRow targetMargin={targetMargin}
                                                                 name={currentCampaign.name}
                                                                 type="Campaign"
                                                                 metrics={currentCampaign}

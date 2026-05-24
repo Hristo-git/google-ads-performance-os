@@ -25,7 +25,7 @@ export interface QSData {
         start: string;  // ISO date: "2026-01-15"
         end: string;    // ISO date: "2026-02-14"
     };
-    brandTokens: string[];  // e.g. ["виденов", "videnov", "мебели виденов"]
+    brandTokens: string[];  // brand terms for the account (see config/accounts getBrandTerms)
     summary: QSSummary;
     keywords: QSKeyword[];
     adGroups: QSAdGroup[];

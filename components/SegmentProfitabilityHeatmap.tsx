@@ -2,10 +2,9 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { fmtEuro, fmtPct, fmtX, fmtNum } from "@/lib/format";
+import { getDefaultMargin } from "@/config/accounts";
 
 const LS_KEY = "product-category-taxonomy";
-
-const TARGET_MARGIN = 0.31;
 
 // ─── Campaign Category ────────────────────────────────────────────────────────
 
@@ -287,7 +286,7 @@ const cardBg = (p: number | null) => {
     return "bg-red-950/40 border-red-800/50";
 };
 const profColor = (p: number | null) => (p === null ? "text-slate-400" : p >= 0 ? "text-emerald-400" : "text-red-400");
-const ersColor  = (e: number | null) => (e === null ? "text-slate-400" : e <= TARGET_MARGIN ? "text-emerald-400" : "text-red-400");
+const ersColor  = (e: number | null, targetMargin: number) => (e === null ? "text-slate-400" : e <= targetMargin ? "text-emerald-400" : "text-red-400");
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -300,6 +299,8 @@ interface Props {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dateRange }: Props) {
+
+    const targetMargin = useMemo(() => getDefaultMargin(customerId), [customerId]);
 
     // ── Taxonomy state ──
     const [categories, setCategories] = useState<Record<string, ProductCatDef>>(DEFAULT_PRODUCT_CATEGORIES);
@@ -342,7 +343,7 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
         return Object.entries(map)
             .map(([cat, m]) => {
                 const ers          = m.conversionValue > 0 ? m.cost / m.conversionValue : null;
-                const profitability = ers !== null ? TARGET_MARGIN - ers : null;
+                const profitability = ers !== null ? targetMargin - ers : null;
                 const roas         = m.cost > 0 ? m.conversionValue / m.cost : null;
                 const aov          = m.conversions > 0 ? m.conversionValue / m.conversions : null;
                 const spendPct     = totalCost > 0 ? m.cost / totalCost : 0;
@@ -350,7 +351,7 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
             })
             .filter(s => s.cost > 0)
             .sort((a, b) => b.cost - a.cost);
-    }, [campaigns]);
+    }, [campaigns, targetMargin]);
 
     // ── Keyword DDA fetch ──
     const [kwLoading, setKwLoading] = useState(false);
@@ -394,7 +395,7 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
                         const ers  = m.allConversionValue > 0 ? m.cost / m.allConversionValue : null;
                         const roas = m.cost > 0 ? m.allConversionValue / m.cost : null;
                         const aov  = m.allConversions > 0 ? m.allConversionValue / m.allConversions : null;
-                        const profitability = ers !== null ? TARGET_MARGIN - ers : null;
+                        const profitability = ers !== null ? targetMargin - ers : null;
                         const valuePct = totalAllValue > 0 ? m.allConversionValue / totalAllValue : 0;
                         return { cat, def, ...m, ers, roas, aov, profitability, valuePct };
                     })
@@ -405,7 +406,7 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
             })
             .catch(e => setKwError(e.message))
             .finally(() => setKwLoading(false));
-    }, [customerId, dateRange?.start, dateRange?.end, getProductCategory, categories]);
+    }, [customerId, dateRange?.start, dateRange?.end, getProductCategory, categories, targetMargin]);
 
     if (!segments.length) {
         return <div className="p-8 text-center text-slate-500">No campaign data available.</div>;
@@ -424,7 +425,7 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
                     <span className="text-xs text-red-400 font-medium">Red = over-spending</span>
                 </div>
                 <p className="text-xs text-slate-500 mb-4">
-                    Profitability = Target Margin ({fmtPct(TARGET_MARGIN * 100, 0)}) − ERS
+                    Profitability = Target Margin ({fmtPct(targetMargin * 100, 0)}) − ERS
                 </p>
 
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
@@ -454,10 +455,10 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
                                     </div>
                                     <div>
                                         <div className="text-slate-500 uppercase tracking-wider text-[9px]">ERS</div>
-                                        <div className={`font-semibold ${ersColor(s.ers)}`}>
+                                        <div className={`font-semibold ${ersColor(s.ers, targetMargin)}`}>
                                             {s.ers !== null ? fmtPct(s.ers * 100, 1) : "—"}
                                         </div>
-                                        <div className="text-slate-500 text-[10px]">target {fmtPct(TARGET_MARGIN * 100, 0)}</div>
+                                        <div className="text-slate-500 text-[10px]">target {fmtPct(targetMargin * 100, 0)}</div>
                                     </div>
                                     <div>
                                         <div className="text-slate-500 uppercase tracking-wider text-[9px]">Conv. Value</div>
@@ -554,10 +555,10 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
                                     </div>
                                     <div>
                                         <div className="text-slate-500 uppercase tracking-wider text-[9px]">ERS (DDA)</div>
-                                        <div className={`font-semibold ${ersColor(s.ers)}`}>
+                                        <div className={`font-semibold ${ersColor(s.ers, targetMargin)}`}>
                                             {s.ers !== null ? fmtPct(s.ers * 100, 1) : "—"}
                                         </div>
-                                        <div className="text-slate-500 text-[10px]">target {fmtPct(TARGET_MARGIN * 100, 0)}</div>
+                                        <div className="text-slate-500 text-[10px]">target {fmtPct(targetMargin * 100, 0)}</div>
                                     </div>
                                     <div>
                                         <div className="text-slate-500 uppercase tracking-wider text-[9px]">DDA Conv.</div>
