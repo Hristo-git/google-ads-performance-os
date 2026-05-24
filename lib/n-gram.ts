@@ -56,6 +56,10 @@ export function processNGrams(searchTerms: SearchTermData[]): NGramAnalysisResul
     };
 
     searchTerms.forEach(term => {
+        // PMax Insight rows are category pseudo-terms with no real cost; they would
+        // pollute n-grams with tokens like "[PMax Insight]". Skip them.
+        if (!term.searchTerm || term.searchTerm.startsWith('[PMax Insight]')) return;
+
         const words = term.searchTerm.split(/\s+/).filter(w => w.length > 0);
 
         // 1-Grams
@@ -97,9 +101,10 @@ export function processNGrams(searchTerms: SearchTermData[]): NGramAnalysisResul
         .sort((a, b) => b.conversionValue - a.conversionValue)
         .slice(0, 5);
 
-    // Wasteful: High Spend, Low ROAS (e.g. < 1) or 0 Conversions
+    // Wasteful: must have actually spent money, and then either no conversions or ROAS < 1.
+    // The cost > 0 guard prevents zero-spend grams from being flagged as "wasteful spend".
     const topWasteful = [...allGrams]
-        .filter(g => g.roas < 1 || g.conversions === 0)
+        .filter(g => g.cost > 0 && (g.conversions === 0 || g.roas < 1))
         .sort((a, b) => b.cost - a.cost)
         .slice(0, 5);
 

@@ -329,7 +329,7 @@ export function buildQualityScoreRequest(
         totalKeywordsAnalyzed: allWithQs.length,
         keywordsWithQsBelowThreshold: allWithQs.filter(kw => kw.qualityScore <= threshold).length,
         averageQualityScore: round(
-            allKeywords.length > 0
+            allWithQs.length > 0
                 ? allWithQs.reduce((sum, kw) => sum + kw.qualityScore, 0) / allWithQs.length
                 : 0
         ),

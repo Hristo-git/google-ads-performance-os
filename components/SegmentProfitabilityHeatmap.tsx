@@ -485,7 +485,7 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
                 </div>
             </div>
 
-            {/* ── Section 2: Product Category DDA ── */}
+            {/* ── Section 2: Product Category (all-conversions) ── */}
             {editorOpen && (
                 <TaxonomyEditor
                     categories={categories}
@@ -496,8 +496,8 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
             <div>
                 <div className="mb-4 flex items-center gap-3">
                     <h3 className="text-base font-bold text-white">By Product Category</h3>
-                    <span className="text-xs bg-violet-500/20 text-violet-300 border border-violet-500/30 px-2 py-0.5 rounded font-medium">DDA Attribution</span>
-                    <span className="text-xs text-slate-500">Keyword-level · all_conversions</span>
+                    <span className="text-xs bg-violet-500/20 text-violet-300 border border-violet-500/30 px-2 py-0.5 rounded font-medium">All Conversions</span>
+                    <span className="text-xs text-slate-500">Keyword-level · metrics.all_conversions</span>
                     <button
                         onClick={() => setEditorOpen(true)}
                         className="ml-auto flex items-center gap-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors"
@@ -507,12 +507,12 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
                     </button>
                 </div>
                 <p className="text-xs text-slate-500 mb-4">
-                    Aggregated DDA conversion value from all keywords per product category, across all campaign types (incl. Brand).
+                    Aggregated all-conversions value (includes secondary &amp; view-through actions, not just primary "Conversions") from all keywords per product category, across all campaign types (incl. Brand).
                 </p>
 
                 {kwLoading && (
                     <div className="h-32 flex items-center justify-center text-slate-400 text-sm">
-                        Loading keyword DDA data...
+                        Loading keyword data...
                     </div>
                 )}
                 {kwError && (
@@ -539,7 +539,7 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
                                 </div>
 
                                 <div>
-                                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">Profitability (DDA)</div>
+                                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">Profitability (All Conv.)</div>
                                     <div className={`text-2xl font-black ${profColor(s.profitability)}`}>
                                         {s.profitability !== null
                                             ? `${s.profitability >= 0 ? "+" : ""}${fmtPct(s.profitability * 100, 1)}`
@@ -549,29 +549,29 @@ export default function SegmentProfitabilityHeatmap({ campaigns, customerId, dat
 
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                                     <div>
-                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">DDA Value</div>
+                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">All Conv. Value</div>
                                         <div className="text-emerald-400 font-semibold">{fmtEuro(s.allConversionValue, 0)}</div>
                                         <div className="text-slate-500 text-[10px]">{fmtPct(s.valuePct * 100, 1)} of total</div>
                                     </div>
                                     <div>
-                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">ERS (DDA)</div>
+                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">ERS (All Conv.)</div>
                                         <div className={`font-semibold ${ersColor(s.ers, targetMargin)}`}>
                                             {s.ers !== null ? fmtPct(s.ers * 100, 1) : "—"}
                                         </div>
                                         <div className="text-slate-500 text-[10px]">target {fmtPct(targetMargin * 100, 0)}</div>
                                     </div>
                                     <div>
-                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">DDA Conv.</div>
+                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">All Conv.</div>
                                         <div className="text-white font-semibold">{fmtNum(s.allConversions, 1)}</div>
                                     </div>
                                     <div>
-                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">ROAS (DDA)</div>
+                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">ROAS (All Conv.)</div>
                                         <div className={`font-semibold ${s.roas !== null ? (s.roas >= 3 ? "text-emerald-400" : s.roas >= 1 ? "text-amber-400" : "text-red-400") : "text-slate-400"}`}>
                                             {s.roas !== null ? fmtX(s.roas) : "—"}
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">AOV (DDA)</div>
+                                        <div className="text-slate-500 uppercase tracking-wider text-[9px]">AOV (All Conv.)</div>
                                         <div className="text-slate-300 font-semibold">{s.aov !== null ? fmtEuro(s.aov, 0) : "—"}</div>
                                     </div>
                                     <div>

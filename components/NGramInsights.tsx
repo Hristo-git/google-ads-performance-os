@@ -124,11 +124,11 @@ function SegmentHeatmap({ searchTerms, brandWords, targetMargin }: { searchTerms
                                 <div className="text-slate-300 font-semibold">{fmtEuro(seg.aov, 0)}</div>
                             </div>
                             <div>
-                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Conv. Value (DDA)</div>
+                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Conv. Value</div>
                                 <div className="text-emerald-400 font-semibold">{fmtEuro(seg.rev, 0)}</div>
                             </div>
                             <div>
-                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Conversions (DDA)</div>
+                                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Conversions</div>
                                 <div className="text-white font-semibold">{fmtNum(seg.conv, 1)}</div>
                             </div>
                             <div>
@@ -612,8 +612,8 @@ export default function NGramInsights({ searchTerms, loading, dateRange, onReque
                                     <SortHeader label="Terms" field="termCount" right />
                                     <SortHeader label="Spend (Share)" field="cost" />
                                     <SortHeader label="Conv. (LC)" field="conversions" right />
-                                    <SortHeader label="Conv. (DDA)" field="allConversions" right />
-                                    <SortHeader label="Value (DDA)" field="allConversionValue" right />
+                                    <SortHeader label="Conv. (All)" field="allConversions" right />
+                                    <SortHeader label="Value (All)" field="allConversionValue" right />
                                     <SortHeader label="AOV" field="aov" right />
                                     <SortHeader label="ROAS" field="roas" right />
                                     <SortHeader label="CPA" field="cpa" right />

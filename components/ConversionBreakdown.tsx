@@ -251,6 +251,10 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
 
     return (
         <div className="space-y-6">
+            <p className="text-xs text-slate-500">
+                Counts use <span className="text-slate-300">all conversion actions</span> (incl. secondary &amp; view-through), so totals here may exceed the primary &quot;Conversions&quot; shown on campaign tables.
+            </p>
+
             {/* Category Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {categorySummary.slice(0, 5).map(cat => (
@@ -299,7 +303,7 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
             <div className="rounded-xl bg-slate-800 border border-slate-700 p-4 flex items-center justify-between">
                 <div className="flex items-center gap-6">
                     <div>
-                        <span className="text-xs text-slate-500 uppercase">Total Conversions</span>
+                        <span className="text-xs text-slate-500 uppercase">Total (All Conv.)</span>
                         <p className="text-lg font-bold text-white">{fmtInt(totalConversions)}</p>
                     </div>
                     <div>
@@ -328,7 +332,7 @@ export default function ConversionBreakdown({ customerId, dateRange }: Conversio
                                 <th className="px-4 py-3 font-medium">Category</th>
                                 <th className="px-4 py-3 text-right font-medium">
                                     <button onClick={() => handleSort('conversions')} className="flex items-center gap-1 ml-auto hover:text-white">
-                                        Conversions
+                                        All Conv.
                                         {sortBy === 'conversions' && <span>{sortDir === 'asc' ? '↑' : '↓'}</span>}
                                     </button>
                                 </th>
