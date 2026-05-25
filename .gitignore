@@ -45,6 +45,15 @@ test-*.ts
 test-*.js
 windsor-test-*.json
 
+# dev/debug artifacts (one-off scripts, dumps, backups)
+debug-*
+verify-*
+*.bak
+*.wip
+/tmp/
+kuchni_aon_*
+wasted_terms_report.md
+
 # Agent/AI artifacts
 .claude/
 .next_new/
