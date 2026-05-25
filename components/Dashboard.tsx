@@ -800,6 +800,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
     const [strategicBreakdown, setStrategicBreakdown] = useState<any>(null);
     const [selectedAccountId, setSelectedAccountId] = useState<string>(DEFAULT_ACCOUNT_ID);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const targetMargin = useMemo(() => getDefaultMargin(selectedAccountId), [selectedAccountId]);
     const [dateRange, setDateRangeRaw] = useState<{ start: string, end: string }>(loadDateRange);
     const [sortBy, setSortBy] = useState<string>('cost'); // Default sort by cost
@@ -2811,12 +2812,22 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
     };
     return (
         <div className="flex h-screen bg-slate-900 overflow-hidden">
+            {/* Mobile drawer backdrop */}
+            {sidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-30 md:hidden"
+                    onClick={() => setSidebarOpen(false)}
+                    aria-hidden="true"
+                />
+            )}
             <Sidebar
                 campaigns={campaigns}
                 adGroups={adGroups}
                 onNavigate={setNavigation}
                 navigation={navigation}
                 accountName={displayAccountName}
+                mobileOpen={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
             />
             {/* Main Content */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
@@ -2839,7 +2850,17 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                 {/* Header */}
                 <header className="border-b border-slate-700 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-10">
                     <div className="px-6 py-4 flex items-center justify-between">
-                        <div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setSidebarOpen(true)}
+                                aria-label="Open menu"
+                                className="md:hidden p-2 -ml-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            </button>
+                            <div>
                             {/* Breadcrumbs */}
                             <div className="flex items-center gap-2 text-sm">
                                 <button
@@ -2895,6 +2916,7 @@ export default function Dashboard({ customerId }: { customerId?: string }) {
                                                     ) :
                                                         'All Campaigns'}
                             </h1>
+                        </div>
                         </div>
                         <div className="flex items-center gap-3">
                             {/* Account Selector */}

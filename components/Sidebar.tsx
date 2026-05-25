@@ -9,6 +9,10 @@ interface SidebarProps {
     navigation: NavigationState;
     onNavigate: (nav: NavigationState) => void;
     accountName: string;
+    /** Whether the off-canvas drawer is open on mobile. */
+    mobileOpen?: boolean;
+    /** Called to close the drawer (mobile). */
+    onClose?: () => void;
 }
 
 export default function Sidebar({
@@ -17,8 +21,16 @@ export default function Sidebar({
     navigation,
     onNavigate,
     accountName,
+    mobileOpen = false,
+    onClose,
 }: SidebarProps) {
     const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
+
+    // Navigate, then close the drawer on mobile so content is visible.
+    const handleNavigate = (nav: NavigationState) => {
+        onNavigate(nav);
+        onClose?.();
+    };
 
     const toggleCampaign = (campaignId: string) => {
         const newExpanded = new Set(expandedCampaigns);
@@ -43,11 +55,23 @@ export default function Sidebar({
     };
 
     return (
-        <aside className="w-72 bg-slate-800 border-r border-slate-700 flex flex-col h-full">
+        <aside
+            className={`w-72 bg-slate-800 border-r border-slate-700 flex flex-col h-full fixed inset-y-0 left-0 z-40 transform transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        >
+            {/* Mobile close button */}
+            <button
+                onClick={() => onClose?.()}
+                aria-label="Close menu"
+                className="md:hidden absolute top-3 right-3 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
             {/* Account Header */}
             <div className="p-4 border-b border-slate-700">
                 <button
-                    onClick={() => onNavigate({ level: 'account' })}
+                    onClick={() => handleNavigate({ level: 'account' })}
                     className={`w-full text-left p-3 rounded-lg transition-colors ${isSelected('account')
                         ? 'bg-violet-600 text-white'
                         : 'hover:bg-slate-700 text-slate-300'
@@ -72,7 +96,7 @@ export default function Sidebar({
                 <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">View</div>
                 <div className="space-y-1">
                     <button
-                        onClick={() => onNavigate({ level: 'account', view: 'dashboard' })}
+                        onClick={() => handleNavigate({ level: 'account', view: 'dashboard' })}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${(!navigation.view || navigation.view === 'dashboard')
                             ? 'bg-violet-600 text-white'
                             : 'hover:bg-slate-700 text-slate-300'
@@ -84,7 +108,7 @@ export default function Sidebar({
                         Dashboard
                     </button>
                     <button
-                        onClick={() => onNavigate({ level: 'account', view: 'insights' })}
+                        onClick={() => handleNavigate({ level: 'account', view: 'insights' })}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${navigation.view === 'insights'
                             ? 'bg-violet-600 text-white'
                             : 'hover:bg-slate-700 text-slate-300'
@@ -97,7 +121,7 @@ export default function Sidebar({
                     </button>
 
                     <button
-                        onClick={() => onNavigate({ level: 'account', view: 'reports' })}
+                        onClick={() => handleNavigate({ level: 'account', view: 'reports' })}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${navigation.view === 'reports'
                             ? 'bg-violet-600 text-white'
                             : 'hover:bg-slate-700 text-slate-300'
@@ -109,7 +133,7 @@ export default function Sidebar({
                         AI Reports
                     </button>
                     <button
-                        onClick={() => onNavigate({ level: 'account', view: 'diagnostics' })}
+                        onClick={() => handleNavigate({ level: 'account', view: 'diagnostics' })}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${navigation.view === 'diagnostics'
                             ? 'bg-violet-600 text-white'
                             : 'hover:bg-slate-700 text-slate-300'
@@ -121,7 +145,7 @@ export default function Sidebar({
                         Diagnostics
                     </button>
                     <button
-                        onClick={() => onNavigate({ level: 'account', view: 'ngrams' })}
+                        onClick={() => handleNavigate({ level: 'account', view: 'ngrams' })}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${navigation.view === 'ngrams'
                             ? 'bg-violet-600 text-white'
                             : 'hover:bg-slate-700 text-slate-300'
@@ -153,6 +177,8 @@ export default function Sidebar({
                                 <div className="flex items-center">
                                     <button
                                         onClick={() => toggleCampaign(campaign.id)}
+                                        aria-label={isExpanded ? 'Collapse campaign' : 'Expand campaign'}
+                                        aria-expanded={isExpanded}
                                         className="p-2 text-slate-400 hover:text-white transition-colors"
                                     >
                                         <svg
@@ -166,7 +192,7 @@ export default function Sidebar({
                                     </button>
                                     <button
                                         onClick={() => {
-                                            onNavigate({
+                                            handleNavigate({
                                                 level: 'campaign',
                                                 campaignId: campaign.id,
                                                 campaignName: campaign.name,
@@ -195,7 +221,7 @@ export default function Sidebar({
                                             return (
                                                 <button
                                                     key={item.id}
-                                                    onClick={() => onNavigate({
+                                                    onClick={() => handleNavigate({
                                                         level: 'adgroup',
                                                         campaignId: campaign.id,
                                                         campaignName: campaign.name,
