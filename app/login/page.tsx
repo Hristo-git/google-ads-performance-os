@@ -29,8 +29,8 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-900 text-white">
-            <div className="w-full max-w-md p-8 bg-gray-800 rounded-lg shadow-xl">
+        <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
+            <div className="w-full max-w-md p-8 bg-slate-800 rounded-lg shadow-xl">
                 <h1 className="text-3xl font-bold mb-6 text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
                     Ads Performance OS
                 </h1>
@@ -43,24 +43,24 @@ export default function LoginPage() {
                     )}
 
                     <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-300">Username</label>
+                        <label className="block text-sm font-medium mb-2 text-slate-300">Username</label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none text-white"
+                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none text-white"
                             placeholder="Enter username"
                             required
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-300">Password</label>
+                        <label className="block text-sm font-medium mb-2 text-slate-300">Password</label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none text-white"
+                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none text-white"
                             placeholder="Enter password"
                             required
                         />
@@ -76,16 +76,16 @@ export default function LoginPage() {
 
                 <div className="relative my-6">
                     <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-gray-600"></div>
+                        <div className="w-full border-t border-slate-600"></div>
                     </div>
                     <div className="relative flex justify-center text-sm">
-                        <span className="px-2 bg-gray-800 text-gray-400">Or continue with</span>
+                        <span className="px-2 bg-slate-800 text-slate-400">Or continue with</span>
                     </div>
                 </div>
 
                 <button
                     onClick={() => signIn('google', { callbackUrl: '/' })}
-                    className="w-full py-3 bg-white hover:bg-gray-100 text-gray-900 rounded font-medium transition-colors duration-200 flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-white hover:bg-slate-100 text-slate-900 rounded font-medium transition-colors duration-200 flex items-center justify-center gap-2"
                 >
                     <svg className="w-5 h-5" viewBox="0 0 24 24">
                         <path
